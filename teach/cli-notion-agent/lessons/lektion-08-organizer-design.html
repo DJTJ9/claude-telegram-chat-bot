@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Lektion 08 – Organizer-Datenbankstruktur designen</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --accent: #e94560;
+      --accent2: #0f3460;
+      --text: #eaeaea;
+      --muted: #888;
+      --code-bg: #0d1117;
+      --success: #2d9e5f;
+      --warn: #e8a838;
+      --purple: #7c3aed;
+      --teal: #0d9488;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; line-height: 1.7; padding: 2rem; max-width: 900px; margin: 0 auto; }
+    h1 { color: var(--accent); font-size: 1.8rem; margin-bottom: 0.3rem; }
+    .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; }
+    h2 { color: #a0c4ff; margin: 2rem 0 0.8rem; font-size: 1.2rem; border-left: 3px solid var(--accent); padding-left: 0.7rem; }
+    h3 { color: #c9d1d9; margin: 1.2rem 0 0.4rem; }
+    p { margin-bottom: 0.9rem; }
+    code { background: var(--code-bg); color: #79c0ff; padding: 0.1rem 0.4rem; border-radius: 3px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.9rem; }
+    .box { background: var(--surface); border: 1px solid #30363d; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.2rem 0; }
+    .box.warn { border-color: var(--warn); }
+    .box.quiz { border-color: var(--accent2); background: #0d1a2e; }
+    .box.decision { border-color: var(--teal); background: #0d1f1e; }
+    .label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; }
+    .label.warn { color: var(--warn); }
+    .label.quiz { color: #79c0ff; }
+    .label.decision { color: #2dd4bf; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    th { background: var(--accent2); color: #a0c4ff; padding: 0.6rem 0.8rem; text-align: left; }
+    td { border-bottom: 1px solid #21262d; padding: 0.5rem 0.8rem; vertical-align: top; }
+    td:first-child { color: #f9c74f; font-weight: 600; white-space: nowrap; }
+    .q { margin-bottom: 1rem; }
+    .q strong { color: #f9c74f; }
+    footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid #21262d; padding-top: 1rem; }
+    .schema { display: grid; gap: 0.6rem; margin: 1rem 0; }
+    .prop-row { display: flex; gap: 1rem; background: var(--code-bg); border-radius: 6px; padding: 0.7rem 1rem; align-items: baseline; flex-wrap: wrap; }
+    .prop-name { color: #f9c74f; font-family: monospace; min-width: 130px; font-size: 0.95rem; }
+    .prop-type { color: #79c0ff; font-family: monospace; min-width: 90px; font-size: 0.85rem; }
+    .prop-why { color: #c9d1d9; font-size: 0.85rem; flex: 1; }
+    .prop-tag { font-size: 0.7rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 3px; margin-left: 0.4rem; }
+    .tag-must { background: #14532d; color: #4ade80; }
+    .tag-nice { background: #451a03; color: #fb923c; }
+  </style>
+</head>
+<body>
+
+<h1>Lektion 08 — Organizer-Datenbankstruktur designen</h1>
+<p class="meta">Kurs: CLI × Notion × Coding Agent &nbsp;|&nbsp; Heute: Das richtige Schema für tägliche Planung</p>
+
+<h2>🎯 Lernziel</h2>
+<p>Du entwirfst die Property-Struktur deines persönlichen Tagesorganizers — so, dass Claude Code damit sinnvoll filtern, sortieren und updaten kann.</p>
+
+<h2>Warum Schema zuerst?</h2>
+<p>Ein schlechtes Schema macht jeden Workflow kompliziert. Ein gutes Schema macht Prompts wie
+<em>„Zeig mir alle dringenden Tasks von heute"</em> trivial — weil Notion exakt die richtigen
+Filter-Felder hat.</p>
+
+<div class="box decision">
+  <div class="label decision">Kernfrage</div>
+  <p>Was muss Claude Code über einen Task wissen, damit er <strong>nützlich handeln</strong> kann?<br>
+  Nicht: was ist theoretisch interessant zu speichern.</p>
+</div>
+
+<h2>Empfohlenes Schema: Tagesorganizer</h2>
+
+<div class="schema">
+  <div class="prop-row">
+    <span class="prop-name">Name</span>
+    <span class="prop-type">title</span>
+    <span class="prop-why">Was ist zu tun? <span class="prop-tag tag-must">MUSS</span></span>
+  </div>
+  <div class="prop-row">
+    <span class="prop-name">Status</span>
+    <span class="prop-type">status</span>
+    <span class="prop-why">Not started / In progress / Done — Workflow-Steuerung <span class="prop-tag tag-must">MUSS</span></span>
+  </div>
+  <div class="prop-row">
+    <span class="prop-name">Priorität</span>
+    <span class="prop-type">select</span>
+    <span class="prop-why">Hoch / Mittel / Niedrig — für „zeig mir was wichtig ist heute" <span class="prop-tag tag-must">MUSS</span></span>
+  </div>
+  <div class="prop-row">
+    <span class="prop-name">Datum</span>
+    <span class="prop-type">date</span>
+    <span class="prop-why">Fälligkeitsdatum — für Tagesfilter „alles für heute" <span class="prop-tag tag-must">MUSS</span></span>
+  </div>
+  <div class="prop-row">
+    <span class="prop-name">Bereich</span>
+    <span class="prop-type">select</span>
+    <span class="prop-why">Arbeit / Privat / Lernen / Gesundheit — Kontext für Fokusblöcke <span class="prop-tag tag-nice">NICE</span></span>
+  </div>
+  <div class="prop-row">
+    <span class="prop-name">Notiz</span>
+    <span class="prop-type">rich_text</span>
+    <span class="prop-why">Kurze Zusatzinfo — was Claude Code als Ergebnis reinschreiben kann <span class="prop-tag tag-nice">NICE</span></span>
+  </div>
+</div>
+
+<div class="box warn">
+  <div class="label warn">⚠ Weniger ist mehr</div>
+  <p>Jedes Property, das du nie filterst oder updatest, ist Lärm. Starte mit den 4 MUSS-Properties.
+  Füge NICE-Properties erst hinzu wenn du sie brauchst.</p>
+</div>
+
+<h2>Warum diese Properties mit Claude Code harmonieren</h2>
+<table>
+  <tr><th>Property</th><th>Claude Code kann damit...</th></tr>
+  <tr><td>Status</td><td>filtern (nur "Not started"), updaten nach Erledigung</td></tr>
+  <tr><td>Priorität</td><td>sortieren, nur "Hoch" zeigen, Morgenplan priorisieren</td></tr>
+  <tr><td>Datum</td><td>filtern auf heute, überfällige Tasks finden</td></tr>
+  <tr><td>Bereich</td><td>Fokusblöcke: "nur Arbeit-Tasks für heute"</td></tr>
+  <tr><td>Notiz</td><td>Ergebnis oder Kommentar zurückschreiben</td></tr>
+</table>
+
+<h2>Bestehende DB erweitern oder neue anlegen?</h2>
+
+<div class="box decision">
+  <div class="label decision">Empfehlung</div>
+  <p><strong>Neue Datenbank</strong> — "Tagesorganizer" — anlegen. Die bestehende "Tasks"-DB war für den Kurs.
+  Der echte Organizer bekommt ein sauberes Schema von Anfang an.<br><br>
+  Alternativ: "Tasks"-DB erweitern (schneller, aber Altlasten bleiben).</p>
+</div>
+
+<h2>🔬 Live-Aufgabe — Entscheidung treffen</h2>
+<div class="box quiz">
+  <div class="label quiz">Aufgabe</div>
+  <p><strong>Schritt 1:</strong> Entscheide dich — neue DB oder bestehende erweitern?</p>
+  <p style="margin-top:0.8rem;"><strong>Option A (neu, empfohlen):</strong> Sag Claude Code:</p>
+  <p style="margin-top:0.4rem; font-style:italic; color: #c9d1d9;">
+    „Lege in Notion eine neue Datenbank namens 'Tagesorganizer' an mit den Properties: Name (title), Status (status: Not started / In progress / Done), Priorität (select: Hoch / Mittel / Niedrig), Datum (date), Bereich (select: Arbeit / Privat / Lernen / Gesundheit), Notiz (rich_text)."
+  </p>
+  <p style="margin-top:0.8rem;"><strong>Option B (erweitern):</strong></p>
+  <p style="font-style:italic; color: #c9d1d9;">
+    „Füge zur Tasks-Datenbank folgende Properties hinzu: Priorität (select: Hoch/Mittel/Niedrig), Datum (date), Bereich (select: Arbeit/Privat/Lernen/Gesundheit), Notiz (rich_text)."
+  </p>
+</div>
+
+<h2>Quiz — Theorie</h2>
+<div class="box quiz">
+  <div class="label quiz">Fragen</div>
+  <div class="q"><strong>F1:</strong> Warum ist <code>select</code> für Priorität besser als <code>rich_text</code>?</div>
+  <div class="q"><strong>F2:</strong> Was ermöglicht das <code>date</code>-Feld, das ohne es nicht geht?</div>
+  <div class="q"><strong>F3:</strong> Welchen Property-Typ würdest du nutzen, wenn Claude Code ein Ergebnis als Text zurückschreiben soll?</div>
+</div>
+
+<footer>Lektion 08 · CLI × Notion × Coding Agent · 2026-06-09</footer>
+</body>
+</html>

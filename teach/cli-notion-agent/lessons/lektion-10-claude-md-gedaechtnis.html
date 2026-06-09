@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Lektion 10 – CLAUDE.md als Workflow-Gedächtnis</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --accent: #e94560;
+      --accent2: #0f3460;
+      --text: #eaeaea;
+      --muted: #888;
+      --code-bg: #0d1117;
+      --success: #2d9e5f;
+      --warn: #e8a838;
+      --teal: #0d9488;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; line-height: 1.7; padding: 2rem; max-width: 900px; margin: 0 auto; }
+    h1 { color: var(--accent); font-size: 1.8rem; margin-bottom: 0.3rem; }
+    .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; }
+    h2 { color: #a0c4ff; margin: 2rem 0 0.8rem; font-size: 1.2rem; border-left: 3px solid var(--accent); padding-left: 0.7rem; }
+    p { margin-bottom: 0.9rem; }
+    code { background: var(--code-bg); color: #79c0ff; padding: 0.1rem 0.4rem; border-radius: 3px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.9rem; }
+    pre { background: var(--code-bg); border: 1px solid #30363d; border-radius: 6px; padding: 1.2rem 1.4rem; overflow-x: auto; margin: 1rem 0; font-size: 0.88rem; line-height: 1.8; }
+    pre code { background: none; padding: 0; color: #e6edf3; }
+    .hl { color: #f9c74f; }
+    .cm { color: #6e7681; }
+    .str { color: #a5d6ff; }
+    .box { background: var(--surface); border: 1px solid #30363d; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.2rem 0; }
+    .box.warn { border-color: var(--warn); }
+    .box.quiz { border-color: var(--accent2); background: #0d1a2e; }
+    .box.teal { border-color: var(--teal); background: #0d1f1e; }
+    .box.success { border-color: var(--success); background: #0a1f12; }
+    .label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.6rem; }
+    .label.warn { color: var(--warn); }
+    .label.quiz { color: #79c0ff; }
+    .label.teal { color: #2dd4bf; }
+    .label.success { color: #4ade80; }
+    .before-after { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+    .ba-box { background: var(--code-bg); border: 1px solid #30363d; border-radius: 6px; padding: 1rem; font-size: 0.85rem; }
+    .ba-box h4 { margin-bottom: 0.6rem; font-size: 0.9rem; }
+    .bad { color: #f87171; }
+    .good { color: #4ade80; }
+    .q { margin-bottom: 1rem; }
+    .q strong { color: #f9c74f; }
+    footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid #21262d; padding-top: 1rem; }
+  </style>
+</head>
+<body>
+
+<h1>Lektion 10 — CLAUDE.md als Workflow-Gedächtnis</h1>
+<p class="meta">Kurs: CLI × Notion × Coding Agent &nbsp;|&nbsp; Heute: Kontext einmal speichern, nie mehr erklären</p>
+
+<h2>🎯 Lernziel</h2>
+<p>Du speicherst deine Workflow-Prompts und Datenbank-IDs in einer <code>CLAUDE.md</code>-Datei — so kennt Claude Code deinen Organizer in jeder neuen Session ohne Einleitung.</p>
+
+<h2>Was ist CLAUDE.md?</h2>
+<p>Eine Markdown-Datei, die Claude Code beim Start automatisch liest. Alles darin ist
+<strong>persistenter Kontext</strong> — du musst es nie wiederholen. Ideal für:</p>
+<ul style="margin-left:1.5rem; margin-bottom:1rem;">
+  <li>Datenbank-IDs die sich nie ändern</li>
+  <li>Workflow-Prompt-Vorlagen zum Copy-Paste</li>
+  <li>Regeln ("immer Datum setzen", "Priorität Hoch = heute erledigen")</li>
+</ul>
+
+<h2>Vorher / Nachher</h2>
+<div class="before-after">
+  <div class="ba-box">
+    <h4 class="bad">❌ Ohne CLAUDE.md</h4>
+    <p style="color:var(--muted)">Jede Session: „Mein Tagesorganizer heißt X, die data_source_id ist Y, Morgen-Workflow macht Z..."<br><br>Claude Code sucht DB jedes Mal neu.</p>
+  </div>
+  <div class="ba-box">
+    <h4 class="good">✅ Mit CLAUDE.md</h4>
+    <p style="color:var(--muted)">Jede Session: „Morgen-Workflow starten."<br><br>Claude Code weiß sofort: welche DB, welche IDs, welcher Filter.</p>
+  </div>
+</div>
+
+<h2>Deine CLAUDE.md — Vorlage</h2>
+<p>Speichern unter: <code>C:\Users\tjark\.claude\CLAUDE.md</code> (global, immer aktiv).</p>
+
+<pre><code><span class="cm"># Notion Tagesorganizer</span>
+
+<span class="cm">## Datenbank</span>
+<span class="hl">- Name:</span> <span class="str">Tagesorganizer</span>
+<span class="hl">- data_source_id:</span> <span class="str">c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0</span>
+<span class="hl">- Eltern-Seite:</span> <span class="str">Organizer (Workspace-Level)</span>
+
+<span class="cm">## Properties</span>
+<span class="hl">- Name</span> <span class="str">(title)</span>
+<span class="hl">- Status</span> <span class="str">(status): Not started | In progress | Done</span>
+<span class="hl">- Priorität</span> <span class="str">(select): Hoch | Mittel | Niedrig</span>
+<span class="hl">- Datum</span> <span class="str">(date): ISO 8601, z.B. 2026-06-09</span>
+<span class="hl">- Bereich</span> <span class="str">(select): Arbeit | Privat | Lernen | Gesundheit</span>
+<span class="hl">- Notiz</span> <span class="str">(rich_text)</span>
+
+<span class="cm">## Regeln</span>
+<span class="hl">-</span> Immer Datum setzen wenn Task angelegt wird
+<span class="hl">-</span> Priorität Hoch = muss heute erledigt werden
+<span class="hl">-</span> Notiz-Feld für Ergebnisse und Kommentare nutzen
+
+<span class="cm">## Morgen-Workflow</span>
+Lies den Tagesorganizer. Zeig alle Tasks mit Datum heute oder ohne Datum,
+die nicht Done sind. Sortiere nach Priorität (Hoch zuerst). Gruppiere nach Bereich.
+
+<span class="cm">## Abend-Workflow</span>
+Lies den Tagesorganizer. Zeige:
+1) Alle heute erledigten Tasks (Status = Done) — Erfolgsliste
+2) Alle offenen Tasks (Status ≠ Done) — offene Punkte
+Frage dann: Soll ich offene Tasks auf morgen verschieben?</code></pre>
+
+<div class="box teal">
+  <div class="label teal">💡 Warum die data_source_id reinschreiben?</div>
+  <p>Ohne ID muss Claude Code bei jedem Start <code>notion_find</code> aufrufen — kostet Zeit und einen Tool-Call.
+  Mit ID geht es direkt los. Die ID ändert sich nie solange die DB existiert.</p>
+</div>
+
+<h2>Wo speichern?</h2>
+<div class="box">
+  <div class="label">Zwei Optionen</div>
+  <p><strong>Global</strong> <code>C:\Users\tjark\.claude\CLAUDE.md</code> — gilt für alle Projekte, immer aktiv.<br>
+  <strong>Projekt-lokal</strong> <code>CLAUDE.md</code> im Projektordner — nur aktiv wenn du dort arbeitest.</p>
+  <p style="margin-top:0.6rem; color:var(--muted);">Für den Tagesorganizer: <strong>global empfohlen</strong> — du willst ihn überall nutzen können.</p>
+</div>
+
+<h2>🔬 Live-Aufgabe</h2>
+<div class="box quiz">
+  <div class="label quiz">Aufgabe</div>
+  <p>Sag Claude Code:</p>
+  <p style="font-style:italic; margin-top:0.4rem; color:#e2e8f0;">„Füge meiner globalen CLAUDE.md die Tagesorganizer-Konfiguration hinzu: data_source_id, Properties, Morgen- und Abend-Workflow als Vorlage."</p>
+  <p style="margin-top:0.8rem; color:var(--muted);">Claude Code schreibt die CLAUDE.md — dann neue Session starten und einfach „Morgen-Workflow" tippen. Kein Kontext nötig.</p>
+</div>
+
+<h2>Quiz — Theorie</h2>
+<div class="box quiz">
+  <div class="label quiz">Fragen</div>
+  <div class="q"><strong>F1:</strong> Was ist der Unterschied zwischen globaler und projekt-lokaler CLAUDE.md?</div>
+  <div class="q"><strong>F2:</strong> Warum ist die data_source_id wertvoller als der Datenbankname in der CLAUDE.md?</div>
+  <div class="q"><strong>F3:</strong> Was würdest du noch in die CLAUDE.md schreiben, das dir täglich hilft?</div>
+</div>
+
+<div class="box success" style="margin-top:2rem;">
+  <div class="label success">🏁 Kurs-Abschluss</div>
+  <p>Du hast gebaut:</p>
+  <p>✓ Bidirektionaler Notion-Workflow &nbsp;·&nbsp; ✓ Tagesorganizer-DB mit vollständigem Schema<br>
+  ✓ Morgen- &amp; Abend-Prompts &nbsp;·&nbsp; ✓ CLAUDE.md als persistentes Gedächtnis</p>
+  <p style="margin-top:0.8rem; color:var(--muted);">Nächster Horizont: Wochenrückblick-Prompt, Bereichs-Fokusblöcke, Tasks per Spracheingabe anlegen.</p>
+</div>
+
+<footer>Lektion 10 · CLI × Notion × Coding Agent · 2026-06-09</footer>
+</body>
+</html>

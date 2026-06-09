@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Lektion 06 – Vollständiger Workflow</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --accent: #e94560;
+      --accent2: #0f3460;
+      --text: #eaeaea;
+      --muted: #888;
+      --code-bg: #0d1117;
+      --success: #2d9e5f;
+      --warn: #e8a838;
+      --purple: #7c3aed;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+    h1 { color: var(--accent); font-size: 1.8rem; margin-bottom: 0.3rem; }
+    .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; }
+    h2 { color: #a0c4ff; margin: 2rem 0 0.8rem; font-size: 1.2rem; border-left: 3px solid var(--accent); padding-left: 0.7rem; }
+    h3 { color: #c9d1d9; margin: 1.2rem 0 0.4rem; }
+    p { margin-bottom: 0.9rem; }
+    code { background: var(--code-bg); color: #79c0ff; padding: 0.1rem 0.4rem; border-radius: 3px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.9rem; }
+    pre { background: var(--code-bg); border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.2rem; overflow-x: auto; margin: 1rem 0; }
+    pre code { background: none; padding: 0; color: #e6edf3; }
+    .hl { color: #f9c74f; }
+    .cm { color: #6e7681; }
+    .str { color: #a5d6ff; }
+    .box { background: var(--surface); border: 1px solid #30363d; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.2rem 0; }
+    .box.warn { border-color: var(--warn); }
+    .box.success { border-color: var(--success); }
+    .box.quiz { border-color: var(--accent2); background: #0d1a2e; }
+    .box.prompt { border-color: var(--purple); background: #150d2e; }
+    .label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; }
+    .label.warn { color: var(--warn); }
+    .label.success { color: var(--success); }
+    .label.quiz { color: #79c0ff; }
+    .label.prompt { color: #c084fc; }
+    .pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin: 1.2rem 0; }
+    .pipe-step { background: var(--accent2); border-radius: 8px; padding: 0.8rem; text-align: center; font-size: 0.85rem; }
+    .pipe-step .num { font-size: 1.2rem; font-weight: 700; color: #f9c74f; }
+    .pipe-step .tool { color: #79c0ff; font-family: monospace; font-size: 0.8rem; margin-top: 0.3rem; }
+    .q { margin-bottom: 1rem; }
+    .q strong { color: #f9c74f; }
+    footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid #21262d; padding-top: 1rem; }
+    .milestone { background: linear-gradient(135deg, #0f3460, #1a1a2e); border: 2px solid var(--success); border-radius: 10px; padding: 1.5rem; margin: 2rem 0; text-align: center; }
+    .milestone h3 { color: #4ade80; font-size: 1.3rem; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+
+<h1>Lektion 06 — Vollständiger bidirektionaler Workflow</h1>
+<p class="meta">Kurs: CLI × Notion × Coding Agent &nbsp;|&nbsp; Heute: Alles zusammen</p>
+
+<h2>🎯 Lernziel</h2>
+<p>Du kannst Claude Code mit <strong>einem einzigen Prompt</strong> beauftragen, einen Task aus Notion zu lesen, etwas zu tun, und das Ergebnis zurückzuschreiben — ohne manuelles Copy-Paste.</p>
+
+<h2>Was wir bisher haben</h2>
+<div class="pipeline">
+  <div class="pipe-step"><div class="num">✓</div>DB lesen<div class="tool">notion_find<br>+ query</div></div>
+  <div class="pipe-step"><div class="num">✓</div>page_id<div class="tool">aus Query-<br>Antwort</div></div>
+  <div class="pipe-step"><div class="num">✓</div>Status setzen<div class="tool">update_page_<br>properties</div></div>
+  <div class="pipe-step"><div class="num">→</div>Alles in einem<div class="tool">ein Prompt<br>= Workflow</div></div>
+</div>
+
+<h2>Das Konzept: Agenten-Prompt</h2>
+<p>Ein guter Workflow-Prompt hat drei Teile:</p>
+<ol style="margin-left:1.5rem; margin-bottom:1rem;">
+  <li><strong>Quelle</strong> — Wo liegt der Task? (Notion-Datenbank, Filter)</li>
+  <li><strong>Aktion</strong> — Was soll der Agent tun? (lesen, verarbeiten, entscheiden)</li>
+  <li><strong>Rückschreiben</strong> — Was soll zurück nach Notion? (Status, Kommentar, Ergebnis)</li>
+</ol>
+
+<div class="box prompt">
+  <div class="label prompt">Beispiel-Prompt (Vorlage)</div>
+  <p>
+    „Lies alle Tasks aus meiner Notion-Datenbank 'Tasks' mit Status 'Not started'.<br>
+    Für jeden Task: schreib den Task-Namen auf und setze den Status auf 'In progress'.<br>
+    Zeig mir am Ende eine Liste aller Tasks, die du verändert hast."
+  </p>
+</div>
+
+<h2>Warum ein Prompt reicht</h2>
+<div class="box">
+  <div class="label">Wie Claude Code das intern zerlegt</div>
+  <p>Claude Code sieht den Prompt und plant automatisch die Tool-Kette:</p>
+  <pre><code><span class="cm">1. notion_find("Tasks")           → data_source_id</span>
+<span class="cm">2. notion_query_data_source(      → Liste aller "Not started"-Pages</span>
+<span class="cm">     filter: Status = "Not started"</span>
+<span class="cm">   )</span>
+<span class="cm">3. für jede page_id:</span>
+<span class="cm">   notion_update_page_properties( → Status = "In progress"</span>
+<span class="cm">     page_id, Status: "In progress"</span>
+<span class="cm">   )</span>
+<span class="cm">4. Zusammenfassung ausgeben</span></code></pre>
+  <p>Du denkst in <em>Absichten</em>, Claude Code denkt in <em>Tool-Calls</em>.</p>
+</div>
+
+<h2>Filter in Queries</h2>
+<p>Statt alle Tasks zu laden, kannst du gezielt filtern. Beispiel: nur "Not started"-Tasks:</p>
+<pre><code><span class="cm">// notion_query_data_source mit filter:</span>
+{
+  <span class="hl">"data_source_id"</span>: <span class="str">"..."</span>,
+  <span class="hl">"filter"</span>: {
+    <span class="hl">"property"</span>: <span class="str">"Status"</span>,
+    <span class="hl">"status"</span>: {
+      <span class="hl">"equals"</span>: <span class="str">"Not started"</span>
+    }
+  }
+}</code></pre>
+
+<div class="box warn">
+  <div class="label warn">⚠ Vorsicht bei "für alle Tasks"</div>
+  <p>Wenn du sagst „setze alle Tasks auf Done" — macht Claude Code genau das. Kein Undo-Button.
+  Nutze Filter und lass dir vor dem Schreiben eine Liste zeigen (zweistufiger Prompt).</p>
+</div>
+
+<h2>🔬 Live-Aufgabe</h2>
+<div class="box quiz">
+  <div class="label quiz">Aufgabe in zwei Stufen</div>
+  <p><strong>Stufe 1 — Sicher:</strong> Sag Claude Code:</p>
+  <p><em>„Lies alle Tasks aus der Tasks-Datenbank mit Status 'Not started' und zeig mir die Liste — aber ändere noch nichts."</em></p>
+  <p style="margin-top:0.8rem;"><strong>Stufe 2 — Schreiben:</strong> Wenn du die Liste siehst:</p>
+  <p><em>„Setze jetzt den Status aller aufgelisteten Tasks auf 'In progress'."</em></p>
+  <p style="margin-top:0.8rem; color: var(--muted);">Prüfe in Notion Desktop nach Stufe 2.</p>
+</div>
+
+<h2>Quiz — Theorie</h2>
+<div class="box quiz">
+  <div class="label quiz">Fragen</div>
+  <div class="q"><strong>F1:</strong> Was sind die drei Teile eines guten Workflow-Prompts?</div>
+  <div class="q"><strong>F2:</strong> Warum ist ein zweistufiger Prompt (erst lesen, dann bestätigen) sicherer als ein einstufiger?</div>
+  <div class="q"><strong>F3:</strong> Welchen Filter würdest du nutzen, um nur Tasks mit Status "Done" abzurufen?</div>
+</div>
+
+<div class="milestone">
+  <h3>🏁 Mission fast erfüllt</h3>
+  <p>Nach dieser Lektion kannst du:</p>
+  <p>✓ Notion-Task lesen &nbsp;·&nbsp; ✓ Status schreiben &nbsp;·&nbsp; ✓ Workflow in einem Prompt</p>
+  <p style="margin-top:0.8rem; color: var(--muted);">Noch offen: eigene Tasks anlegen (notion_create_data_source_item) — Lektion 7</p>
+</div>
+
+<footer>Lektion 06 · CLI × Notion × Coding Agent · 2026-06-09</footer>
+</body>
+</html>

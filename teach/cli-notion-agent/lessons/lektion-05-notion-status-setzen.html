@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Lektion 05 – Notion-Status aktualisieren</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --accent: #e94560;
+      --accent2: #0f3460;
+      --text: #eaeaea;
+      --muted: #888;
+      --code-bg: #0d1117;
+      --success: #2d9e5f;
+      --warn: #e8a838;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+    h1 { color: var(--accent); font-size: 1.8rem; margin-bottom: 0.3rem; }
+    .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; }
+    h2 { color: #a0c4ff; margin: 2rem 0 0.8rem; font-size: 1.2rem; border-left: 3px solid var(--accent); padding-left: 0.7rem; }
+    h3 { color: #c9d1d9; margin: 1.2rem 0 0.4rem; }
+    p { margin-bottom: 0.9rem; }
+    code { background: var(--code-bg); color: #79c0ff; padding: 0.1rem 0.4rem; border-radius: 3px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.9rem; }
+    pre { background: var(--code-bg); border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.2rem; overflow-x: auto; margin: 1rem 0; }
+    pre code { background: none; padding: 0; color: #e6edf3; }
+    .highlight { color: #f9c74f; }
+    .comment { color: #6e7681; }
+    .box { background: var(--surface); border: 1px solid #30363d; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.2rem 0; }
+    .box.warn { border-color: var(--warn); }
+    .box.success { border-color: var(--success); }
+    .box.quiz { border-color: var(--accent2); background: #0d1a2e; }
+    .label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; }
+    .label.warn { color: var(--warn); }
+    .label.success { color: var(--success); }
+    .label.quiz { color: #79c0ff; }
+    .flow { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; font-size: 0.9rem; }
+    .step { background: var(--accent2); padding: 0.3rem 0.8rem; border-radius: 20px; color: #a0c4ff; }
+    .arrow { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    th { background: var(--accent2); color: #a0c4ff; padding: 0.5rem 0.8rem; text-align: left; }
+    td { border-bottom: 1px solid #21262d; padding: 0.5rem 0.8rem; }
+    .q { margin-bottom: 1rem; }
+    .q strong { color: #f9c74f; }
+    footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid #21262d; padding-top: 1rem; }
+  </style>
+</head>
+<body>
+
+<h1>Lektion 05 — Notion-Status aktualisieren</h1>
+<p class="meta">Kurs: CLI × Notion × Coding Agent &nbsp;|&nbsp; Heute: Properties schreiben</p>
+
+<h2>🎯 Lernziel</h2>
+<p>Du kannst den <code>Status</code> eines Notion-Tasks per Claude Code von <em>„Not started"</em> auf <em>„Done"</em> setzen — ohne Browser.</p>
+
+<h2>Warum ist das wichtig?</h2>
+<p>
+  Lesen ist die halbe Miete. Euer Workflow braucht aber den Rückkanal:
+  Claude Code erledigt eine Aufgabe → Notion weiß es → du siehst es sofort in der App.
+  Das ist der Schritt von <em>„Agent liest Tasks"</em> zu <em>„Agent schreibt Ergebnisse zurück"</em>.
+</p>
+
+<h2>Das Tool: <code>notion_update_page_properties</code></h2>
+
+<div class="box">
+  <div class="label">Konzept</div>
+  <p>Jede Notion-Page hat eine eindeutige <code>page_id</code>. Properties werden als JSON-Objekt übergeben.<br>
+  Status-Properties brauchen ein spezielles Format: <code>{ "status": { "name": "Done" } }</code></p>
+</div>
+
+<h3>Der Ablauf</h3>
+<div class="flow">
+  <span class="step">1. notion_find</span>
+  <span class="arrow">→</span>
+  <span class="step">2. notion_query_data_source</span>
+  <span class="arrow">→</span>
+  <span class="step">3. page_id merken</span>
+  <span class="arrow">→</span>
+  <span class="step">4. notion_update_page_properties</span>
+</div>
+
+<h2>Schritt für Schritt</h2>
+
+<h3>1. Tasks laden (kennst du schon)</h3>
+<pre><code><span class="comment">// notion_find → data_source_id ermitteln
+// notion_query_data_source → Einträge + page_ids anzeigen</span></code></pre>
+
+<h3>2. page_id identifizieren</h3>
+<p>In der Query-Antwort hat jede Page eine <code>id</code> im Format <code>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</code>. Das ist deine <code>page_id</code>.</p>
+
+<h3>3. Status aktualisieren</h3>
+
+<div class="box warn">
+  <div class="label warn">⚠ Achtung: Status-Namen sind exakt</div>
+  <p>Der Name muss <strong>exakt</strong> mit dem Notion-Status übereinstimmen (Groß-/Kleinschreibung, Leerzeichen).
+  Falsche Namen → Notion-Fehler. Nutze <code>notion_inspect_data_source</code> um erlaubte Werte zu sehen.</p>
+</div>
+
+<pre><code><span class="comment">// Tool: notion_update_page_properties</span>
+{
+  <span class="highlight">"page_id"</span>: <span class="highlight">"37a4bba2-9c55-8039-ae03-e774679e0a9d"</span>,  <span class="comment">// z.B. "Learn Notion"</span>
+  <span class="highlight">"properties"</span>: {
+    <span class="highlight">"Status"</span>: {
+      <span class="highlight">"status"</span>: {
+        <span class="highlight">"name"</span>: <span class="highlight">"Done"</span>
+      }
+    }
+  }
+}</code></pre>
+
+<h2>Property-Typen Übersicht</h2>
+<table>
+  <tr><th>Typ</th><th>Format im JSON</th><th>Beispiel</th></tr>
+  <tr><td><code>status</code></td><td><code>{"status": {"name": "Done"}}</code></td><td>Workflow-Status</td></tr>
+  <tr><td><code>title</code></td><td><code>{"title": [{"text": {"content": "Neu"}}]}</code></td><td>Seitentitel</td></tr>
+  <tr><td><code>rich_text</code></td><td><code>{"rich_text": [{"text": {"content": "Text"}}]}</code></td><td>Notizfeld</td></tr>
+  <tr><td><code>checkbox</code></td><td><code>{"checkbox": true}</code></td><td>Erledigt-Haken</td></tr>
+  <tr><td><code>select</code></td><td><code>{"select": {"name": "Option"}}</code></td><td>Einzelauswahl</td></tr>
+</table>
+
+<h2>🔬 Aufgabe — Mach es live</h2>
+<div class="box quiz">
+  <div class="label quiz">Live-Aufgabe</div>
+  <p>Sage Claude Code (in diesem Chat-Fenster):</p>
+  <p><em>„Setze den Status des Tasks 'Learn Notion' in der Tasks-Datenbank auf 'Done'."</em></p>
+  <p style="margin-top:0.8rem; color: var(--muted);">Claude Code führt die nötigen Notion-MCP-Calls aus. Prüfe danach in der Notion Desktop App, ob der Status sich geändert hat.</p>
+</div>
+
+<h2>Quiz — Theorie</h2>
+<div class="box quiz">
+  <div class="label quiz">Fragen</div>
+  <div class="q"><strong>F1:</strong> Welche zwei Informationen brauchst du, bevor du <code>notion_update_page_properties</code> aufrufen kannst?</div>
+  <div class="q"><strong>F2:</strong> Warum darf der Status-Name nicht getippt werden, ohne vorher die erlaubten Werte nachzusehen?</div>
+  <div class="q"><strong>F3:</strong> Was ist der Unterschied zwischen <code>status</code>-Property und <code>select</code>-Property in der JSON-Struktur? (Tipp: Tabelle oben)</div>
+</div>
+
+<div class="box success" style="margin-top:2rem;">
+  <div class="label success">🎉 Wenn die Aufgabe klappt</div>
+  <p>Du hast den <strong>Rückkanal</strong> deines Workflows: Agent liest Task → arbeitet → schreibt Status zurück.<br>
+  Nächster Schritt: Einen vollständigen Workflow bauen — Task lesen, "bearbeiten", Status setzen — in einem einzigen Prompt.</p>
+</div>
+
+<footer>Lektion 05 · CLI × Notion × Coding Agent · 2026-06-09</footer>
+</body>
+</html>

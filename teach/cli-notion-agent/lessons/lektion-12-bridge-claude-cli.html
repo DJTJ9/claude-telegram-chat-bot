@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Lektion 12 – Bridge: Telegram → Claude Code CLI</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --accent: #e94560;
+      --accent2: #0f3460;
+      --text: #eaeaea;
+      --muted: #888;
+      --code-bg: #0d1117;
+      --success: #2d9e5f;
+      --warn: #e8a838;
+      --teal: #0d9488;
+      --tg: #2ca5e0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; line-height: 1.7; padding: 2rem; max-width: 900px; margin: 0 auto; }
+    h1 { color: var(--accent); font-size: 1.8rem; margin-bottom: 0.3rem; }
+    .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; }
+    h2 { color: #a0c4ff; margin: 2rem 0 0.8rem; font-size: 1.2rem; border-left: 3px solid var(--accent); padding-left: 0.7rem; }
+    p { margin-bottom: 0.9rem; }
+    code { background: var(--code-bg); color: #79c0ff; padding: 0.1rem 0.4rem; border-radius: 3px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.9rem; }
+    pre { background: var(--code-bg); border: 1px solid #30363d; border-radius: 6px; padding: 1.2rem 1.4rem; overflow-x: auto; margin: 1rem 0; font-size: 0.88rem; line-height: 1.8; }
+    pre code { background: none; padding: 0; color: #e6edf3; }
+    .hl { color: #f9c74f; }
+    .cm { color: #6e7681; }
+    .str { color: #a5d6ff; }
+    .kw { color: #ff7b72; }
+    .fn { color: #d2a8ff; }
+    .box { background: var(--surface); border: 1px solid #30363d; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.2rem 0; }
+    .box.warn { border-color: var(--warn); }
+    .box.quiz { border-color: var(--accent2); background: #0d1a2e; }
+    .box.teal { border-color: var(--teal); background: #0d1f1e; }
+    .box.success { border-color: var(--success); background: #0a1f12; }
+    .box.tg { border-color: var(--tg); background: #0a1a2e; }
+    .label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.6rem; }
+    .label.warn { color: var(--warn); }
+    .label.quiz { color: #79c0ff; }
+    .label.teal { color: #2dd4bf; }
+    .label.success { color: #4ade80; }
+    .label.tg { color: var(--tg); }
+    .flow { display: flex; align-items: center; gap: 0.5rem; margin: 1rem 0; flex-wrap: wrap; }
+    .flow-box { background: var(--code-bg); border: 1px solid #30363d; border-radius: 6px; padding: 0.5rem 0.9rem; font-size: 0.85rem; }
+    .flow-arrow { color: var(--muted); font-size: 1.1rem; }
+    .q { margin-bottom: 1rem; }
+    .q strong { color: #f9c74f; }
+    footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid #21262d; padding-top: 1rem; }
+    ol, ul { margin-left: 1.5rem; margin-bottom: 0.9rem; }
+    li { margin-bottom: 0.3rem; }
+  </style>
+</head>
+<body>
+
+<h1>Lektion 12 — Bridge: Telegram → Claude Code CLI</h1>
+<p class="meta">Kurs: CLI × Notion × Coding Agent &nbsp;|&nbsp; Heute: Bot-Nachricht ruft <code>claude -p</code> auf, Antwort zurück an Telegram</p>
+
+<h2>🎯 Lernziel</h2>
+<p>Du erweiterst bot.py so, dass jede Telegram-Nachricht an Claude Code weitergeleitet wird und die Antwort zurückkommt. Das ist die fertige Bridge — danach braucht nur noch der Prompt zu funktionieren.</p>
+
+<h2>Das Schlüsselkonzept: <code>claude -p</code></h2>
+<p>Claude Code hat einen nicht-interaktiven Modus: <code>claude -p "dein Prompt"</code> führt den Prompt aus, gibt die Antwort auf stdout aus und beendet sich. Genau das brauchen wir.</p>
+
+<pre><code><span class="cm"># Im Terminal testen:</span>
+claude -p <span class="str">"Was ist 2+2?"</span>
+<span class="cm"># Ausgabe: 4</span></code></pre>
+
+<div class="box teal">
+  <div class="label teal">Warum subprocess?</div>
+  <p>Python kann keine Claude-Code-Plugins direkt importieren. Aber es kann jeden CLI-Befehl als Kindprozess starten, Output einlesen und weiterverwenden. <code>subprocess.run</code> ist dafür gebaut.</p>
+</div>
+
+<h2>Datenfluss</h2>
+<div class="flow">
+  <div class="flow-box" style="border-color:var(--tg);color:var(--tg);">📱 Telegram<br><small>"Task: Arzt anrufen"</small></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box" style="border-color:#f9c74f;color:#f9c74f;">🐍 bot.py<br><small>subprocess.run()</small></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box" style="border-color:var(--accent);color:var(--accent);">⚡ claude -p<br><small>stdout</small></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box" style="border-color:var(--tg);color:var(--tg);">📱 Telegram<br><small>Antwort zurück</small></div>
+</div>
+
+<h2>bot.py — erweiterte Version</h2>
+
+<pre><code><span class="kw">import</span> os, subprocess, requests
+
+TOKEN = os.environ[<span class="str">"TELEGRAM_TOKEN"</span>]
+MY_CHAT_ID = <span class="hl">8896609541</span>
+BASE = <span class="str">f"https://api.telegram.org/bot{TOKEN}"</span>
+WORK_DIR = <span class="str">r"C:\Unity\Aktuelle Projekte\DartTrainingsApp"</span>
+
+<span class="kw">def</span> <span class="fn">get_updates</span>(offset=<span class="hl">None</span>):
+    params = {<span class="str">"timeout"</span>: <span class="hl">30</span>, <span class="str">"offset"</span>: offset}
+    r = requests.<span class="fn">get</span>(<span class="str">f"{BASE}/getUpdates"</span>, params=params, timeout=<span class="hl">35</span>)
+    <span class="kw">return</span> r.json().get(<span class="str">"result"</span>, [])
+
+<span class="kw">def</span> <span class="fn">send_message</span>(chat_id, text):
+    requests.<span class="fn">post</span>(<span class="str">f"{BASE}/sendMessage"</span>, json={<span class="str">"chat_id"</span>: chat_id, <span class="str">"text"</span>: text})
+
+<span class="kw">def</span> <span class="fn">run_claude</span>(prompt):
+    result = subprocess.<span class="fn">run</span>(
+        [<span class="str">"claude"</span>, <span class="str">"--dangerously-skip-permissions"</span>, <span class="str">"-p"</span>, prompt],
+        capture_output=<span class="hl">True</span>,
+        text=<span class="hl">True</span>,
+        timeout=<span class="hl">120</span>,
+        cwd=WORK_DIR
+    )
+    <span class="kw">return</span> result.stdout.strip() <span class="kw">or</span> result.stderr.strip() <span class="kw">or</span> <span class="str">"(keine Antwort)"</span>
+
+offset = <span class="hl">None</span>
+<span class="kw">print</span>(<span class="str">"Bridge läuft. Strg+C zum Beenden."</span>)
+
+<span class="kw">while True</span>:
+    updates = <span class="fn">get_updates</span>(offset)
+    <span class="kw">for</span> update <span class="kw">in</span> updates:
+        offset = update[<span class="str">"update_id"</span>] + <span class="hl">1</span>
+        msg = update.get(<span class="str">"message"</span>, {})
+        chat_id = msg.get(<span class="str">"chat"</span>, {}).get(<span class="str">"id"</span>)
+        text = msg.get(<span class="str">"text"</span>, <span class="str">""</span>).strip()
+
+        <span class="kw">if</span> chat_id != MY_CHAT_ID <span class="kw">or not</span> text:
+            <span class="kw">continue</span>
+
+        <span class="fn">send_message</span>(chat_id, <span class="str">"⏳ Denke nach..."</span>)
+        <span class="kw">print</span>(<span class="str">f"→ Claude: {text}"</span>)
+        response = <span class="fn">run_claude</span>(text)
+        <span class="kw">print</span>(<span class="str">f"← Antwort: {response[:80]}..."</span>)
+        <span class="fn">send_message</span>(chat_id, response)
+</code></pre>
+
+<div class="box warn">
+  <div class="label warn">--dangerously-skip-permissions</div>
+  <p>Im nicht-interaktiven Modus kann Claude Code keine Bestätigungen einholen. Das Flag überspringt Permission-Prompts automatisch. Nur für vertrauenswürdige Prompts von deiner Chat-ID verwenden — daher ist der Chat-ID-Filter so wichtig.</p>
+</div>
+
+<div class="box">
+  <div class="label">cwd=WORK_DIR erklärt</div>
+  <p>Claude Code liest <code>CLAUDE.md</code> aus dem Arbeitsverzeichnis. Mit <code>cwd</code> zeigen wir auf den Projektordner — so kennt Claude beim Aufruf automatisch den Tagesorganizer, die data_source_id und alle Workflow-Regeln.</p>
+</div>
+
+<h2>🔬 Live-Aufgabe</h2>
+<div class="box quiz">
+  <div class="label quiz">2 Schritte</div>
+  <ol>
+    <li>bot.py mit der neuen Version ersetzen (Claude Code macht das für dich)</li>
+    <li>Bot starten → im Telegram tippen: <em>"Was ist heute das Datum?"</em> — Claude antwortet direkt in Telegram</li>
+  </ol>
+  <p style="margin-top:0.8rem; color:var(--muted);">Erste Antwort dauert ~5–15 Sekunden — Claude Code startet kalt. "⏳ Denke nach..." zeigt dass der Aufruf läuft.</p>
+</div>
+
+<h2>Quiz — Theorie</h2>
+<div class="box quiz">
+  <div class="label quiz">Fragen</div>
+  <div class="q"><strong>F1:</strong> Warum brauchen wir <code>cwd=WORK_DIR</code> statt einfach <code>claude -p</code> aufzurufen?</div>
+  <div class="q"><strong>F2:</strong> Was passiert wenn <code>timeout=120</code> überschritten wird — und wann könnte das passieren?</div>
+  <div class="q"><strong>F3:</strong> Warum geben wir <code>result.stderr</code> als Fallback zurück?</div>
+</div>
+
+<div class="box teal" style="margin-top:2rem;">
+  <div class="label teal">Nächste Lektion (L13)</div>
+  <p>Task-Parsing: Wenn du <em>"Task: Arzt anrufen bis morgen, Priorität Hoch"</em> schickst — erkennt Claude automatisch Name, Datum, Priorität und legt den Task strukturiert in Notion an. Kein manuelles Formular.</p>
+</div>
+
+<footer>Lektion 12 · CLI × Notion × Coding Agent · 2026-06-09</footer>
+</body>
+</html>
