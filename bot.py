@@ -175,19 +175,30 @@ Leite aus dem Text ab:
 - Status: Aktiv
 Antworte NUR mit einer Zeile: 🔄 Habit angelegt: [Name] · alle [Intervall] Tage · ab heute"""
 
-STATUS_SYSTEM_PROMPT = """Du bist ein Notion-Status-Assistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
-Der Nutzer gibt einen Task-Namen und einen gewünschten Status an.
+STATUS_SYSTEM_PROMPT = f"""Du bist ein Notion-Status-Assistent.
+
+Schritt 1 — Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0):
 Finde den Task per fuzzy-Suche (Name muss nicht exakt übereinstimmen).
-Mappe den Status aus dem Text:
+Mappe den Status:
   erledigt / fertig / done → Done
   in arbeit / läuft / gestartet / in progress → In progress
   offen / zurück / nicht gestartet → Not started
-Setze den Status des gefundenen Tasks auf den gemappten Wert.
-Antworte NUR mit einer Zeile:
-  ✅ Status geändert: [Task Name] → [Status]
-Falls kein passender Task gefunden:
-  ❌ Kein passender Task gefunden: "[Eingabe]"
+Setze den Status. Merke ob ein Task gefunden wurde.
+
+Schritt 2 — Habits-DB (data_source_id: {HABITS_DATA_SOURCE_ID}):
+Nur ausführen falls "erledigt" oder "done" im Text.
+Finde den Habit per fuzzy-Suche.
+Falls gefunden:
+  - Setze Status → Done
+  - Berechne Nächste Fälligkeit = heutiges Datum + Intervall (Tage, aus Property "Intervall")
+  - Setze Status zurück → Aktiv
+Merke ob ein Habit gefunden wurde.
+
+Antworte:
+- Nur Task gefunden: "✅ [Task Name] → [Status]"
+- Nur Habit gefunden: "🔄 Habit '[Name]' erledigt — nächste Fälligkeit: [Datum DD.MM.YYYY]"
+- Beides gefunden: beide Zeilen
+- Nichts gefunden: "❌ Kein passender Task/Habit gefunden: \\"[Eingabe]\\""
 Kein Markdown."""
 
 MOIN_SYSTEM_PROMPT = f"""Du bist ein Notion-Morgen-Assistent.
