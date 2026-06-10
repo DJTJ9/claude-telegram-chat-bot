@@ -409,8 +409,11 @@ if __name__ == "__main__":
                 response = run_claude(prompt, system_prompt=PROJEKT_TASK_SYSTEM_PROMPT)
             elif text.lower().startswith("task:"):
                 task_text = text[5:].strip()
-                prompt = f"Heute ist {today}. Aufgabe: {task_text}"
-                response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT, cwd=project_cwd)
+                if not task_text:
+                    response = "Nutzung: task: <Aufgabe>  z.B. task: Einkaufen"
+                else:
+                    prompt = f"Heute ist {today}. Aufgabe: {task_text}"
+                    response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT, cwd=project_cwd)
             elif text.lower() == "woche":
                 response = run_claude(f"Heute ist {today}.", system_prompt=WOCHE_SYSTEM_PROMPT)
             elif text.lower().startswith("fokus:"):
