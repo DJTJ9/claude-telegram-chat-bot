@@ -397,8 +397,11 @@ if __name__ == "__main__":
                 response = run_claude(idee_text, system_prompt=IDEE_SYSTEM_PROMPT)
             elif text.lower().startswith("status:"):
                 status_text = text[7:].strip()
-                prompt = f"Heute ist {today}. Anfrage: {status_text}"
-                response = run_claude(prompt, system_prompt=STATUS_SYSTEM_PROMPT)
+                if not status_text:
+                    response = "Nutzung: status: <Taskname> <Status>  z.B. status: Sport erledigt"
+                else:
+                    prompt = f"Heute ist {today}. Anfrage: {status_text}"
+                    response = run_claude(prompt, system_prompt=STATUS_SYSTEM_PROMPT)
             elif text.lower().startswith("/teach") or text.lower().startswith("teach:"):
                 response = run_claude_with_history(chat_id, text, cwd=os.path.dirname(TEACH_DIR))
             else:
