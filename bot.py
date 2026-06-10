@@ -419,14 +419,21 @@ if __name__ == "__main__":
                 continue
 
             if chat_id in pending_task_input:
-                del pending_task_input[chat_id]
-                send_message(chat_id, "⏳ Denke nach...")
-                prompt = f"Heute ist {today}. Aufgabe: {text}"
-                response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT)
-                send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
-                publish_new_lessons(chat_id)
-                print(f"[task-dialog] → {response[:60]}")
-                continue
+                _is_command = (text.lower() in ("restart", "projekte", "moin", "abend", "woche", "hilfe")
+                               or any(text.lower().startswith(p) for p in
+                                      ("task:", "status:", "fokus:", "verschieben:", "lern:",
+                                       "idee:", "habit:", "projekt:", "teach:")))
+                if _is_command:
+                    del pending_task_input[chat_id]
+                else:
+                    del pending_task_input[chat_id]
+                    send_message(chat_id, "⏳ Denke nach...")
+                    prompt = f"Heute ist {today}. Aufgabe: {text}"
+                    response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT)
+                    send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                    publish_new_lessons(chat_id)
+                    print(f"[task-dialog] → {response[:60]}")
+                    continue
 
             send_message(chat_id, "⏳ Denke nach...")
 
