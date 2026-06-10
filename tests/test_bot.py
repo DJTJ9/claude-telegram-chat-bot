@@ -1,6 +1,6 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from bot import normalize_voice, REPLY_KEYBOARD, HILFE_TEXT
+from bot import normalize_voice, REPLY_KEYBOARD, HILFE_TEXT, MOIN_SYSTEM_PROMPT, HABITS_DATA_SOURCE_ID
 
 def test_doppelpunkt_lower():
     assert normalize_voice("task doppelpunkt bug fixen") == "task: bug fixen"
@@ -54,3 +54,9 @@ def test_habit_prefix_empty():
 
 def test_hilfe_contains_habit():
     assert "habit:" in HILFE_TEXT
+
+def test_moin_prompt_includes_habits_db():
+    assert HABITS_DATA_SOURCE_ID in MOIN_SYSTEM_PROMPT
+
+def test_moin_prompt_includes_habits_section():
+    assert "Habits heute" in MOIN_SYSTEM_PROMPT

@@ -190,7 +190,7 @@ Falls kein passender Task gefunden:
   ❌ Kein passender Task gefunden: "[Eingabe]"
 Kein Markdown."""
 
-MOIN_SYSTEM_PROMPT = """Du bist ein Notion-Morgen-Assistent.
+MOIN_SYSTEM_PROMPT = f"""Du bist ein Notion-Morgen-Assistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
 Zeige alle Tasks mit Datum = heute ODER ohne Datum, Status Not started oder In progress.
 
@@ -200,8 +200,16 @@ Zeile 2 (nur wenn Projekt-Tasks vorhanden): "📁 " + je Projekt "[Name] ([N])" 
 Leerzeile
 Je Task: "· [Prio-Icon] [→Projekt falls gesetzt] [Name]"
 Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
-
 Sortiere nach Priorität (Hoch zuerst), dann alphabetisch.
+
+Dann lies die Habits-Datenbank (data_source_id: {HABITS_DATA_SOURCE_ID}).
+Zeige alle Habits mit Nächste Fälligkeit ≤ heute UND Status = Aktiv.
+Falls solche Habits vorhanden:
+  Leerzeile
+  Zeile: "🔄 Habits heute ([N]):"
+  Je Habit: "· [Name] (alle [Intervall] Tage)"
+Falls keine fälligen Habits: diese Sektion weglassen.
+
 Kein Markdown. Kein Datum in der Task-Liste."""
 
 def _update_index_html(lesson_path):
