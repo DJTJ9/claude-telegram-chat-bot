@@ -335,7 +335,7 @@ def transcribe_voice(file_id):
             transcription = groq_client.audio.transcriptions.create(
                 model="whisper-large-v3",
                 file=f,
-                prompt="task: erledigt: status: fokus: lern: idee: verschieben:",
+                prompt="task: erledigt: status: fokus: lern: idee: habit: verschieben:",
             )
         return transcription.text
     finally:
@@ -348,6 +348,7 @@ def normalize_voice(text: str) -> str:
     return text
 
 conversation_history = {}
+pending_task_input = {}
 
 def run_claude_with_history(chat_id, text, system_prompt=None, cwd=None):
     history = conversation_history.get(chat_id, [])
@@ -417,6 +418,16 @@ if __name__ == "__main__":
                 send_message(chat_id, "\n".join(lines))
                 continue
 
+            if chat_id in pending_task_input:
+                del pending_task_input[chat_id]
+                send_message(chat_id, "⏳ Denke nach...")
+                prompt = f"Heute ist {today}. Aufgabe: {text}"
+                response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT)
+                send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                publish_new_lessons(chat_id)
+                print(f"[task-dialog] → {response[:60]}")
+                continue
+
             send_message(chat_id, "⏳ Denke nach...")
 
             project_cwd = None
@@ -443,7 +454,8 @@ if __name__ == "__main__":
             elif text.lower().startswith("task:"):
                 task_text = text[5:].strip()
                 if not task_text:
-                    response = "Nutzung: task: <Aufgabe>  z.B. task: Einkaufen"
+                    pending_task_input[chat_id] = True
+                    response = "Schreib mir: Name, Priorität (Hoch/Mittel/Niedrig), Bereich (Arbeit/Privat/Lernen/Gesundheit)\nz.B.: Arzttermin, Hoch, Gesundheit"
                 else:
                     prompt = f"Heute ist {today}. Aufgabe: {task_text}"
                     response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT, cwd=project_cwd)

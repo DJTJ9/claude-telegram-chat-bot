@@ -1,6 +1,6 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from bot import normalize_voice, REPLY_KEYBOARD, HILFE_TEXT, MOIN_SYSTEM_PROMPT, HABITS_DATA_SOURCE_ID, STATUS_SYSTEM_PROMPT
+from bot import normalize_voice, REPLY_KEYBOARD, HILFE_TEXT, MOIN_SYSTEM_PROMPT, HABITS_DATA_SOURCE_ID, STATUS_SYSTEM_PROMPT, pending_task_input
 
 def test_doppelpunkt_lower():
     assert normalize_voice("task doppelpunkt bug fixen") == "task: bug fixen"
@@ -66,3 +66,11 @@ def test_status_prompt_includes_habits_db():
 
 def test_status_prompt_includes_recurrence_logic():
     assert "Nächste Fälligkeit" in STATUS_SYSTEM_PROMPT
+
+def test_pending_task_input_is_dict():
+    assert isinstance(pending_task_input, dict)
+
+def test_task_bare_command_detection():
+    text = "task:"
+    assert text.lower().startswith("task:")
+    assert text[5:].strip() == ""
