@@ -5,6 +5,7 @@ from groq import Groq
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 MY_CHAT_ID = 8896609541
+HABITS_DATA_SOURCE_ID = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
 BASE = f"https://api.telegram.org/bot{TOKEN}"
 WORK_DIR = r"C:\Projekte\telegram-notion-bot"
 TEACH_DIR = r"C:\Projekte\teach"
