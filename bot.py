@@ -186,12 +186,11 @@ Mappe den Status:
 Setze den Status. Merke ob ein Task gefunden wurde.
 
 Schritt 2 — Habits-DB (data_source_id: {HABITS_DATA_SOURCE_ID}):
-Nur ausführen falls "erledigt" oder "done" im Text.
+Nur ausführen falls "erledigt", "fertig" oder "done" im Text.
 Finde den Habit per fuzzy-Suche.
 Falls gefunden:
-  - Setze Status → Done
   - Berechne Nächste Fälligkeit = heutiges Datum + Intervall (Tage, aus Property "Intervall")
-  - Setze Status zurück → Aktiv
+  - Setze Nächste Fälligkeit auf dieses Datum und lasse Status = Aktiv
 Merke ob ein Habit gefunden wurde.
 
 Antworte:
