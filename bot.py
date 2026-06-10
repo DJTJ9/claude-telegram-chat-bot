@@ -58,13 +58,16 @@ REPLY_KEYBOARD = {
 HILFE_TEXT = """📋 Befehle:
 
 🌅 Tagesplanung
-  moin — Tasks für heute
+  moin — Tasks + fällige Habits für heute
   abend — Tagesabschluss
   woche — Wochenrückblick
   fokus: <Bereich> — Arbeit / Privat / Lernen / Gesundheit
 
-✅ Tasks
-  task: <text> — Neuen Task anlegen
+✅ Tasks & Habits
+  task: — Neuen Task anlegen (interaktiv)
+  task: <text> — Neuen Task direkt anlegen
+  habit: <text> — Neuen Habit anlegen
+    z.B. habit: Sport täglich  oder  habit: Laufen alle 2 Tage
   status: <name> <status> — Status ändern
     erledigt / in arbeit / offen
   verschieben: <datum> — Offene Tasks verschieben
@@ -161,6 +164,16 @@ Leite aus dem Text ab:
 - Status: immer "Idee"
 - Beschreibung: die vollständige Idee des Nutzers unverändert übernehmen
 Antworte NUR mit einer Zeile: 🎮 Spielidee gespeichert: [Name] · [Typ] · [Genre]"""
+
+HABIT_SYSTEM_PROMPT = """Du bist ein Habit-Assistent. Der Nutzer beschreibt einen wiederkehrenden Habit.
+Lege ihn in der Habits-Datenbank an (data_source_id: 6a4d7e7d-dcde-44e3-b7a0-c46330a6261c).
+Leite aus dem Text ab:
+- Name: kurzer Titel des Habits
+- Intervall: Anzahl Tage als Zahl (täglich=1, wöchentlich=7, alle N Tage=N)
+- Bereich: Arbeit/Privat/Lernen/Gesundheit (leer lassen falls nicht angegeben)
+- Nächste Fälligkeit: das heutige Datum (aus dem Nutzer-Prompt)
+- Status: Aktiv
+Antworte NUR mit einer Zeile: 🔄 Habit angelegt: [Name] · alle [Intervall] Tage · ab heute"""
 
 STATUS_SYSTEM_PROMPT = """Du bist ein Notion-Status-Assistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
@@ -444,6 +457,13 @@ if __name__ == "__main__":
             elif text.lower().startswith("idee:"):
                 idee_text = text[5:].strip()
                 response = run_claude(idee_text, system_prompt=IDEE_SYSTEM_PROMPT)
+            elif text.lower().startswith("habit:"):
+                habit_text = text[6:].strip()
+                if not habit_text:
+                    response = "Nutzung: habit: <Habit>  z.B. habit: Sport täglich  oder  habit: Laufen alle 2 Tage"
+                else:
+                    prompt = f"Heute ist {today}. Habit: {habit_text}"
+                    response = run_claude(prompt, system_prompt=HABIT_SYSTEM_PROMPT)
             elif text.lower() == "hilfe":
                 response = HILFE_TEXT
             elif text.lower().startswith("status:"):

@@ -42,3 +42,15 @@ def test_keyboard_structure():
 def test_hilfe_contains_all_commands():
     for cmd in ["moin", "abend", "woche", "task:", "status:", "fokus:", "verschieben:", "lern:", "idee:"]:
         assert cmd in HILFE_TEXT, f"Missing command in HILFE_TEXT: {cmd}"
+
+def test_habit_prefix_detection():
+    text = "habit: Sport täglich"
+    assert text.lower().startswith("habit:")
+    assert text[6:].strip() == "Sport täglich"
+
+def test_habit_prefix_empty():
+    text = "habit:"
+    assert text[6:].strip() == ""
+
+def test_hilfe_contains_habit():
+    assert "habit:" in HILFE_TEXT
