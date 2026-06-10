@@ -375,6 +375,7 @@ if __name__ == "__main__":
                 send_message(chat_id, "🔄 Bot wird neu gestartet...")
                 os.environ['BOT_START_OFFSET'] = str(offset)
                 os.execv(sys.executable, [sys.executable] + sys.argv[:1])
+                continue
 
             if text.lower() == "projekte":
                 lines = ["📁 Verfügbare Projekte:"]
