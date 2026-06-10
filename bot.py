@@ -120,6 +120,21 @@ Leite aus dem Text ab:
 - Beschreibung: die vollständige Idee des Nutzers unverändert übernehmen
 Antworte NUR mit einer Zeile: 🎮 Spielidee gespeichert: [Name] · [Typ] · [Genre]"""
 
+STATUS_SYSTEM_PROMPT = """Du bist ein Notion-Status-Assistent.
+Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Der Nutzer gibt einen Task-Namen und einen gewünschten Status an.
+Finde den Task per fuzzy-Suche (Name muss nicht exakt übereinstimmen).
+Mappe den Status aus dem Text:
+  erledigt / fertig / done → Done
+  in arbeit / läuft / gestartet / in progress → In progress
+  offen / zurück / nicht gestartet → Not started
+Setze den Status des gefundenen Tasks auf den gemappten Wert.
+Antworte NUR mit einer Zeile:
+  ✅ Status geändert: [Task Name] → [Status]
+Falls kein passender Task gefunden:
+  ❌ Kein passender Task gefunden: "[Eingabe]"
+Kein Markdown."""
+
 MOIN_SYSTEM_PROMPT = """Du bist ein Notion-Morgen-Assistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
 Zeige alle Tasks mit Datum = heute ODER ohne Datum, Status Not started oder In progress.
@@ -380,6 +395,10 @@ if __name__ == "__main__":
             elif text.lower().startswith("idee:"):
                 idee_text = text[5:].strip()
                 response = run_claude(idee_text, system_prompt=IDEE_SYSTEM_PROMPT)
+            elif text.lower().startswith("status:"):
+                status_text = text[7:].strip()
+                prompt = f"Heute ist {today}. Anfrage: {status_text}"
+                response = run_claude(prompt, system_prompt=STATUS_SYSTEM_PROMPT)
             elif text.lower().startswith("/teach") or text.lower().startswith("teach:"):
                 response = run_claude_with_history(chat_id, text, cwd=os.path.dirname(TEACH_DIR))
             else:

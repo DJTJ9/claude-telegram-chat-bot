@@ -19,3 +19,13 @@ def test_no_change():
 
 def test_combined():
     assert normalize_voice("status doppelpunkt sport erledigt") == "status: sport erledigt"
+
+def test_status_prefix_detection():
+    text = "status: sport erledigt"
+    assert text.lower().startswith("status:")
+    assert text[7:].strip() == "sport erledigt"
+
+def test_status_prefix_voice():
+    text = normalize_voice("status doppelpunkt sport erledigt")
+    assert text.lower().startswith("status:")
+    assert text[7:].strip() == "sport erledigt"
