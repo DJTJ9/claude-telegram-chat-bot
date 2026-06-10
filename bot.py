@@ -42,6 +42,47 @@ Antworte NUR mit einer Zeile: ✓ Task angelegt: [Name] · [Projekt] · [Priorit
 
 BEREICHE = {"arbeit", "privat", "lernen", "gesundheit"}
 
+REPLY_KEYBOARD = {
+    "keyboard": [
+        ["moin", "abend"],
+        ["task:", "status:"],
+        ["woche", "fokus:"],
+        ["verschieben:", "hilfe"],
+    ],
+    "resize_keyboard": True,
+    "one_time_keyboard": False,
+    "persistent": True,
+}
+
+HILFE_TEXT = """📋 Befehle:
+
+🌅 Tagesplanung
+  moin — Tasks für heute
+  abend — Tagesabschluss
+  woche — Wochenrückblick
+  fokus: <Bereich> — Arbeit / Privat / Lernen / Gesundheit
+
+✅ Tasks
+  task: <text> — Neuen Task anlegen
+  status: <name> <status> — Status ändern
+    erledigt / in arbeit / offen
+  verschieben: <datum> — Offene Tasks verschieben
+    z.B. verschieben: morgen  oder  verschieben: 2026-06-15
+
+📁 Projekte
+  projekte — Alle Projekte anzeigen
+  <name>: <frage> — Im Projektkontext fragen
+  <name>: tasks — Projekt-Tasks anzeigen
+  <name>: task: <text> — Projekt-Task anlegen
+
+📚 Listen
+  lern: <thema> — Lernthema speichern
+  idee: <text> — Spielidee speichern
+
+🛠 Sonstiges
+  teach: <text> — Lernkurs erstellen
+  restart — Bot neu starten"""
+
 WOCHE_SYSTEM_PROMPT = """Du bist ein Notion-Wochenassistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
 Zeige alle Tasks der letzten 7 Tage (inkl. heute).
@@ -233,8 +274,11 @@ def get_updates(offset=None):
     r = requests.get(f"{BASE}/getUpdates", params=params, timeout=35)
     return r.json().get("result", [])
 
-def send_message(chat_id, text):
-    requests.post(f"{BASE}/sendMessage", json={"chat_id": chat_id, "text": text})
+def send_message(chat_id, text, reply_markup=None):
+    payload = {"chat_id": chat_id, "text": text}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    requests.post(f"{BASE}/sendMessage", json=payload)
 
 def run_claude(prompt, system_prompt=None, cwd=None):
     cmd = ["claude", "--dangerously-skip-permissions"]
@@ -395,6 +439,8 @@ if __name__ == "__main__":
             elif text.lower().startswith("idee:"):
                 idee_text = text[5:].strip()
                 response = run_claude(idee_text, system_prompt=IDEE_SYSTEM_PROMPT)
+            elif text.lower() == "hilfe":
+                response = HILFE_TEXT
             elif text.lower().startswith("status:"):
                 status_text = text[7:].strip()
                 if not status_text:
@@ -407,6 +453,6 @@ if __name__ == "__main__":
             else:
                 response = run_claude_with_history(chat_id, text, cwd=project_cwd)
 
-            send_message(chat_id, response)
+            send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
             publish_new_lessons(chat_id)
             print(f"[{text[:40]}] → {response[:60]}")
