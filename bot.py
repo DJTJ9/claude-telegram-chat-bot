@@ -1,4 +1,4 @@
-import os, re, subprocess, requests, tempfile
+import os, re, subprocess, requests, tempfile, sys
 from datetime import date
 from groq import Groq
 
@@ -70,6 +70,69 @@ Setze ihr Datum-Feld auf das vom Nutzer angegebene Datum.
 Antworte NUR mit: "📆 N Tasks verschoben auf [Datum]."
 Falls keine offenen Tasks: "Keine offenen Tasks zum Verschieben."
 Kein Markdown."""
+
+ABEND_SYSTEM_PROMPT = """Du bist ein Notion-Abend-Assistent.
+Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Zeige alle Tasks mit Datum = heute.
+
+Format:
+
+Zeile 1: "🌙 Tagesabschluss [DD.MM.YYYY]"
+Leerzeile
+
+Abschnitt 1: "✅ Heute erledigt ([N]):"
+Je Task: · [→Projekt falls gesetzt] [Name]
+Falls keine: · (nichts heute abgehakt)
+
+Leerzeile
+
+Abschnitt 2: "⏳ Noch offen ([N]):"
+Je Task: · [Prio-Icon] [→Projekt falls gesetzt] [Name]
+Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
+Sortiere nach Priorität (Hoch zuerst).
+Falls keine: · (alles erledigt — gut gemacht!)
+
+Leerzeile
+
+Abschnitt 3: "📊 Projekt-Bilanz:"
+Je Projekt das heute Tasks hat:
+· [Name]: [N_done] erledigt / [N_offen] offen
+Falls N_done = 0: füge " — kein Fortschritt heute" hinzu.
+Falls keine Projekt-Tasks heute: · (keine Projekt-Tasks heute)
+
+Leerzeile
+"💡 Offene Tasks verschieben? → verschieben: morgen"
+Kein Markdown."""
+
+LERN_SYSTEM_PROMPT = """Du bist ein Lernthemen-Assistent. Der Nutzer nennt ein Thema, das er lernen möchte.
+Lege es in der Lernthemen-Datenbank an (data_source_id: 5a76447f-2b0a-4f6b-81bb-853f39aa04bb).
+Leite aus dem Text ab: Name, Kategorie (Programmierung/Sprachen/Mathematik/Design/Sonstiges, Programmierung falls unklar), Priorität (Mittel falls nicht angegeben).
+Antworte NUR mit einer Zeile: 📚 Lernthema gespeichert: [Name] · [Kategorie] · [Priorität]"""
+
+IDEE_SYSTEM_PROMPT = """Du bist ein Spieleideen-Assistent. Der Nutzer beschreibt eine Spielidee.
+Lege sie in der Spieleideen-Datenbank an (data_source_id: ce6783d1-54fe-421f-8d7d-aa8c34880853).
+Leite aus dem Text ab:
+- Name: kurzer prägnanter Titel
+- Typ: Neues Spiel / Game Mechanic / Erweiterung / Mod (Neues Spiel falls unklar)
+- Genre: ein oder mehrere aus: Strategy, RPG, Puzzle, Action, Simulation, Idle, Horror, Platformer
+- Plattform: PC falls nicht genannt
+- Status: immer "Idee"
+- Beschreibung: die vollständige Idee des Nutzers unverändert übernehmen
+Antworte NUR mit einer Zeile: 🎮 Spielidee gespeichert: [Name] · [Typ] · [Genre]"""
+
+MOIN_SYSTEM_PROMPT = """Du bist ein Notion-Morgen-Assistent.
+Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Zeige alle Tasks mit Datum = heute ODER ohne Datum, Status Not started oder In progress.
+
+Format:
+Zeile 1: "🌅 Guten Morgen! [N] Tasks heute"
+Zeile 2 (nur wenn Projekt-Tasks vorhanden): "📁 " + je Projekt "[Name] ([N])" mit " · " getrennt
+Leerzeile
+Je Task: "· [Prio-Icon] [→Projekt falls gesetzt] [Name]"
+Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
+
+Sortiere nach Priorität (Hoch zuerst), dann alphabetisch.
+Kein Markdown. Kein Datum in der Task-Liste."""
 
 def _update_index_html(lesson_path):
     parts = lesson_path.replace("\\", "/").split("/")
@@ -181,94 +244,147 @@ def transcribe_voice(file_id):
             transcription = groq_client.audio.transcriptions.create(
                 model="whisper-large-v3",
                 file=f,
+                prompt="task: erledigt: status: fokus: lern: idee: verschieben:",
             )
         return transcription.text
     finally:
         os.unlink(tmp_path)
 
-offset = None
-today = date.today().isoformat()
-print(f"Bridge läuft ({today}). Strg+C zum Beenden.")
+def normalize_voice(text: str) -> str:
+    text = re.sub(r' Doppelpunkt\b', ':', text, flags=re.IGNORECASE)
+    text = re.sub(r' Komma\b', ',', text, flags=re.IGNORECASE)
+    text = re.sub(r' Punkt\b', '.', text, flags=re.IGNORECASE)
+    return text
 
-while True:
-    try:
-        updates = get_updates(offset)
-    except requests.exceptions.ReadTimeout:
-        continue
-    except Exception as e:
-        print(f"Polling-Fehler: {e}")
-        continue
-    for update in updates:
-        offset = update["update_id"] + 1
-        msg = update.get("message", {})
-        chat_id = msg.get("chat", {}).get("id")
+conversation_history = {}
 
-        if chat_id != MY_CHAT_ID:
+def run_claude_with_history(chat_id, text, system_prompt=None, cwd=None):
+    history = conversation_history.get(chat_id, [])
+    if history and not system_prompt:
+        context = "\n".join(
+            f"[{'USER' if m['role'] == 'user' else 'ASSISTANT'}]: {m['content']}"
+            for m in history
+        )
+        prompt = f"Vorheriger Gesprächsverlauf:\n{context}\n\n[USER]: {text}"
+    else:
+        prompt = text
+    response = run_claude(prompt, system_prompt=system_prompt, cwd=cwd)
+    if not system_prompt:
+        history = history + [
+            {"role": "user", "content": text},
+            {"role": "assistant", "content": response},
+        ]
+        conversation_history[chat_id] = history[-6:]
+    return response
+
+if __name__ == "__main__":
+    offset = int(os.environ.pop('BOT_START_OFFSET', '0')) or None
+    today = date.today().isoformat()
+    print(f"Bridge läuft ({today}). Strg+C zum Beenden.")
+
+    while True:
+        try:
+            updates = get_updates(offset)
+        except requests.exceptions.ReadTimeout:
             continue
+        except Exception as e:
+            print(f"Polling-Fehler: {e}")
+            continue
+        for update in updates:
+            offset = update["update_id"] + 1
+            msg = update.get("message", {})
+            chat_id = msg.get("chat", {}).get("id")
 
-        voice = msg.get("voice")
-        text = msg.get("text", "").strip()
-
-        if voice:
-            send_message(chat_id, "🎤 Transkribiere...")
-            try:
-                text = transcribe_voice(voice["file_id"])
-                send_message(chat_id, f"🎤 Erkannt: {text}")
-            except Exception as e:
-                send_message(chat_id, f"❌ Transkription fehlgeschlagen: {e}")
+            if chat_id != MY_CHAT_ID:
                 continue
-        elif not text:
-            continue
 
-        if text.lower() == "projekte":
-            lines = ["📁 Verfügbare Projekte:"]
+            voice = msg.get("voice")
+            text = msg.get("text", "").strip()
+
+            if voice:
+                send_message(chat_id, "🎤 Transkribiere...")
+                try:
+                    text = normalize_voice(transcribe_voice(voice["file_id"]))
+                    send_message(chat_id, f"🎤 Erkannt: {text}")
+                except Exception as e:
+                    send_message(chat_id, f"❌ Transkription fehlgeschlagen: {e}")
+                    continue
+            elif not text:
+                continue
+
+            if text.lower() == "restart":
+                send_message(chat_id, "🔄 Bot wird neu gestartet...")
+                os.environ['BOT_START_OFFSET'] = str(offset)
+                os.execv(sys.executable, [sys.executable] + sys.argv[:1])
+
+            if text.lower() == "projekte":
+                lines = ["📁 Verfügbare Projekte:"]
+                for name, info in PROJECTS.items():
+                    lines.append(f"  {name}: → {info['path']}")
+                lines.append("\nNutzung: <name>: <frage>  |  <name>: tasks  |  <name>: task: <aufgabe>")
+                send_message(chat_id, "\n".join(lines))
+                continue
+
+            send_message(chat_id, "⏳ Denke nach...")
+
+            project_cwd = None
+            project_notion_name = None
             for name, info in PROJECTS.items():
-                lines.append(f"  {name}: → {info['path']}")
-            lines.append("\nNutzung: <name>: <frage>  |  <name>: tasks  |  <name>: task: <aufgabe>")
-            send_message(chat_id, "\n".join(lines))
-            continue
+                prefix = f"{name}:"
+                if text.lower().startswith(prefix):
+                    project_cwd = info["path"]
+                    project_notion_name = info["notion_name"]
+                    text = text[len(prefix):].strip()
+                    break
 
-        send_message(chat_id, "⏳ Denke nach...")
-
-        project_cwd = None
-        project_notion_name = None
-        for name, info in PROJECTS.items():
-            prefix = f"{name}:"
-            if text.lower().startswith(prefix):
-                project_cwd = info["path"]
-                project_notion_name = info["notion_name"]
-                text = text[len(prefix):].strip()
-                break
-
-        if project_notion_name and text.lower() == "tasks":
-            prompt = f"Heute ist {today}. Projektname: {project_notion_name}"
-            response = run_claude(prompt, system_prompt=PROJEKT_TASKS_SYSTEM_PROMPT)
-        elif project_notion_name and text.lower().startswith("task:"):
-            task_text = text[5:].strip()
-            prompt = f"Heute ist {today}. Projektname: {project_notion_name}. Aufgabe: {task_text}"
-            response = run_claude(prompt, system_prompt=PROJEKT_TASK_SYSTEM_PROMPT)
-        elif text.lower().startswith("task:"):
-            task_text = text[5:].strip()
-            prompt = f"Heute ist {today}. Aufgabe: {task_text}"
-            response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT, cwd=project_cwd)
-        elif text.lower() == "woche":
-            response = run_claude(f"Heute ist {today}.", system_prompt=WOCHE_SYSTEM_PROMPT)
-        elif text.lower().startswith("fokus:"):
-            bereich_raw = text[6:].strip()
-            bereich = bereich_raw.capitalize()
-            if bereich.lower() not in BEREICHE:
-                response = f"Unbekannter Bereich: {bereich_raw}\nGültig: Arbeit, Privat, Lernen, Gesundheit"
+            if project_notion_name and text.lower() == "tasks":
+                prompt = f"Heute ist {today}. Projektname: {project_notion_name}"
+                response = run_claude(prompt, system_prompt=PROJEKT_TASKS_SYSTEM_PROMPT)
+            elif text.lower() in ("moin", "morgen", "guten morgen"):
+                response = run_claude(f"Heute ist {today}.", system_prompt=MOIN_SYSTEM_PROMPT)
+            elif text.lower() in ("abend", "feierabend", "guten abend"):
+                response = run_claude(f"Heute ist {today}.", system_prompt=ABEND_SYSTEM_PROMPT)
+            elif project_notion_name and text.lower().startswith("task:"):
+                task_text = text[5:].strip()
+                prompt = f"Heute ist {today}. Projektname: {project_notion_name}. Aufgabe: {task_text}"
+                response = run_claude(prompt, system_prompt=PROJEKT_TASK_SYSTEM_PROMPT)
+            elif text.lower().startswith("task:"):
+                task_text = text[5:].strip()
+                prompt = f"Heute ist {today}. Aufgabe: {task_text}"
+                response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT, cwd=project_cwd)
+            elif text.lower() == "woche":
+                response = run_claude(f"Heute ist {today}.", system_prompt=WOCHE_SYSTEM_PROMPT)
+            elif text.lower().startswith("fokus:"):
+                bereich_raw = text[6:].strip()
+                bereich = bereich_raw.capitalize()
+                if bereich.lower() not in BEREICHE:
+                    response = f"Unbekannter Bereich: {bereich_raw}\nGültig: Arbeit, Privat, Lernen, Gesundheit"
+                else:
+                    response = run_claude(f"Heute ist {today}. Bereich: {bereich}", system_prompt=FOKUS_SYSTEM_PROMPT)
+            elif text.lower().startswith("verschieben:"):
+                ziel_datum = text[12:].strip()
+                if not ziel_datum:
+                    response = "Nutzung: verschieben: morgen  oder  verschieben: 2026-06-15"
+                else:
+                    response = run_claude(f"Heute ist {today}. Zieldatum: {ziel_datum}", system_prompt=VERSCHIEBEN_SYSTEM_PROMPT)
+            elif text.lower().startswith("projekt:"):
+                projektname = text[8:].strip()
+                if not projektname:
+                    response = "Nutzung: projekt: <Projektname>  z.B. projekt: Dart-App"
+                else:
+                    prompt = f"Heute ist {today}. Projektname: {projektname}"
+                    response = run_claude(prompt, system_prompt=PROJEKT_TASKS_SYSTEM_PROMPT)
+            elif text.lower().startswith("lern:"):
+                lern_text = text[5:].strip()
+                response = run_claude(lern_text, system_prompt=LERN_SYSTEM_PROMPT)
+            elif text.lower().startswith("idee:"):
+                idee_text = text[5:].strip()
+                response = run_claude(idee_text, system_prompt=IDEE_SYSTEM_PROMPT)
+            elif text.lower().startswith("/teach") or text.lower().startswith("teach:"):
+                response = run_claude_with_history(chat_id, text, cwd=os.path.dirname(TEACH_DIR))
             else:
-                response = run_claude(f"Heute ist {today}. Bereich: {bereich}", system_prompt=FOKUS_SYSTEM_PROMPT)
-        elif text.lower().startswith("verschieben:"):
-            ziel_datum = text[12:].strip()
-            if not ziel_datum:
-                response = "Nutzung: verschieben: morgen  oder  verschieben: 2026-06-15"
-            else:
-                response = run_claude(f"Heute ist {today}. Zieldatum: {ziel_datum}", system_prompt=VERSCHIEBEN_SYSTEM_PROMPT)
-        else:
-            response = run_claude(text, cwd=project_cwd)
+                response = run_claude_with_history(chat_id, text, cwd=project_cwd)
 
-        send_message(chat_id, response)
-        publish_new_lessons(chat_id)
-        print(f"[{text[:40]}] → {response[:60]}")
+            send_message(chat_id, response)
+            publish_new_lessons(chat_id)
+            print(f"[{text[:40]}] → {response[:60]}")
