@@ -10,6 +10,7 @@ HABITS_DATA_SOURCE_ID = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
 BASE = f"https://api.telegram.org/bot{TOKEN}"
 WORK_DIR = r"C:\Projekte\telegram-notion-bot"
 REMINDERS_PATH = Path(WORK_DIR) / "reminders.json"
+PLANS_PATH = Path(WORK_DIR) / "scheduled_plans.json"
 TEACH_DIR = r"C:\Projekte\teach"
 PAGES_BASE = "https://djtj9.github.io/teach-lessons"
 COURSE_NAMES = {
@@ -466,6 +467,27 @@ def load_reminders():
 
 def save_reminders(reminders):
     REMINDERS_PATH.write_text(json.dumps(reminders, indent=2, ensure_ascii=False), encoding="utf-8")
+
+def _load_plans():
+    if PLANS_PATH.exists():
+        try:
+            return json.loads(PLANS_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            pass
+    return []
+
+def _save_plans(plans):
+    PLANS_PATH.write_text(json.dumps(plans, indent=2, ensure_ascii=False), encoding="utf-8")
+
+def _set_plan_status(slug, status):
+    plans = _load_plans()
+    for p in plans:
+        if p["slug"] == slug:
+            p["status"] = status
+            break
+    _save_plans(plans)
+    subprocess.run(["git", "-C", WORK_DIR, "add", "scheduled_plans.json"], capture_output=True)
+    subprocess.run(["git", "-C", WORK_DIR, "commit", "-m", f"chore: plan {slug} -> {status}"], capture_output=True)
 
 def add_reminder(chat_id, text, due_iso):
     reminders = load_reminders()
