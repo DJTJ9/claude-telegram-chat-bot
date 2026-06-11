@@ -1,5 +1,5 @@
-import os, re, subprocess, requests, tempfile, sys, json
-from datetime import date
+import os, re, subprocess, requests, tempfile, sys, json, uuid, threading, time
+from datetime import date, datetime
 from pathlib import Path
 from groq import Groq
 
@@ -9,6 +9,7 @@ MY_CHAT_ID = 8896609541
 HABITS_DATA_SOURCE_ID = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
 BASE = f"https://api.telegram.org/bot{TOKEN}"
 WORK_DIR = r"C:\Projekte\telegram-notion-bot"
+REMINDERS_PATH = Path(WORK_DIR) / "reminders.json"
 TEACH_DIR = r"C:\Projekte\teach"
 PAGES_BASE = "https://djtj9.github.io/teach-lessons"
 COURSE_NAMES = {
@@ -83,6 +84,12 @@ HILFE_TEXT = """📋 Befehle:
 📚 Listen
   lern: <thema> — Lernthema speichern
   idee: <text> — Spielidee speichern
+
+⏰ Erinnerungen
+  erinnere mich um 14:00 an Zahnarzt — Erinnerung setzen
+  erinnere mich morgen um 9 an Meeting — mit Datum
+  erinnerung: <text> — alternative Syntax
+  erinnerungen — alle offenen Erinnerungen anzeigen
 
 🛠 Sonstiges
   teach: <text> — Lernkurs erstellen
@@ -227,6 +234,27 @@ Falls keine fälligen Habits: diese Sektion weglassen.
 
 Kein Markdown. Kein Datum in der Task-Liste."""
 
+CHAT_SYSTEM_PROMPT = """Du bist ein hilfreicher persönlicher Assistent-Bot. Antworte kurz und direkt auf Fragen und Konversation.
+Führe KEINE Aktionen aus. Nutze KEINE Tools. Erstelle KEINE Schedules oder Routines. Antworte NUR mit Text."""
+
+REMINDER_PARSE_SYSTEM_PROMPT = """Du bist ein Erinnerungs-Parser. Deine einzige Aufgabe: Text analysieren und JSON zurückgeben.
+
+WICHTIG: Führe KEINE Aktionen aus. Nutze KEINE Tools. Sende KEINE Nachrichten. Schreibe KEINEN Code.
+
+Extrahiere aus dem Nutzer-Text:
+- text: Was soll erinnert werden
+- due: Fälligkeitszeitpunkt als ISO 8601 (YYYY-MM-DDTHH:MM:SS)
+
+Regeln:
+- "morgen" = heute + 1 Tag, "übermorgen" = heute + 2 Tage
+- Falls kein Datum: heute
+- Falls keine Uhrzeit: 09:00
+- "um 14" oder "14 Uhr" → 14:00:00
+- "halb drei" → 14:30:00, "Viertel nach acht" → 08:15:00
+
+Antworte AUSSCHLIESSLICH mit diesem JSON (kein Markdown, keine Erklärung, nichts anderes):
+{"text": "<was erinnert werden soll>", "due": "<YYYY-MM-DDTHH:MM:SS>"}"""
+
 def _update_index_html(lesson_path):
     parts = lesson_path.replace("\\", "/").split("/")
     if len(parts) < 3:
@@ -340,7 +368,7 @@ def transcribe_voice(file_id):
             transcription = groq_client.audio.transcriptions.create(
                 model="whisper-large-v3",
                 file=f,
-                prompt="task: erledigt: status: fokus: lern: idee: habit: verschieben:",
+                prompt="task: erledigt: status: fokus: lern: idee: habit: verschieben: erinnere mich um:",
             )
         return transcription.text
     finally:
@@ -387,7 +415,73 @@ def run_claude_with_history(chat_id, text, system_prompt=None, cwd=None):
         conversation_history[chat_id] = history[-6:]
     return response
 
+def run_claude_parse(prompt, system_prompt):
+    """Parse-only Claude call: no MCP servers, returns raw text."""
+    cfg = Path(WORK_DIR) / ".parse_mcp_empty.json"
+    cfg.write_text('{"mcpServers": {}}', encoding="utf-8")
+    try:
+        cmd = ["claude", "--permission-mode", "plan",
+               "--strict-mcp-config", "--mcp-config", str(cfg),
+               "--system-prompt", system_prompt, "-p", prompt]
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=30, cwd=WORK_DIR)
+        return (result.stdout or "").strip() or "{}"
+    except subprocess.TimeoutExpired:
+        return "{}"
+    finally:
+        cfg.unlink(missing_ok=True)
+
+def load_reminders():
+    if REMINDERS_PATH.exists():
+        try:
+            return json.loads(REMINDERS_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            pass
+    return []
+
+def save_reminders(reminders):
+    REMINDERS_PATH.write_text(json.dumps(reminders, indent=2, ensure_ascii=False), encoding="utf-8")
+
+def add_reminder(chat_id, text, due_iso):
+    reminders = load_reminders()
+    reminders.append({
+        "id": str(uuid.uuid4())[:8],
+        "text": text,
+        "due": due_iso,
+        "status": "pending",
+        "chat_id": chat_id,
+        "created": datetime.now().isoformat(timespec="seconds"),
+    })
+    save_reminders(reminders)
+    subprocess.run(["git", "-C", WORK_DIR, "add", "reminders.json"], capture_output=True)
+    subprocess.run(["git", "-C", WORK_DIR, "commit", "-m", f"chore: add reminder '{text[:40]}'"], capture_output=True)
+    subprocess.run(["git", "-C", WORK_DIR, "push"], capture_output=True)
+
+def check_and_send_reminders():
+    try:
+        subprocess.run(["git", "-C", WORK_DIR, "pull", "--rebase"], capture_output=True)
+        reminders = load_reminders()
+        now = datetime.now()
+        changed = False
+        for r in reminders:
+            if r["status"] == "pending" and datetime.fromisoformat(r["due"]) <= now:
+                send_message(r["chat_id"], f"⏰ Erinnerung: {r['text']}")
+                r["status"] = "sent"
+                changed = True
+        if changed:
+            save_reminders(reminders)
+            subprocess.run(["git", "-C", WORK_DIR, "add", "reminders.json"], capture_output=True)
+            subprocess.run(["git", "-C", WORK_DIR, "commit", "-m", "chore: mark reminders sent"], capture_output=True)
+            subprocess.run(["git", "-C", WORK_DIR, "push"], capture_output=True)
+    except Exception as e:
+        print(f"reminder check error: {e}")
+
+def _reminder_loop():
+    while True:
+        time.sleep(60)
+        check_and_send_reminders()
+
 if __name__ == "__main__":
+    threading.Thread(target=_reminder_loop, daemon=True).start()
     offset = int(os.environ.pop('BOT_START_OFFSET', '0')) or None
     today = date.today().isoformat()
     print(f"Bridge läuft ({today}). Strg+C zum Beenden.")
@@ -457,7 +551,9 @@ if __name__ == "__main__":
             if voice:
                 send_message(chat_id, "🎤 Transkribiere...")
                 try:
-                    text = normalize_voice(transcribe_voice(voice["file_id"]))
+                    text = normalize_voice(transcribe_voice(voice["file_id"])).strip()
+                    if re.match(r'^\d{1,2}[.:]\d{2}\s*(uhr\s+)?an\s+', text, re.IGNORECASE):
+                        text = f"erinnere mich um {text}"
                     send_message(chat_id, f"🎤 Erkannt: {text}")
                 except Exception as e:
                     send_message(chat_id, f"❌ Transkription fehlgeschlagen: {e}")
@@ -497,10 +593,10 @@ if __name__ == "__main__":
                 continue
 
             if chat_id in pending_task_input:
-                _is_command = (text.lower() in ("restart", "projekte", "moin", "abend", "woche", "hilfe")
+                _is_command = (text.lower() in ("restart", "projekte", "moin", "abend", "woche", "hilfe", "erinnerungen")
                                or any(text.lower().startswith(p) for p in
                                       ("task:", "status:", "fokus:", "verschieben:", "lern:",
-                                       "idee:", "habit:", "projekt:", "teach:")))
+                                       "idee:", "habit:", "projekt:", "teach:", "erinnere", "erinnerung:")))
                 if _is_command:
                     del pending_task_input[chat_id]
                 else:
@@ -588,10 +684,33 @@ if __name__ == "__main__":
                 else:
                     prompt = f"Heute ist {today}. Anfrage: {status_text}"
                     response = run_claude(prompt, system_prompt=STATUS_SYSTEM_PROMPT)
+            elif text.lower().startswith("erinnere") or text.lower().startswith("erinnerung:"):
+                now_time = datetime.now().strftime("%H:%M")
+                parse_prompt = f"Heute ist {today}, aktuelle Uhrzeit: {now_time}. Nutzer schreibt: {text}"
+                raw = run_claude_parse(parse_prompt, system_prompt=REMINDER_PARSE_SYSTEM_PROMPT)
+                try:
+                    parsed = json.loads(raw)
+                    add_reminder(chat_id, parsed["text"], parsed["due"])
+                    due_dt = datetime.fromisoformat(parsed["due"])
+                    response = f"⏰ Erinnerung gesetzt: {parsed['text']} — {due_dt.strftime('%d.%m.%Y um %H:%M')}"
+                except (json.JSONDecodeError, KeyError, ValueError) as e:
+                    print(f"[reminder parse error] raw={repr(raw)} exc={e}")
+                    response = f"❌ Konnte Erinnerung nicht parsen. Versuche: erinnere mich um 14:00 an Zahnarzt"
+            elif text.lower() == "erinnerungen":
+                reminders = load_reminders()
+                pending = [r for r in reminders if r["status"] == "pending"]
+                if not pending:
+                    response = "⏰ Keine offenen Erinnerungen."
+                else:
+                    lines = [f"⏰ Offene Erinnerungen ({len(pending)}):"]
+                    for r in sorted(pending, key=lambda x: x["due"]):
+                        due_dt = datetime.fromisoformat(r["due"])
+                        lines.append(f"· {due_dt.strftime('%d.%m. %H:%M')} — {r['text']}")
+                    response = "\n".join(lines)
             elif text.lower().startswith("/teach") or text.lower().startswith("teach:"):
                 response = run_claude_with_history(chat_id, text, cwd=os.path.dirname(TEACH_DIR))
             else:
-                response = run_claude_with_history(chat_id, text, cwd=project_cwd)
+                response = run_claude_with_history(chat_id, text, system_prompt=CHAT_SYSTEM_PROMPT, cwd=project_cwd)
 
             send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
             publish_new_lessons(chat_id)

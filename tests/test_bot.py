@@ -1,7 +1,7 @@
 import sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from pathlib import Path
-from bot import normalize_voice, REPLY_KEYBOARD, HILFE_TEXT, MOIN_SYSTEM_PROMPT, HABITS_DATA_SOURCE_ID, STATUS_SYSTEM_PROMPT, pending_task_input
+from bot import normalize_voice, REPLY_KEYBOARD, HILFE_TEXT, MOIN_SYSTEM_PROMPT, HABITS_DATA_SOURCE_ID, STATUS_SYSTEM_PROMPT, pending_task_input, load_reminders, save_reminders, REMINDER_PARSE_SYSTEM_PROMPT
 
 def test_doppelpunkt_lower():
     assert normalize_voice("task doppelpunkt bug fixen") == "task: bug fixen"
@@ -101,3 +101,31 @@ def test_load_settings_corrupt_file(tmp_path):
 def test_bot_notify_in_hilfe():
     from bot import HILFE_TEXT
     assert "/bot-notify" in HILFE_TEXT
+
+def test_load_reminders_empty(tmp_path, monkeypatch):
+    import bot
+    monkeypatch.setattr(bot, "REMINDERS_PATH", tmp_path / "reminders.json")
+    assert bot.load_reminders() == []
+
+def test_save_load_reminders_roundtrip(tmp_path, monkeypatch):
+    import bot
+    monkeypatch.setattr(bot, "REMINDERS_PATH", tmp_path / "reminders.json")
+    data = [{"id": "abc12345", "text": "Test", "due": "2026-06-12T14:00:00", "status": "pending", "chat_id": 123, "created": "2026-06-11T10:00:00"}]
+    bot.save_reminders(data)
+    assert bot.load_reminders() == data
+
+def test_load_reminders_corrupt(tmp_path, monkeypatch):
+    import bot
+    p = tmp_path / "reminders.json"
+    p.write_text("{bad json}", encoding="utf-8")
+    monkeypatch.setattr(bot, "REMINDERS_PATH", p)
+    assert bot.load_reminders() == []
+
+def test_reminder_parse_prompt_contains_rules():
+    assert "morgen" in REMINDER_PARSE_SYSTEM_PROMPT
+    assert "JSON" in REMINDER_PARSE_SYSTEM_PROMPT
+    assert "due" in REMINDER_PARSE_SYSTEM_PROMPT
+
+def test_hilfe_contains_erinnerungen():
+    assert "erinnere" in HILFE_TEXT
+    assert "erinnerungen" in HILFE_TEXT
