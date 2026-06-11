@@ -354,6 +354,7 @@ def normalize_voice(text: str) -> str:
 
 conversation_history = {}
 pending_task_input = {}
+_active_permission_id = None
 
 def load_settings(_dir=WORK_DIR):
     p = Path(_dir) / "settings.json"
@@ -392,8 +393,27 @@ if __name__ == "__main__":
     print(f"Bridge läuft ({today}). Strg+C zum Beenden.")
 
     while True:
+        # Check for pending permission request from Claude Code hook
+        pending_path = Path(WORK_DIR) / "pending_permission.json"
+        if pending_path.exists():
+            try:
+                req = json.loads(pending_path.read_text())
+                tool_input = req.get("input", {})
+                cmd = str(tool_input.get("command", tool_input))[:200]
+                msg_text = f"🔐 Permission needed:\nTool: {req['tool']}\n$ {cmd}"
+                inline_kb = {"inline_keyboard": [[
+                    {"text": "Ja ✅", "callback_data": f"approve_{req['request_id']}"},
+                    {"text": "Nein ❌", "callback_data": f"deny_{req['request_id']}"},
+                ]]}
+                send_message(MY_CHAT_ID, msg_text, reply_markup=inline_kb)
+                _active_permission_id = req["request_id"]
+                pending_path.unlink()
+            except Exception as e:
+                print(f"permission check error: {e}")
+
+        poll_timeout = 5 if _active_permission_id else 30
         try:
-            updates = get_updates(offset)
+            updates = get_updates(offset, timeout=poll_timeout)
         except requests.exceptions.ReadTimeout:
             continue
         except Exception as e:
@@ -401,6 +421,23 @@ if __name__ == "__main__":
             continue
         for update in updates:
             offset = update["update_id"] + 1
+
+            # Handle inline keyboard callbacks (permission approve/deny)
+            cb = update.get("callback_query")
+            if cb:
+                cb_data = cb.get("data", "")
+                if cb_data.startswith("approve_") or cb_data.startswith("deny_"):
+                    request_id = cb_data.split("_", 1)[1]
+                    approved = cb_data.startswith("approve_")
+                    resp_path = Path(WORK_DIR) / f"permission_response_{request_id}.json"
+                    resp_path.write_text(json.dumps({"approved": approved, "request_id": request_id}))
+                    requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                    action = "genehmigt ✅" if approved else "abgelehnt ❌"
+                    send_message(MY_CHAT_ID, f"Permission {action}")
+                    if _active_permission_id == request_id:
+                        _active_permission_id = None
+                continue  # Don't process callback_query as a message
+
             msg = update.get("message", {})
             chat_id = msg.get("chat", {}).get("id")
 
