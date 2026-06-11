@@ -491,9 +491,11 @@ def _set_plan_status(slug, status):
 
 def _run_plan(plan_path, slug=None):
     # Restrict to trusted plans directory to prevent path traversal
-    resolved = Path(WORK_DIR) / plan_path
+    resolved = (Path(WORK_DIR) / plan_path).resolve()
     allowed = (Path(WORK_DIR) / "docs" / "superpowers" / "plans").resolve()
-    if not str(resolved.resolve()).startswith(str(allowed)):
+    try:
+        resolved.relative_to(allowed)
+    except ValueError:
         send_message(MY_CHAT_ID, f"❌ Ungültiger Plan-Pfad: {plan_path}")
         return
     prompt = (
