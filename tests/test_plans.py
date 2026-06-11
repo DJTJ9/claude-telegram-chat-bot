@@ -164,3 +164,9 @@ def test_abort_plan_unknown_slug(tmp_path):
         from bot import _abort_plan
         result = _abort_plan("unknown")
     assert "gefunden" in result
+
+def test_hilfe_contains_plan_commands():
+    from bot import HILFE_TEXT
+    assert "/plans" in HILFE_TEXT
+    assert "implement-plan:" in HILFE_TEXT
+    assert "abort-plan:" in HILFE_TEXT

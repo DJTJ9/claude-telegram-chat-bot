@@ -98,6 +98,12 @@ HILFE_TEXT = """📋 Befehle:
   teach: <text> — Lernkurs erstellen
   restart — Bot neu starten
 
+🤖 Pläne
+  /plans — geplante Implementierungen anzeigen
+  implement-plan: <slug> um HH:MM — Implementierung planen
+  implement-plan: <slug> jetzt — sofort implementieren
+  abort-plan: <slug> — Implementierung entfernen
+
 ⚙️ Einstellungen
   /bot-notify an — Benachrichtigungen aktivieren
   /bot-notify aus — Benachrichtigungen deaktivieren"""
@@ -766,10 +772,11 @@ if __name__ == "__main__":
                 continue
 
             if chat_id in pending_task_input:
-                _is_command = (text.lower() in ("restart", "projekte", "moin", "abend", "woche", "hilfe", "erinnerungen")
+                _is_command = (text.lower() in ("restart", "projekte", "moin", "abend", "woche", "hilfe", "erinnerungen", "/plans")
                                or any(text.lower().startswith(p) for p in
                                       ("task:", "status:", "fokus:", "verschieben:", "lern:",
-                                       "idee:", "habit:", "termin:", "projekt:", "teach:", "erinnere", "erinnerung:")))
+                                       "idee:", "habit:", "termin:", "projekt:", "teach:", "erinnere", "erinnerung:",
+                                       "implement-plan:", "abort-plan:")))
                 if _is_command:
                     del pending_task_input[chat_id]
                 else:
