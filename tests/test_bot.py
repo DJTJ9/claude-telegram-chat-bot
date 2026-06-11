@@ -158,3 +158,12 @@ def test_termin_empty_detection():
 
 def test_hilfe_contains_termin():
     assert "termin:" in HILFE_TEXT
+
+def test_moin_prompt_includes_termine_section():
+    assert "Termine heute" in MOIN_SYSTEM_PROMPT
+
+def test_moin_prompt_includes_tasks_section():
+    assert "Tasks heute" in MOIN_SYSTEM_PROMPT
+
+def test_moin_prompt_includes_datetime_distinction():
+    assert "Zeitanteil" in MOIN_SYSTEM_PROMPT
