@@ -1,4 +1,4 @@
-import os, re, subprocess, requests, tempfile, sys, json, uuid
+import os, re, subprocess, requests, tempfile, sys, json
 from datetime import date
 from pathlib import Path
 from groq import Groq
@@ -354,7 +354,10 @@ pending_task_input = {}
 def load_settings(_dir=WORK_DIR):
     p = Path(_dir) / "settings.json"
     if p.exists():
-        return json.loads(p.read_text())
+        try:
+            return json.loads(p.read_text())
+        except json.JSONDecodeError:
+            pass
     return {"notifications_enabled": True}
 
 def save_settings(s, _dir=WORK_DIR):
