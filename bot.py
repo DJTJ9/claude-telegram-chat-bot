@@ -408,6 +408,7 @@ def normalize_voice(text: str) -> str:
 conversation_history = {}
 pending_task_input = {}
 _active_permission_id = None
+_active_question_id = None
 
 def load_settings(_dir=WORK_DIR):
     p = Path(_dir) / "settings.json"
@@ -518,8 +519,13 @@ if __name__ == "__main__":
             try:
                 req = json.loads(pending_path.read_text())
                 tool_input = req.get("input", {})
-                cmd = str(tool_input.get("command", tool_input))[:200]
-                msg_text = f"🔐 Permission needed:\nTool: {req['tool']}\n$ {cmd}"
+                tool_name = req.get("tool", "Unknown")
+                if tool_name in ("Edit", "Write"):
+                    file_path = tool_input.get("file_path", str(tool_input))[:300]
+                    msg_text = f"✏️ Datei-Edit:\n{file_path}"
+                else:
+                    cmd = str(tool_input.get("command", tool_input))[:200]
+                    msg_text = f"🔐 Permission needed:\nTool: {tool_name}\n$ {cmd}"
                 inline_kb = {"inline_keyboard": [[
                     {"text": "Ja ✅", "callback_data": f"approve_{req['request_id']}"},
                     {"text": "Nein ❌", "callback_data": f"deny_{req['request_id']}"},
@@ -530,7 +536,18 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"permission check error: {e}")
 
-        poll_timeout = 5 if _active_permission_id else 30
+        pending_question_path = Path(WORK_DIR) / "pending_question.json"
+        if pending_question_path.exists():
+            try:
+                req = json.loads(pending_question_path.read_text())
+                question_text = req.get("question", "")
+                send_message(MY_CHAT_ID, f"❓ Brainstorming-Frage:\n\n{question_text}")
+                _active_question_id = req["request_id"]
+                pending_question_path.unlink()
+            except Exception as e:
+                print(f"question check error: {e}")
+
+        poll_timeout = 5 if (_active_permission_id or _active_question_id) else 30
         try:
             updates = get_updates(offset, timeout=poll_timeout)
         except requests.exceptions.ReadTimeout:
@@ -584,6 +601,15 @@ if __name__ == "__main__":
                     send_message(chat_id, f"❌ Transkription fehlgeschlagen: {e}")
                     continue
             elif not text:
+                continue
+
+            if _active_question_id:
+                resp_path = (Path(WORK_DIR) / f"question_response_{_active_question_id}.json").resolve()
+                if Path(WORK_DIR).resolve() not in resp_path.parents:
+                    continue
+                resp_path.write_text(json.dumps({"answer": text}))
+                _active_question_id = None
+                send_message(chat_id, f"💬 Antwort gesendet: {text}")
                 continue
 
             if text.lower().startswith("/bot-notify"):
