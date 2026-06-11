@@ -302,9 +302,9 @@ def publish_new_lessons(chat_id):
     except Exception as e:
         print(f"publish_new_lessons error: {e}")
 
-def get_updates(offset=None):
-    params = {"timeout": 30, "offset": offset}
-    r = requests.get(f"{BASE}/getUpdates", params=params, timeout=35)
+def get_updates(offset=None, timeout=30):
+    params = {"timeout": timeout, "offset": offset}
+    r = requests.get(f"{BASE}/getUpdates", params=params, timeout=timeout + 5)
     return r.json().get("result", [])
 
 def send_message(chat_id, text, reply_markup=None):
