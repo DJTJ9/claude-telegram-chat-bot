@@ -36,3 +36,37 @@ def test_set_plan_status(tmp_path):
         _set_plan_status("alpha", "running")
         result = _load_plans()
         assert result[0]["status"] == "running"
+
+def test_run_plan_success(tmp_path):
+    p = tmp_path / "scheduled_plans.json"
+    p.write_text(json.dumps([
+        {"slug": "alpha", "plan_path": "docs/alpha.md", "scheduled_time": "02:00", "status": "pending"}
+    ]))
+    sent = []
+    with patch("bot.PLANS_PATH", p), \
+         patch("subprocess.run") as mock_run, \
+         patch("bot.send_message", lambda chat_id, text, **kw: sent.append(text)):
+        mock_run.return_value = type("R", (), {"returncode": 0, "stderr": ""})()
+        from bot import _run_plan
+        _run_plan("docs/alpha.md", slug="alpha")
+    assert any("abgeschlossen" in m for m in sent)
+
+def test_run_plan_failure_retries(tmp_path):
+    p = tmp_path / "scheduled_plans.json"
+    p.write_text(json.dumps([
+        {"slug": "beta", "plan_path": "docs/beta.md", "scheduled_time": "02:00", "status": "pending"}
+    ]))
+    sent = []
+    call_count = {"n": 0}
+    def mock_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd and cmd[0] == "claude":
+            call_count["n"] += 1
+            return type("R", (), {"returncode": 1, "stderr": "error msg"})()
+        return type("R", (), {"returncode": 0, "stderr": ""})()
+    with patch("bot.PLANS_PATH", p), \
+         patch("subprocess.run", mock_run), \
+         patch("bot.send_message", lambda chat_id, text, **kw: sent.append(text)):
+        from bot import _run_plan
+        _run_plan("docs/beta.md", slug="beta")
+    assert call_count["n"] == 2
+    assert any("fehlgeschlagen" in m for m in sent)

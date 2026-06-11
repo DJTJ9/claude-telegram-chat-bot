@@ -489,6 +489,30 @@ def _set_plan_status(slug, status):
     subprocess.run(["git", "-C", WORK_DIR, "add", "scheduled_plans.json"], capture_output=True)
     subprocess.run(["git", "-C", WORK_DIR, "commit", "-m", f"chore: plan {slug} -> {status}"], capture_output=True)
 
+def _run_plan(plan_path, slug=None):
+    prompt = (
+        f"Follow the implementation plan exactly. "
+        f"Plan file: {plan_path}\n"
+        f"Read the plan file and implement every task step by step. Commit all changes when done."
+    )
+    cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
+    if slug:
+        _set_plan_status(slug, "running")
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                            timeout=3600, cwd=WORK_DIR)
+    if result.returncode != 0:
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                                timeout=3600, cwd=WORK_DIR)
+    success = result.returncode == 0
+    if slug:
+        _set_plan_status(slug, "done" if success else "failed")
+    label = slug or plan_path
+    if success:
+        send_message(MY_CHAT_ID, f"✅ Implementierung abgeschlossen: {label}")
+    else:
+        stderr_snippet = (result.stderr or "")[-500:]
+        send_message(MY_CHAT_ID, f"❌ Implementierung fehlgeschlagen: {label}\n{stderr_snippet}")
+
 def add_reminder(chat_id, text, due_iso):
     reminders = load_reminders()
     reminders.append({
