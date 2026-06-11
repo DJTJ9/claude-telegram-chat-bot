@@ -564,6 +564,19 @@ def _schedule_plan(slug, scheduled_time):
             return f"⏰ {slug} geplant für {scheduled_time}"
     return f"❌ Kein Plan mit slug '{slug}' gefunden"
 
+def _abort_plan(slug):
+    plans = _load_plans()
+    for plan in plans:
+        if plan["slug"] == slug:
+            if plan["status"] == "running":
+                return f"⚠️ Plan läuft gerade — abbrechen nicht möglich"
+            plans = [p for p in plans if p["slug"] != slug]
+            _save_plans(plans)
+            subprocess.run(["git", "-C", WORK_DIR, "add", "scheduled_plans.json"], capture_output=True)
+            subprocess.run(["git", "-C", WORK_DIR, "commit", "-m", f"chore: remove plan {slug}"], capture_output=True)
+            return f"🗑 {slug} entfernt"
+    return f"❌ Kein Plan mit slug '{slug}' gefunden"
+
 def add_reminder(chat_id, text, due_iso):
     reminders = load_reminders()
     reminders.append({
@@ -865,6 +878,14 @@ if __name__ == "__main__":
                         response = _schedule_plan(slug_part, scheduled_time)
                     else:
                         response = "Nutzung: implement-plan: <slug> um HH:MM  oder  implement-plan: <slug> jetzt"
+                send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                continue
+            elif text.lower().startswith("abort-plan:"):
+                slug_part = text[11:].strip()
+                if not slug_part:
+                    response = "Nutzung: abort-plan: <slug>"
+                else:
+                    response = _abort_plan(slug_part)
                 send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
                 continue
             elif text.lower() == "hilfe":

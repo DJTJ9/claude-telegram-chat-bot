@@ -131,3 +131,36 @@ def test_schedule_plan_unknown_slug(tmp_path):
         from bot import _schedule_plan
         result = _schedule_plan("unknown", "02:00")
     assert "gefunden" in result
+
+# Task 7: _abort_plan tests
+def test_abort_plan_removes_entry(tmp_path):
+    p = tmp_path / "scheduled_plans.json"
+    p.write_text(json.dumps([
+        {"slug": "alpha", "plan_path": "docs/superpowers/plans/alpha.md", "scheduled_time": "02:00", "status": "pending"}
+    ]))
+    with patch("bot.PLANS_PATH", p), patch("subprocess.run"):
+        from bot import _abort_plan
+        result = _abort_plan("alpha")
+    assert "entfernt" in result
+    plans = json.loads(p.read_text())
+    assert plans == []
+
+def test_abort_plan_blocked_when_running(tmp_path):
+    p = tmp_path / "scheduled_plans.json"
+    p.write_text(json.dumps([
+        {"slug": "beta", "plan_path": "docs/superpowers/plans/beta.md", "scheduled_time": "02:00", "status": "running"}
+    ]))
+    with patch("bot.PLANS_PATH", p):
+        from bot import _abort_plan
+        result = _abort_plan("beta")
+    assert "läuft" in result
+    plans = json.loads(p.read_text())
+    assert len(plans) == 1
+
+def test_abort_plan_unknown_slug(tmp_path):
+    p = tmp_path / "scheduled_plans.json"
+    p.write_text("[]")
+    with patch("bot.PLANS_PATH", p):
+        from bot import _abort_plan
+        result = _abort_plan("unknown")
+    assert "gefunden" in result
