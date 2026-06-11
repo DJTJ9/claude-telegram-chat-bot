@@ -28,9 +28,20 @@ except Exception:
     print(json.dumps({"decision": "block", "reason": "Hook received unparseable input"}))
     sys.exit(2)
 
-request_id = str(uuid.uuid4())[:8]
 tool_name = data.get("tool_name", "Unknown")
 tool_input = data.get("tool_input", {})
+
+# Auto-approve Edit/Write for files inside the project directory
+if tool_name in ("Edit", "Write"):
+    file_path_str = tool_input.get("file_path", "")
+    try:
+        Path(file_path_str).resolve().relative_to(PROJECT_DIR.resolve())
+        print(json.dumps({"decision": "approve"}))
+        sys.exit(0)
+    except ValueError:
+        pass  # Outside project — fall through to Telegram relay
+
+request_id = str(uuid.uuid4())[:8]
 
 pending_path = PROJECT_DIR / "pending_permission.json"
 pending_path.write_text(json.dumps({
