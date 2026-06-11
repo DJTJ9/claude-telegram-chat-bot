@@ -143,3 +143,15 @@ def test_termin_system_prompt_default_time():
 
 def test_termin_system_prompt_response_format():
     assert "📅 Termin angelegt" in TERMIN_SYSTEM_PROMPT
+
+def test_termin_prefix_detection():
+    text = "termin: Arzttermin morgen um 14:00"
+    assert text.lower().startswith("termin:")
+
+def test_termin_prefix_extraction():
+    text = "termin: Arzttermin morgen um 14:00"
+    assert text[7:].strip() == "Arzttermin morgen um 14:00"
+
+def test_termin_empty_detection():
+    text = "termin:"
+    assert text[7:].strip() == ""

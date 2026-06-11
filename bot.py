@@ -606,7 +606,7 @@ if __name__ == "__main__":
                 _is_command = (text.lower() in ("restart", "projekte", "moin", "abend", "woche", "hilfe", "erinnerungen")
                                or any(text.lower().startswith(p) for p in
                                       ("task:", "status:", "fokus:", "verschieben:", "lern:",
-                                       "idee:", "habit:", "projekt:", "teach:", "erinnere", "erinnerung:")))
+                                       "idee:", "habit:", "termin:", "projekt:", "teach:", "erinnere", "erinnerung:")))
                 if _is_command:
                     del pending_task_input[chat_id]
                 else:
@@ -685,6 +685,13 @@ if __name__ == "__main__":
                 else:
                     prompt = f"Heute ist {today}. Habit: {habit_text}"
                     response = run_claude(prompt, system_prompt=HABIT_SYSTEM_PROMPT)
+            elif text.lower().startswith("termin:"):
+                termin_text = text[7:].strip()
+                if not termin_text:
+                    response = "Nutzung: termin: <text>  z.B. termin: Arzttermin morgen um 14:00"
+                else:
+                    prompt = f"Heute ist {today}. Termin: {termin_text}"
+                    response = run_claude(prompt, system_prompt=TERMIN_SYSTEM_PROMPT)
             elif text.lower() == "hilfe":
                 response = HILFE_TEXT
             elif text.lower().startswith("status:"):
