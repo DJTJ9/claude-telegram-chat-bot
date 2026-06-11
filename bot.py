@@ -490,6 +490,12 @@ def _set_plan_status(slug, status):
     subprocess.run(["git", "-C", WORK_DIR, "commit", "-m", f"chore: plan {slug} -> {status}"], capture_output=True)
 
 def _run_plan(plan_path, slug=None):
+    # Restrict to trusted plans directory to prevent path traversal
+    resolved = Path(WORK_DIR) / plan_path
+    allowed = (Path(WORK_DIR) / "docs" / "superpowers" / "plans").resolve()
+    if not str(resolved.resolve()).startswith(str(allowed)):
+        send_message(MY_CHAT_ID, f"❌ Ungültiger Plan-Pfad: {plan_path}")
+        return
     prompt = (
         f"Follow the implementation plan exactly. "
         f"Plan file: {plan_path}\n"

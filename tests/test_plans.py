@@ -40,7 +40,7 @@ def test_set_plan_status(tmp_path):
 def test_run_plan_success(tmp_path):
     p = tmp_path / "scheduled_plans.json"
     p.write_text(json.dumps([
-        {"slug": "alpha", "plan_path": "docs/alpha.md", "scheduled_time": "02:00", "status": "pending"}
+        {"slug": "alpha", "plan_path": "docs/superpowers/plans/alpha.md", "scheduled_time": "02:00", "status": "pending"}
     ]))
     sent = []
     with patch("bot.PLANS_PATH", p), \
@@ -48,13 +48,13 @@ def test_run_plan_success(tmp_path):
          patch("bot.send_message", lambda chat_id, text, **kw: sent.append(text)):
         mock_run.return_value = type("R", (), {"returncode": 0, "stderr": ""})()
         from bot import _run_plan
-        _run_plan("docs/alpha.md", slug="alpha")
+        _run_plan("docs/superpowers/plans/alpha.md", slug="alpha")
     assert any("abgeschlossen" in m for m in sent)
 
 def test_run_plan_failure_retries(tmp_path):
     p = tmp_path / "scheduled_plans.json"
     p.write_text(json.dumps([
-        {"slug": "beta", "plan_path": "docs/beta.md", "scheduled_time": "02:00", "status": "pending"}
+        {"slug": "beta", "plan_path": "docs/superpowers/plans/beta.md", "scheduled_time": "02:00", "status": "pending"}
     ]))
     sent = []
     call_count = {"n": 0}
@@ -67,7 +67,7 @@ def test_run_plan_failure_retries(tmp_path):
          patch("subprocess.run", mock_run), \
          patch("bot.send_message", lambda chat_id, text, **kw: sent.append(text)):
         from bot import _run_plan
-        _run_plan("docs/beta.md", slug="beta")
+        _run_plan("docs/superpowers/plans/beta.md", slug="beta")
     assert call_count["n"] == 2
     assert any("fehlgeschlagen" in m for m in sent)
 
