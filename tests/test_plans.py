@@ -110,3 +110,24 @@ def test_format_plans_empty(tmp_path):
         from bot import _format_plans
         output = _format_plans()
     assert "keine" in output.lower()
+
+# Task 6: _schedule_plan tests
+def test_schedule_plan_sets_time(tmp_path):
+    p = tmp_path / "scheduled_plans.json"
+    p.write_text(json.dumps([
+        {"slug": "alpha", "plan_path": "docs/superpowers/plans/alpha.md", "scheduled_time": None, "status": "pending"}
+    ]))
+    with patch("bot.PLANS_PATH", p), patch("subprocess.run"):
+        from bot import _schedule_plan
+        result = _schedule_plan("alpha", "02:00")
+    assert "02:00" in result
+    plans = json.loads(p.read_text())
+    assert plans[0]["scheduled_time"] == "02:00"
+
+def test_schedule_plan_unknown_slug(tmp_path):
+    p = tmp_path / "scheduled_plans.json"
+    p.write_text("[]")
+    with patch("bot.PLANS_PATH", p):
+        from bot import _schedule_plan
+        result = _schedule_plan("unknown", "02:00")
+    assert "gefunden" in result

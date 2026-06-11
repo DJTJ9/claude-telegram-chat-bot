@@ -553,6 +553,17 @@ def _format_plans():
             lines.append(f"• {plan['slug']}")
     return "\n".join(lines)
 
+def _schedule_plan(slug, scheduled_time):
+    plans = _load_plans()
+    for plan in plans:
+        if plan["slug"] == slug:
+            plan["scheduled_time"] = scheduled_time
+            _save_plans(plans)
+            subprocess.run(["git", "-C", WORK_DIR, "add", "scheduled_plans.json"], capture_output=True)
+            subprocess.run(["git", "-C", WORK_DIR, "commit", "-m", f"chore: schedule plan {slug} at {scheduled_time}"], capture_output=True)
+            return f"⏰ {slug} geplant für {scheduled_time}"
+    return f"❌ Kein Plan mit slug '{slug}' gefunden"
+
 def add_reminder(chat_id, text, due_iso):
     reminders = load_reminders()
     reminders.append({
@@ -829,6 +840,33 @@ if __name__ == "__main__":
                 else:
                     prompt = f"Heute ist {today}. Termin: {termin_text}"
                     response = run_claude(prompt, system_prompt=TERMIN_SYSTEM_PROMPT)
+            elif text.lower().startswith("implement-plan:"):
+                body = text[15:].strip()
+                if not body:
+                    response = "Nutzung: implement-plan: <slug> um HH:MM  oder  implement-plan: <slug> jetzt"
+                else:
+                    slug_part, _, rest = body.partition(" ")
+                    rest = rest.strip()
+                    if rest.lower() == "jetzt":
+                        plan_entry = next((p for p in _load_plans() if p["slug"] == slug_part), None)
+                        if not plan_entry:
+                            response = f"❌ Kein Plan mit slug '{slug_part}' gefunden"
+                            send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                        else:
+                            send_message(chat_id, f"🚀 Implementierung gestartet: {slug_part}")
+                            threading.Thread(
+                                target=_run_plan,
+                                args=(plan_entry["plan_path"], slug_part),
+                                daemon=True
+                            ).start()
+                        continue
+                    elif rest.lower().startswith("um "):
+                        scheduled_time = rest[3:].strip()
+                        response = _schedule_plan(slug_part, scheduled_time)
+                    else:
+                        response = "Nutzung: implement-plan: <slug> um HH:MM  oder  implement-plan: <slug> jetzt"
+                send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                continue
             elif text.lower() == "hilfe":
                 response = HILFE_TEXT
             elif text.lower().startswith("status:"):
