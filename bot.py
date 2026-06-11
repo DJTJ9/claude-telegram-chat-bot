@@ -425,11 +425,18 @@ if __name__ == "__main__":
             # Handle inline keyboard callbacks (permission approve/deny)
             cb = update.get("callback_query")
             if cb:
+                if cb.get("from", {}).get("id") != MY_CHAT_ID:
+                    requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"], "text": "unauthorized"})
+                    continue
                 cb_data = cb.get("data", "")
                 if cb_data.startswith("approve_") or cb_data.startswith("deny_"):
                     request_id = cb_data.split("_", 1)[1]
+                    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", request_id):
+                        continue
+                    resp_path = (Path(WORK_DIR) / f"permission_response_{request_id}.json").resolve()
+                    if Path(WORK_DIR).resolve() not in resp_path.parents:
+                        continue
                     approved = cb_data.startswith("approve_")
-                    resp_path = Path(WORK_DIR) / f"permission_response_{request_id}.json"
                     resp_path.write_text(json.dumps({"approved": approved, "request_id": request_id}))
                     requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
                     action = "genehmigt ✅" if approved else "abgelehnt ❌"
