@@ -255,6 +255,16 @@ Regeln:
 Antworte AUSSCHLIESSLICH mit diesem JSON (kein Markdown, keine Erklärung, nichts anderes):
 {"text": "<was erinnert werden soll>", "due": "<YYYY-MM-DDTHH:MM:SS>"}"""
 
+TERMIN_SYSTEM_PROMPT = """Du bist ein Notion-Termin-Assistent.
+Lege den Termin im Tagesorganizer an (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Leite aus dem Text ab:
+- Name: Bezeichnung des Termins
+- Datum: ISO 8601 datetime YYYY-MM-DDTHH:MM:SS
+  Falls kein Datum: heute. Falls keine Uhrzeit: 09:00.
+  "morgen" = heute + 1 Tag, Wochentage relativ zu heute.
+  "um 14" oder "14 Uhr" → 14:00:00, "halb drei" → 14:30:00
+Antworte NUR mit einer Zeile: 📅 Termin angelegt: [Name] · [DD.MM.YYYY um HH:MM]"""
+
 def _update_index_html(lesson_path):
     parts = lesson_path.replace("\\", "/").split("/")
     if len(parts) < 3:

@@ -129,3 +129,17 @@ def test_reminder_parse_prompt_contains_rules():
 def test_hilfe_contains_erinnerungen():
     assert "erinnere" in HILFE_TEXT
     assert "erinnerungen" in HILFE_TEXT
+
+from bot import TERMIN_SYSTEM_PROMPT
+
+def test_termin_system_prompt_contains_datasource():
+    assert "c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0" in TERMIN_SYSTEM_PROMPT
+
+def test_termin_system_prompt_datetime_format():
+    assert "YYYY-MM-DDTHH:MM:SS" in TERMIN_SYSTEM_PROMPT
+
+def test_termin_system_prompt_default_time():
+    assert "09:00" in TERMIN_SYSTEM_PROMPT
+
+def test_termin_system_prompt_response_format():
+    assert "📅 Termin angelegt" in TERMIN_SYSTEM_PROMPT
