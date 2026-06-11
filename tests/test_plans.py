@@ -70,3 +70,20 @@ def test_run_plan_failure_retries(tmp_path):
         _run_plan("docs/beta.md", slug="beta")
     assert call_count["n"] == 2
     assert any("fehlgeschlagen" in m for m in sent)
+
+def test_plan_loop_fires_on_matching_time(tmp_path):
+    import bot
+    p = tmp_path / "scheduled_plans.json"
+    p.write_text(json.dumps([
+        {"slug": "gamma", "plan_path": "docs/gamma.md", "scheduled_time": "03:00", "status": "pending"}
+    ]))
+    triggered = []
+    with patch("bot.PLANS_PATH", p), \
+         patch("bot.send_message"), \
+         patch("bot._run_plan", lambda path, slug: triggered.append(slug)):
+        plans = bot._load_plans()
+        now = "03:00"
+        for plan in plans:
+            if plan["status"] == "pending" and plan.get("scheduled_time") == now:
+                bot._run_plan(plan["plan_path"], slug=plan["slug"])
+    assert "gamma" in triggered

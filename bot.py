@@ -513,6 +513,23 @@ def _run_plan(plan_path, slug=None):
         stderr_snippet = (result.stderr or "")[-500:]
         send_message(MY_CHAT_ID, f"❌ Implementierung fehlgeschlagen: {label}\n{stderr_snippet}")
 
+def _plan_loop():
+    while True:
+        time.sleep(60)
+        try:
+            now = datetime.now().strftime("%H:%M")
+            plans = _load_plans()
+            for plan in plans:
+                if plan["status"] == "pending" and plan.get("scheduled_time") == now:
+                    send_message(MY_CHAT_ID, f"🚀 Starte Implementierung: {plan['slug']}")
+                    threading.Thread(
+                        target=_run_plan,
+                        args=(plan["plan_path"], plan["slug"]),
+                        daemon=True
+                    ).start()
+        except Exception as e:
+            print(f"plan loop error: {e}")
+
 def add_reminder(chat_id, text, due_iso):
     reminders = load_reminders()
     reminders.append({
@@ -554,6 +571,12 @@ def _reminder_loop():
 
 if __name__ == "__main__":
     threading.Thread(target=_reminder_loop, daemon=True).start()
+    threading.Thread(target=_plan_loop, daemon=True).start()
+    _stale = _load_plans()
+    for _p in _stale:
+        if _p["status"] == "running":
+            _p["status"] = "pending"
+    _save_plans(_stale)
     offset = int(os.environ.pop('BOT_START_OFFSET', '0')) or None
     today = date.today().isoformat()
     print(f"Bridge läuft ({today}). Strg+C zum Beenden.")
