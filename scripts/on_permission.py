@@ -25,8 +25,8 @@ if settings_path.exists():
 try:
     data = json.loads(sys.stdin.read())
 except Exception:
-    print(json.dumps({"decision": "approve"}))
-    sys.exit(0)
+    print(json.dumps({"decision": "block", "reason": "Hook received unparseable input"}))
+    sys.exit(2)
 
 request_id = str(uuid.uuid4())[:8]
 tool_name = data.get("tool_name", "Unknown")
