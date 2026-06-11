@@ -86,7 +86,11 @@ HILFE_TEXT = """📋 Befehle:
 
 🛠 Sonstiges
   teach: <text> — Lernkurs erstellen
-  restart — Bot neu starten"""
+  restart — Bot neu starten
+
+⚙️ Einstellungen
+  /bot-notify an — Benachrichtigungen aktivieren
+  /bot-notify aus — Benachrichtigungen deaktivieren"""
 
 WOCHE_SYSTEM_PROMPT = """Du bist ein Notion-Wochenassistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
@@ -415,6 +419,23 @@ if __name__ == "__main__":
                     send_message(chat_id, f"❌ Transkription fehlgeschlagen: {e}")
                     continue
             elif not text:
+                continue
+
+            if text.lower().startswith("/bot-notify"):
+                arg = text[11:].strip().lower()
+                s = load_settings()
+                if arg == "an":
+                    s["notifications_enabled"] = True
+                    save_settings(s)
+                    response = "🔔 Benachrichtigungen aktiviert"
+                elif arg == "aus":
+                    s["notifications_enabled"] = False
+                    save_settings(s)
+                    response = "🔕 Benachrichtigungen deaktiviert"
+                else:
+                    state = "aktiviert 🔔" if s.get("notifications_enabled", True) else "deaktiviert 🔕"
+                    response = f"Benachrichtigungen: {state}\nNutzung: /bot-notify an  oder  /bot-notify aus"
+                send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
                 continue
 
             if text.lower() == "restart":

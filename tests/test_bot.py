@@ -97,3 +97,7 @@ def test_save_load_roundtrip(tmp_path):
 def test_load_settings_corrupt_file(tmp_path):
     (tmp_path / "settings.json").write_text("{bad json}")
     assert load_settings(tmp_path) == {"notifications_enabled": True}
+
+def test_bot_notify_in_hilfe():
+    from bot import HILFE_TEXT
+    assert "/bot-notify" in HILFE_TEXT
