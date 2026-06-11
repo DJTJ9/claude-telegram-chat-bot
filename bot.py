@@ -510,8 +510,6 @@ def _run_plan(plan_path, slug=None):
         f"Read the plan file and implement every task step by step. Commit all changes when done."
     )
     cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
-    if slug:
-        _set_plan_status(slug, "running")
     result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                             timeout=3600, cwd=WORK_DIR)
     if result.returncode != 0:
@@ -535,6 +533,7 @@ def _plan_loop():
             plans = _load_plans()
             for plan in plans:
                 if plan["status"] == "pending" and plan.get("scheduled_time") == now:
+                    _set_plan_status(plan["slug"], "running")
                     send_message(MY_CHAT_ID, f"🚀 Starte Implementierung: {plan['slug']}")
                     threading.Thread(
                         target=_run_plan,
@@ -884,7 +883,10 @@ if __name__ == "__main__":
                         continue
                     elif rest.lower().startswith("um "):
                         scheduled_time = rest[3:].strip()
-                        response = _schedule_plan(slug_part, scheduled_time)
+                        if not re.fullmatch(r"\d{2}:\d{2}", scheduled_time):
+                            response = "❌ Ungültige Uhrzeit — bitte HH:MM angeben (z.B. 02:00)"
+                        else:
+                            response = _schedule_plan(slug_part, scheduled_time)
                     else:
                         response = "Nutzung: implement-plan: <slug> um HH:MM  oder  implement-plan: <slug> jetzt"
                 send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
