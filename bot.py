@@ -536,6 +536,23 @@ def _plan_loop():
         except Exception as e:
             print(f"plan loop error: {e}")
 
+def _format_plans():
+    plans = [plan for plan in _load_plans() if plan["status"] in ("pending", "running")]
+    if not plans:
+        return "Keine ausstehenden Pläne."
+    scheduled = [plan for plan in plans if plan.get("scheduled_time")]
+    waiting   = [plan for plan in plans if not plan.get("scheduled_time")]
+    lines = ["📋 Geplante Implementierungen"]
+    if scheduled:
+        lines.append("\n⏰ Geplant:")
+        for plan in scheduled:
+            lines.append(f"• {plan['slug']} — {plan['scheduled_time']}")
+    if waiting:
+        lines.append("\n📌 Wartend (kein Termin):")
+        for plan in waiting:
+            lines.append(f"• {plan['slug']}")
+    return "\n".join(lines)
+
 def add_reminder(chat_id, text, due_iso):
     reminders = load_reminders()
     reminders.append({
@@ -685,6 +702,10 @@ if __name__ == "__main__":
                 resp_path.write_text(json.dumps({"answer": text}))
                 _active_question_id = None
                 send_message(chat_id, f"💬 Antwort gesendet: {text}")
+                continue
+
+            if text.lower() == "/plans":
+                send_message(chat_id, _format_plans(), reply_markup=REPLY_KEYBOARD)
                 continue
 
             if text.lower().startswith("/bot-notify"):

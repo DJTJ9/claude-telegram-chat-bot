@@ -87,3 +87,26 @@ def test_plan_loop_fires_on_matching_time(tmp_path):
             if plan["status"] == "pending" and plan.get("scheduled_time") == now:
                 bot._run_plan(plan["plan_path"], slug=plan["slug"])
     assert "gamma" in triggered
+
+# Task 5: _format_plans tests
+def test_format_plans_scheduled_and_waiting(tmp_path):
+    p = tmp_path / "scheduled_plans.json"
+    p.write_text(json.dumps([
+        {"slug": "alpha", "plan_path": "docs/superpowers/plans/alpha.md", "scheduled_time": "02:00", "status": "pending"},
+        {"slug": "beta",  "plan_path": "docs/superpowers/plans/beta.md",  "scheduled_time": None,    "status": "pending"},
+    ]))
+    with patch("bot.PLANS_PATH", p):
+        from bot import _format_plans
+        output = _format_plans()
+    assert "⏰" in output
+    assert "alpha" in output
+    assert "📌" in output
+    assert "beta" in output
+
+def test_format_plans_empty(tmp_path):
+    p = tmp_path / "scheduled_plans.json"
+    p.write_text("[]")
+    with patch("bot.PLANS_PATH", p):
+        from bot import _format_plans
+        output = _format_plans()
+    assert "keine" in output.lower()
