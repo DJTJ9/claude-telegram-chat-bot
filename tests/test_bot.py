@@ -155,3 +155,6 @@ def test_termin_prefix_extraction():
 def test_termin_empty_detection():
     text = "termin:"
     assert text[7:].strip() == ""
+
+def test_hilfe_contains_termin():
+    assert "termin:" in HILFE_TEXT

@@ -70,6 +70,8 @@ HILFE_TEXT = """📋 Befehle:
   task: <text> — Neuen Task direkt anlegen
   habit: <text> — Neuen Habit anlegen
     z.B. habit: Sport täglich  oder  habit: Laufen alle 2 Tage
+  termin: <text> — Termin anlegen
+    z.B. termin: Arzttermin morgen um 14:00
   status: <name> <status> — Status ändern
     erledigt / in arbeit / offen
   verschieben: <datum> — Offene Tasks verschieben
