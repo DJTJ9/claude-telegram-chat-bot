@@ -1,5 +1,6 @@
-import os, re, subprocess, requests, tempfile, sys
+import os, re, subprocess, requests, tempfile, sys, json, uuid
 from datetime import date
+from pathlib import Path
 from groq import Groq
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
@@ -349,6 +350,15 @@ def normalize_voice(text: str) -> str:
 
 conversation_history = {}
 pending_task_input = {}
+
+def load_settings(_dir=WORK_DIR):
+    p = Path(_dir) / "settings.json"
+    if p.exists():
+        return json.loads(p.read_text())
+    return {"notifications_enabled": True}
+
+def save_settings(s, _dir=WORK_DIR):
+    (Path(_dir) / "settings.json").write_text(json.dumps(s, indent=2))
 
 def run_claude_with_history(chat_id, text, system_prompt=None, cwd=None):
     history = conversation_history.get(chat_id, [])

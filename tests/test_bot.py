@@ -1,5 +1,6 @@
-import sys, os
+import sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from pathlib import Path
 from bot import normalize_voice, REPLY_KEYBOARD, HILFE_TEXT, MOIN_SYSTEM_PROMPT, HABITS_DATA_SOURCE_ID, STATUS_SYSTEM_PROMPT, pending_task_input
 
 def test_doppelpunkt_lower():
@@ -74,3 +75,21 @@ def test_task_bare_command_detection():
     text = "task:"
     assert text.lower().startswith("task:")
     assert text[5:].strip() == ""
+
+from bot import load_settings, save_settings
+
+def test_load_settings_default(tmp_path):
+    assert load_settings(tmp_path) == {"notifications_enabled": True}
+
+def test_load_settings_reads_file(tmp_path):
+    (tmp_path / "settings.json").write_text('{"notifications_enabled": false}')
+    assert load_settings(tmp_path) == {"notifications_enabled": False}
+
+def test_save_settings(tmp_path):
+    save_settings({"notifications_enabled": False}, tmp_path)
+    data = json.loads((tmp_path / "settings.json").read_text())
+    assert data == {"notifications_enabled": False}
+
+def test_save_load_roundtrip(tmp_path):
+    save_settings({"notifications_enabled": True}, tmp_path)
+    assert load_settings(tmp_path) == {"notifications_enabled": True}
