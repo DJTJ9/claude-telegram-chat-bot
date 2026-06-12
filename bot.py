@@ -850,6 +850,7 @@ if __name__ == "__main__":
                 continue
 
             if chat_id in pending_task_input:
+                state = pending_task_input[chat_id]
                 _is_command = (text.lower() in ("restart", "projekte", "moin", "abend", "woche", "hilfe", "erinnerungen", "/plans", "backlog")
                                or any(text.lower().startswith(p) for p in
                                       ("task:", "status:", "fokus:", "verschieben:", "lern:",
@@ -857,21 +858,54 @@ if __name__ == "__main__":
                                        "implement-plan:", "abort-plan:", "backlog:")))
                 if _is_command:
                     del pending_task_input[chat_id]
-                else:
-                    state = pending_task_input[chat_id]
+                elif state == "task_menu":
                     del pending_task_input[chat_id]
-                    if state == "backlog_input":
-                        send_message(chat_id, "⏳ Denke nach...")
-                        prompt = f"Heute ist {today}. Backlog-Aufgabe: {text}"
-                        response = run_claude(prompt, system_prompt=BACKLOG_SYSTEM_PROMPT)
-                        send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                    choice = text.strip().upper()
+                    if choice in ("A", "1"):
+                        pending_task_input[chat_id] = "task_input"
+                        send_message(chat_id, "Schreib mir: Name, Priorität (Hoch/Mittel/Niedrig), Bereich (Arbeit/Privat/Lernen/Gesundheit)\nz.B.: Arzttermin, Hoch, Gesundheit")
+                    elif choice in ("B", "2"):
+                        send_message(chat_id, "⏳ Lade Backlog...")
+                        backlog_response = run_claude(f"Heute ist {today}.", system_prompt=BACKLOG_LIST_SYSTEM_PROMPT)
+                        if "leer" in backlog_response.lower():
+                            send_message(chat_id, f"{backlog_response}\n\nKeine Backlog-Tasks verfügbar.")
+                        else:
+                            pending_task_input[chat_id] = {"state": "backlog_select", "list": backlog_response}
+                            send_message(chat_id, f"{backlog_response}\n\nWelchen Task? (Nummer eingeben)")
                     else:
-                        send_message(chat_id, "⏳ Denke nach...")
-                        prompt = f"Heute ist {today}. Aufgabe: {text}"
-                        response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT)
-                        send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
-                        publish_new_lessons(chat_id)
-                        print(f"[task-dialog] → {response[:60]}")
+                        send_message(chat_id, "Bitte A oder B eingeben.")
+                    continue
+                elif isinstance(state, dict) and state.get("state") == "backlog_select":
+                    del pending_task_input[chat_id]
+                    try:
+                        num = int(text.strip())
+                        pending_task_input[chat_id] = {"state": "backlog_date", "num": num, "list": state["list"]}
+                        send_message(chat_id, f"Ausgewählt: #{num}\nWelches Datum? (z.B. heute, morgen, 2026-06-15)")
+                    except ValueError:
+                        send_message(chat_id, "Bitte eine Nummer eingeben.")
+                    continue
+                elif isinstance(state, dict) and state.get("state") == "backlog_date":
+                    del pending_task_input[chat_id]
+                    send_message(chat_id, "⏳ Übertrage in Tagesorganizer...")
+                    prompt = f"Heute ist {today}. Zieldatum: {text}.\nBacklog-Liste:\n{state['list']}\nNummer: {state['num']}"
+                    response = run_claude(prompt, system_prompt=BACKLOG_PROMOTE_SYSTEM_PROMPT)
+                    send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                    continue
+                elif state == "backlog_input":
+                    del pending_task_input[chat_id]
+                    send_message(chat_id, "⏳ Denke nach...")
+                    prompt = f"Heute ist {today}. Backlog-Aufgabe: {text}"
+                    response = run_claude(prompt, system_prompt=BACKLOG_SYSTEM_PROMPT)
+                    send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                    continue
+                else:
+                    del pending_task_input[chat_id]
+                    send_message(chat_id, "⏳ Denke nach...")
+                    prompt = f"Heute ist {today}. Aufgabe: {text}"
+                    response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT)
+                    send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                    publish_new_lessons(chat_id)
+                    print(f"[task-dialog] → {response[:60]}")
                     continue
 
             send_message(chat_id, "⏳ Denke nach...")
@@ -900,8 +934,8 @@ if __name__ == "__main__":
             elif text.lower().startswith("task:"):
                 task_text = text[5:].strip()
                 if not task_text:
-                    pending_task_input[chat_id] = True
-                    response = "Schreib mir: Name, Priorität (Hoch/Mittel/Niedrig), Bereich (Arbeit/Privat/Lernen/Gesundheit)\nz.B.: Arzttermin, Hoch, Gesundheit"
+                    pending_task_input[chat_id] = "task_menu"
+                    response = "Neuer Task oder aus Backlog?\nA) Neuer Task\nB) Aus Backlog auswählen"
                 else:
                     prompt = f"Heute ist {today}. Aufgabe: {task_text}"
                     response = run_claude(prompt, system_prompt=TASK_SYSTEM_PROMPT, cwd=project_cwd)

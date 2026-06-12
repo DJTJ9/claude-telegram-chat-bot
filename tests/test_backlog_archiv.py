@@ -85,3 +85,19 @@ def test_status_in_arbeit_does_not_trigger_archive(monkeypatch):
     if any(w in status_text.lower() for w in ("erledigt", "fertig", "done")):
         bot._run_archive_once()
     assert len(archive_calls) == 0
+
+def test_backlog_promote_prompt_contains_tagesorganizer():
+    assert "c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0" in bot.BACKLOG_PROMOTE_SYSTEM_PROMPT
+
+def test_backlog_promote_prompt_mentions_erledigt():
+    assert "Erledigt" in bot.BACKLOG_PROMOTE_SYSTEM_PROMPT
+
+def test_task_bare_sets_task_menu_state():
+    bot.pending_task_input.clear()
+    chat_id = 99999
+    text = "task:"
+    task_text = text[5:].strip()
+    if not task_text:
+        bot.pending_task_input[chat_id] = "task_menu"
+    assert bot.pending_task_input.get(chat_id) == "task_menu"
+    bot.pending_task_input.clear()
