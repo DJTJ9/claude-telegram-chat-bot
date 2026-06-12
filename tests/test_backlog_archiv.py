@@ -101,3 +101,18 @@ def test_task_bare_sets_task_menu_state():
         bot.pending_task_input[chat_id] = "task_menu"
     assert bot.pending_task_input.get(chat_id) == "task_menu"
     bot.pending_task_input.clear()
+
+def test_all_system_prompts_defined():
+    for attr in ("BACKLOG_SYSTEM_PROMPT", "BACKLOG_LIST_SYSTEM_PROMPT",
+                 "ARCHIVE_LOOP_SYSTEM_PROMPT", "ARCHIVE_TASK_SYSTEM_PROMPT",
+                 "BACKLOG_PROMOTE_SYSTEM_PROMPT"):
+        assert hasattr(bot, attr), f"Missing: {attr}"
+        assert getattr(bot, attr).strip(), f"Empty: {attr}"
+
+def test_archive_loop_prompt_has_tagesorganizer():
+    assert "c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0" in bot.ARCHIVE_LOOP_SYSTEM_PROMPT
+
+def test_keyboard_still_has_original_buttons():
+    all_buttons = [btn for row in bot.REPLY_KEYBOARD["keyboard"] for btn in row]
+    for btn in ("moin", "abend", "task:", "status:", "hilfe"):
+        assert btn in all_buttons, f"Original button missing: {btn}"
