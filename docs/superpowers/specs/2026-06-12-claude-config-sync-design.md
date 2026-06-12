@@ -24,11 +24,16 @@ Desktop ~/.claude  ──push──►  GitHub (privat)  ◄──pull──  La
   CLAUDE.md                   ← globale Instruktionen + Notion-Datenbank-Definitionen
   settings.json               ← Plugins, Hooks, Theme, enabledPlugins
   hooks/                      ← caveman-*.js, config-pull.sh, config-push.sh
-  skills/                     ← teach, watch (lokale Skills)
+  skills/teach/               ← lokaler teach-Skill (kein nested .git)
   memory/                     ← project memories (MEMORY.md + alle *.md)
   statusline-command.sh
   setup.ps1                   ← Bootstrap-Script für neues Gerät
 ```
+
+**Sonderfall `skills/watch`:** Hat eigenes `.git`-Verzeichnis — git überspringt nested Repos. Optionen:
+- Als git Submodul tracken: `git submodule add <watch-remote> skills/watch`
+- Oder: In `setup.ps1` separat klonen, aus dotfiles-Repo ausschließen
+→ **Gewählt: Submodul** (watch hat bereits eigenen Remote, bleibt aktualisierbar)
 
 ### Ignoriert (.gitignore)
 ```
@@ -62,7 +67,13 @@ plugins/marketplaces/
 }
 ```
 
-Alle anderen Plugins (`caveman`, `superpowers`, `codex`, `skill-creator`, `frontend-design`, `security-guidance`) nutzen bereits `github` oder `file`-Pfade unter `~/.claude` — bleiben unverändert.
+**Sonderfall `teach-local`:** Pfad in `settings.json` enthält hardcodierten Username `tjark`:
+```
+C:\Users\tjark\.claude\skills\teach\.claude-plugin\marketplace.json
+```
+Fix: In `setup.ps1` den Pfad dynamisch setzen oder in `settings.json` auf `%USERPROFILE%` verzichten und stattdessen den teach-Pfad relativ halten. Da beide Geräte `tjark` als Username haben, ist dies kein akutes Problem — aber im setup.ps1 dokumentieren.
+
+Alle anderen Plugins (`caveman`, `superpowers`, `codex`, `skill-creator`, `frontend-design`, `security-guidance`) nutzen bereits `github` Source — bleiben unverändert.
 
 ---
 
