@@ -7,6 +7,8 @@ TOKEN = os.environ["TELEGRAM_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 MY_CHAT_ID = 8896609541
 HABITS_DATA_SOURCE_ID = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
+BACKLOG_DATA_SOURCE_ID = "0cb18d17-cf70-413d-b29d-adb4675db614"
+ARCHIV_DATA_SOURCE_ID  = "abb5abd8-e320-4796-bbf6-941feb9007b9"
 BASE = f"https://api.telegram.org/bot{TOKEN}"
 WORK_DIR = r"C:\Projekte\telegram-notion-bot"
 REMINDERS_PATH = Path(WORK_DIR) / "reminders.json"
@@ -286,6 +288,59 @@ Leite aus dem Text ab:
   "morgen" = heute + 1 Tag, Wochentage relativ zu heute.
   "um 14" oder "14 Uhr" → 14:00:00, "halb drei" → 14:30:00
 Antworte NUR mit einer Zeile: 📅 Termin angelegt: [Name] · [DD.MM.YYYY um HH:MM]"""
+
+BACKLOG_SYSTEM_PROMPT = f"""Du bist ein Notion-Backlog-Assistent. Der Nutzer nennt eine Aufgabe ohne festen Termin.
+Lege sie im Backlog an (data_source_id: {BACKLOG_DATA_SOURCE_ID}).
+Leite ab: Name, Priorität (Hoch/Mittel/Niedrig, Mittel falls nicht angegeben), Bereich (Arbeit/Privat/Lernen/Gesundheit, Privat falls unklar).
+Status immer: Offen.
+Antworte NUR mit einer Zeile: 📌 Backlog-Task angelegt: [Name] · [Priorität] · [Bereich]"""
+
+BACKLOG_LIST_SYSTEM_PROMPT = f"""Du bist ein Notion-Backlog-Assistent.
+Lies den Backlog (data_source_id: {BACKLOG_DATA_SOURCE_ID}).
+Zeige alle Tasks mit Status = Offen, sortiert nach Priorität (Hoch zuerst).
+Format:
+Zeile 1: "📌 Backlog ([N] offen):"
+Je Task: "[N]. [Prio-Icon] [Name] — [Bereich]"
+Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
+Falls keine offenen Tasks: "📌 Backlog leer."
+Kein Markdown."""
+
+ARCHIVE_LOOP_SYSTEM_PROMPT = f"""Du bist ein Notion-Archiv-Assistent.
+Archiviere alle erledigten Tasks aus dem Tagesorganizer und dem Backlog ins Task-Archiv.
+
+Schritt 1 — Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0):
+Finde alle Tasks mit Status = Done.
+Für jeden: Lege Eintrag im Task-Archiv an (data_source_id: {ARCHIV_DATA_SOURCE_ID}).
+Kopiere: Name, Status, Priorität, Datum, Bereich, Notiz. Setze "Archiviert am" = heutiges Datum (ISO 8601).
+Archiviere dann den Original-Task (archived: true).
+
+Schritt 2 — Backlog (data_source_id: {BACKLOG_DATA_SOURCE_ID}):
+Finde alle Tasks mit Status = Erledigt.
+Für jeden: Lege Eintrag im Task-Archiv an. Datum = leer. "Archiviert am" = heutiges Datum.
+Archiviere dann den Original-Backlog-Task.
+
+Antworte NUR mit: "✅ Archiviert: N Tasks" oder "Nichts zu archivieren."
+Kein Markdown."""
+
+ARCHIVE_TASK_SYSTEM_PROMPT = f"""Du bist ein Notion-Archiv-Assistent.
+Archiviere den genannten Task sofort.
+Suche im Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0) UND im Backlog (data_source_id: {BACKLOG_DATA_SOURCE_ID}) per fuzzy-Suche.
+Falls gefunden und Status = Done oder Erledigt:
+  Lege Eintrag im Task-Archiv an (data_source_id: {ARCHIV_DATA_SOURCE_ID}).
+  Kopiere alle Properties. Setze "Archiviert am" = heutiges Datum.
+  Archiviere Original (archived: true).
+Antworte NUR: "✅ Archiviert: [Name]" oder "Übersprungen: [Name] (nicht Done)"
+Kein Markdown."""
+
+BACKLOG_PROMOTE_SYSTEM_PROMPT = f"""Du bist ein Notion-Backlog-Assistent.
+Schritt 1: Finde den Task mit der genannten Nummer aus der Backlog-Liste (fuzzy-Suche auf den Namen).
+Schritt 2: Lege neuen Task im Tagesorganizer an (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+  Übernehme: Name, Priorität, Bereich, Notiz.
+  Setze Datum = angegebenes Zieldatum (ISO 8601). "morgen" = heute + 1 Tag.
+  Status = Not started.
+Schritt 3: Setze den Backlog-Task auf Status = Erledigt (data_source_id: {BACKLOG_DATA_SOURCE_ID}).
+Antworte NUR mit: "✅ [Name] → Tagesorganizer für [DD.MM.YYYY]"
+Kein Markdown."""
 
 def _update_index_html(lesson_path):
     parts = lesson_path.replace("\\", "/").split("/")
