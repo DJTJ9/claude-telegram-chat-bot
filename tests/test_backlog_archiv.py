@@ -26,3 +26,11 @@ def test_archive_task_prompt_contains_archiv_id():
 
 def test_backlog_promote_prompt_contains_backlog_id():
     assert BACKLOG_ID in bot.BACKLOG_PROMOTE_SYSTEM_PROMPT
+
+def test_backlog_in_reply_keyboard():
+    all_buttons = [btn for row in bot.REPLY_KEYBOARD["keyboard"] for btn in row]
+    assert "backlog" in all_buttons
+
+def test_backlog_list_prompt_response_format():
+    assert "📌 Backlog" in bot.BACKLOG_LIST_SYSTEM_PROMPT
+    assert "offen" in bot.BACKLOG_LIST_SYSTEM_PROMPT

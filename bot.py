@@ -54,6 +54,7 @@ REPLY_KEYBOARD = {
         ["task:", "status:"],
         ["woche", "fokus:"],
         ["verschieben:", "hilfe"],
+        ["backlog"],
     ],
     "resize_keyboard": True,
     "one_time_keyboard": False,
@@ -956,6 +957,8 @@ if __name__ == "__main__":
                 continue
             elif text.lower() == "hilfe":
                 response = HILFE_TEXT
+            elif text.lower() == "backlog":
+                response = run_claude(f"Heute ist {today}.", system_prompt=BACKLOG_LIST_SYSTEM_PROMPT)
             elif text.lower().startswith("status:"):
                 status_text = text[7:].strip()
                 if not status_text:
