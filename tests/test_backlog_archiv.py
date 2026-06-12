@@ -34,3 +34,13 @@ def test_backlog_in_reply_keyboard():
 def test_backlog_list_prompt_response_format():
     assert "📌 Backlog" in bot.BACKLOG_LIST_SYSTEM_PROMPT
     assert "offen" in bot.BACKLOG_LIST_SYSTEM_PROMPT
+
+def test_hilfe_contains_backlog():
+    assert "backlog:" in bot.HILFE_TEXT
+    assert "backlog" in bot.HILFE_TEXT
+
+def test_backlog_system_prompt_response_format():
+    assert "📌 Backlog-Task angelegt" in bot.BACKLOG_SYSTEM_PROMPT
+
+def test_backlog_system_prompt_status_offen():
+    assert "Offen" in bot.BACKLOG_SYSTEM_PROMPT
