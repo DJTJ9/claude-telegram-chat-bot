@@ -601,6 +601,25 @@ def _plan_loop():
         except Exception as e:
             print(f"plan loop error: {e}")
 
+def _run_archive_once():
+    try:
+        run_claude(f"Heute ist {date.today().isoformat()}.", system_prompt=ARCHIVE_LOOP_SYSTEM_PROMPT)
+    except Exception as e:
+        print(f"archive error: {e}")
+
+def _archive_loop():
+    while True:
+        time.sleep(1800)
+        _run_archive_once()
+
+def _run_migration(_dir=WORK_DIR):
+    s = load_settings(_dir)
+    if s.get("archive_migration_done"):
+        return
+    _run_archive_once()
+    s["archive_migration_done"] = True
+    save_settings(s, _dir)
+
 def _format_plans():
     plans = [plan for plan in _load_plans() if plan["status"] in ("pending", "running")]
     if not plans:
@@ -684,6 +703,8 @@ def _reminder_loop():
 if __name__ == "__main__":
     threading.Thread(target=_reminder_loop, daemon=True).start()
     threading.Thread(target=_plan_loop, daemon=True).start()
+    threading.Thread(target=_archive_loop, daemon=True).start()
+    threading.Thread(target=_run_migration, daemon=True).start()
     _stale = _load_plans()
     for _p in _stale:
         if _p["status"] == "running":

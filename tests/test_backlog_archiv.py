@@ -44,3 +44,28 @@ def test_backlog_system_prompt_response_format():
 
 def test_backlog_system_prompt_status_offen():
     assert "Offen" in bot.BACKLOG_SYSTEM_PROMPT
+
+import json
+from unittest.mock import patch
+
+def test_run_archive_once_calls_run_claude():
+    calls = []
+    with patch("bot.run_claude", lambda prompt, system_prompt=None, **kw: calls.append(system_prompt) or "✅ Archiviert: 0 Tasks"):
+        bot._run_archive_once()
+    assert any(bot.ARCHIV_DATA_SOURCE_ID in (sp or "") for sp in calls)
+
+def test_archive_migration_runs_if_flag_missing(tmp_path):
+    (tmp_path / "settings.json").write_text('{"notifications_enabled": true}')
+    calls = []
+    with patch("bot.run_claude", lambda *a, **kw: calls.append(True) or "Nichts zu archivieren."):
+        bot._run_migration(str(tmp_path))
+    assert len(calls) >= 1
+    settings = json.loads((tmp_path / "settings.json").read_text())
+    assert settings.get("archive_migration_done") is True
+
+def test_archive_migration_skipped_if_flag_set(tmp_path):
+    (tmp_path / "settings.json").write_text('{"notifications_enabled": true, "archive_migration_done": true}')
+    calls = []
+    with patch("bot.run_claude", lambda *a, **kw: calls.append(True) or ""):
+        bot._run_migration(str(tmp_path))
+    assert len(calls) == 0
