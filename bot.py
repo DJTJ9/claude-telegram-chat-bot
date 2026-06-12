@@ -1004,6 +1004,8 @@ if __name__ == "__main__":
                 else:
                     prompt = f"Heute ist {today}. Anfrage: {status_text}"
                     response = run_claude(prompt, system_prompt=STATUS_SYSTEM_PROMPT)
+                    if any(w in status_text.lower() for w in ("erledigt", "fertig", "done")):
+                        threading.Thread(target=_run_archive_once, daemon=True).start()
             elif text.lower().startswith("erinnere") or text.lower().startswith("erinnerung:"):
                 now_time = datetime.now().strftime("%H:%M")
                 parse_prompt = f"Heute ist {today}, aktuelle Uhrzeit: {now_time}. Nutzer schreibt: {text}"

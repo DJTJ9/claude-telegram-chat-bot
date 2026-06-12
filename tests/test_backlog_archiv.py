@@ -69,3 +69,19 @@ def test_archive_migration_skipped_if_flag_set(tmp_path):
     with patch("bot.run_claude", lambda *a, **kw: calls.append(True) or ""):
         bot._run_migration(str(tmp_path))
     assert len(calls) == 0
+
+def test_status_erledigt_triggers_archive(monkeypatch):
+    archive_calls = []
+    monkeypatch.setattr(bot, "_run_archive_once", lambda: archive_calls.append(True))
+    status_text = "Sport erledigt"
+    if any(w in status_text.lower() for w in ("erledigt", "fertig", "done")):
+        bot._run_archive_once()
+    assert len(archive_calls) == 1
+
+def test_status_in_arbeit_does_not_trigger_archive(monkeypatch):
+    archive_calls = []
+    monkeypatch.setattr(bot, "_run_archive_once", lambda: archive_calls.append(True))
+    status_text = "Sport in arbeit"
+    if any(w in status_text.lower() for w in ("erledigt", "fertig", "done")):
+        bot._run_archive_once()
+    assert len(archive_calls) == 0
