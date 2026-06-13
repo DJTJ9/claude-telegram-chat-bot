@@ -18,6 +18,9 @@ MY_CHAT_ID = 8896609541
 if not TOKEN:
     sys.exit(0)
 
+if os.environ.get("CLAUDE_AUTOMATED") == "1":
+    sys.exit(0)
+
 settings_path = PROJECT_DIR / "settings.json"
 if settings_path.exists():
     try:

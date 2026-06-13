@@ -463,13 +463,14 @@ def send_message(chat_id, text, reply_markup=None):
         payload["reply_markup"] = reply_markup
     requests.post(f"{BASE}/sendMessage", json=payload)
 
-def run_claude(prompt, system_prompt=None, cwd=None):
+def run_claude(prompt, system_prompt=None, cwd=None, automated=False):
     cmd = ["claude", "--dangerously-skip-permissions"]
     if system_prompt:
         cmd += ["--system-prompt", system_prompt]
     cmd += ["-p", prompt]
+    env = {**os.environ, "CLAUDE_AUTOMATED": "1"} if automated else None
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=1200, cwd=cwd or WORK_DIR)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=1200, cwd=cwd or WORK_DIR, env=env)
         return (result.stdout or "").strip() or (result.stderr or "").strip() or "(keine Antwort)"
     except subprocess.TimeoutExpired:
         return "⏱ Timeout — Aufgabe hat länger als 20 Minuten gedauert. Bitte vereinfachen oder aufteilen."
@@ -542,7 +543,8 @@ def run_claude_parse(prompt, system_prompt):
         cmd = ["claude", "--permission-mode", "plan",
                "--strict-mcp-config", "--mcp-config", str(cfg),
                "--system-prompt", system_prompt, "-p", prompt]
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=30, cwd=WORK_DIR)
+        env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=30, cwd=WORK_DIR, env=env)
         return (result.stdout or "").strip() or "{}"
     except subprocess.TimeoutExpired:
         return "{}"
@@ -631,7 +633,7 @@ def _plan_loop():
 
 def _run_archive_once():
     try:
-        run_claude(f"Heute ist {date.today().isoformat()}.", system_prompt=ARCHIVE_LOOP_SYSTEM_PROMPT)
+        run_claude(f"Heute ist {date.today().isoformat()}.", system_prompt=ARCHIVE_LOOP_SYSTEM_PROMPT, automated=True)
     except Exception as e:
         print(f"archive error: {e}")
 
