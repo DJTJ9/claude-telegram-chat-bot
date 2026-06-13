@@ -615,9 +615,10 @@ def _run_plan(plan_path, slug=None):
         send_message(MY_CHAT_ID, f"❌ Implementierung fehlgeschlagen: {label}\n{stderr_snippet}")
 
 def _run_teach(topic):
+    safe_topic = topic[:500]
     prompt = (
         f"Invoke the /teach skill. "
-        f"Topic and context from user: {topic}. "
+        f"Topic and context from user: {safe_topic}. "
         f"Use telegram relay for questions if notifications_enabled."
     )
     cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
