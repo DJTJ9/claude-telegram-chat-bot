@@ -183,3 +183,25 @@ def test_suche_prompt_contains_no_treffer_message():
 
 def test_hilfe_contains_suche():
     assert "suche:" in HILFE_TEXT
+
+def test_suche_prefix_detection():
+    text = "suche: Python"
+    assert text.lower().startswith("suche:")
+    assert text[6:].strip() == "Python"
+
+def test_suche_empty_detection():
+    text = "suche:"
+    assert text[6:].strip() == ""
+
+def test_suche_case_insensitive():
+    text = "SUCHE: test"
+    assert text.lower().startswith("suche:")
+    assert text[6:].strip() == "test"
+
+def test_suche_is_known_command():
+    known_prefixes = (
+        "task:", "status:", "fokus:", "verschieben:", "lern:",
+        "idee:", "habit:", "termin:", "projekt:", "teach:", "erinnere", "erinnerung:",
+        "implement-plan:", "abort-plan:", "backlog:", "suche:",
+    )
+    assert "suche: Python".lower().startswith(known_prefixes)

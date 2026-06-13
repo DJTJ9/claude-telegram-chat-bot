@@ -883,7 +883,7 @@ if __name__ == "__main__":
                                or any(text.lower().startswith(p) for p in
                                       ("task:", "status:", "fokus:", "verschieben:", "lern:",
                                        "idee:", "habit:", "termin:", "projekt:", "teach:", "erinnere", "erinnerung:",
-                                       "implement-plan:", "abort-plan:", "backlog:")))
+                                       "implement-plan:", "abort-plan:", "backlog:", "suche:")))
                 if _is_command:
                     del pending_task_input[chat_id]
                 elif state == "task_menu":
@@ -1091,6 +1091,12 @@ if __name__ == "__main__":
                         due_dt = datetime.fromisoformat(r["due"])
                         lines.append(f"· {due_dt.strftime('%d.%m. %H:%M')} — {r['text']}")
                     response = "\n".join(lines)
+            elif text.lower().startswith("suche:"):
+                query = text[6:].strip()
+                if not query:
+                    response = "❓ Suchbegriff fehlt. z.B.: suche: Python"
+                else:
+                    response = run_claude(query, system_prompt=SUCHE_SYSTEM_PROMPT)
             elif text.lower().startswith("/teach") or text.lower().startswith("teach:"):
                 response = run_claude_with_history(chat_id, text, cwd=os.path.dirname(TEACH_DIR))
             else:
