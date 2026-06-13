@@ -1,7 +1,7 @@
 import sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from pathlib import Path
-from bot import normalize_voice, REPLY_KEYBOARD, HILFE_TEXT, MOIN_SYSTEM_PROMPT, HABITS_DATA_SOURCE_ID, STATUS_SYSTEM_PROMPT, pending_task_input, load_reminders, save_reminders, REMINDER_PARSE_SYSTEM_PROMPT
+from bot import normalize_voice, REPLY_KEYBOARD, HILFE_TEXT, MOIN_SYSTEM_PROMPT, HABITS_DATA_SOURCE_ID, STATUS_SYSTEM_PROMPT, pending_task_input, load_reminders, save_reminders, REMINDER_PARSE_SYSTEM_PROMPT, SUCHE_SYSTEM_PROMPT
 
 def test_doppelpunkt_lower():
     assert normalize_voice("task doppelpunkt bug fixen") == "task: bug fixen"
@@ -167,3 +167,19 @@ def test_moin_prompt_includes_tasks_section():
 
 def test_moin_prompt_includes_datetime_distinction():
     assert "Zeitanteil" in MOIN_SYSTEM_PROMPT
+
+def test_suche_prompt_contains_all_dbs():
+    for ds_id in [
+        "c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0",  # Tagesorganizer
+        "0cb18d17-cf70-413d-b29d-adb4675db614",  # Backlog
+        "abb5abd8-e320-4796-bbf6-941feb9007b9",  # Archiv
+        "5a76447f-2b0a-4f6b-81bb-853f39aa04bb",  # Lernthemen
+        "ce6783d1-54fe-421f-8d7d-aa8c34880853",  # Spieleideen
+    ]:
+        assert ds_id in SUCHE_SYSTEM_PROMPT, f"Missing data_source_id: {ds_id}"
+
+def test_suche_prompt_contains_no_treffer_message():
+    assert "Keine Ergebnisse" in SUCHE_SYSTEM_PROMPT
+
+def test_hilfe_contains_suche():
+    assert "suche:" in HILFE_TEXT

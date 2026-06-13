@@ -16,8 +16,9 @@ PLANS_PATH = Path(WORK_DIR) / "scheduled_plans.json"
 TEACH_DIR = r"C:\Projekte\teach"
 PAGES_BASE = "https://djtj9.github.io/teach-lessons"
 COURSE_NAMES = {
-    "cli-notion-agent": "Kurs: CLI Notion Agent",
-    "projekt-planung":  "Kurs: Projekt-Planung",
+    "cli-notion-agent":   "Kurs: CLI Notion Agent",
+    "projekt-planung":    "Kurs: Projekt-Planung",
+    "python-grundlagen":  "Kurs: Python Grundlagen",
 }
 
 PROJECTS = {
@@ -92,6 +93,7 @@ HILFE_TEXT = """📋 Befehle:
 📚 Listen
   lern: <thema> — Lernthema speichern
   idee: <text> — Spielidee speichern
+  suche: <text> — Alle DBs durchsuchen (Tasks, Backlog, Archiv, Lernthemen, Ideen)
 
 ⏰ Erinnerungen
   erinnere mich um 14:00 an Zahnarzt — Erinnerung setzen
@@ -343,6 +345,32 @@ Schritt 2: Lege neuen Task im Tagesorganizer an (data_source_id: c9d2abbe-5607-4
   Status = Not started.
 Schritt 3: Setze den Backlog-Task auf Status = Erledigt (data_source_id: {BACKLOG_DATA_SOURCE_ID}).
 Antworte NUR mit: "✅ [Name] → Tagesorganizer für [DD.MM.YYYY]"
+Kein Markdown."""
+
+SUCHE_SYSTEM_PROMPT = """Du bist ein Notion-Suchassistent.
+Der Nutzer gibt einen Suchbegriff. Suche in allen 5 Datenbanken:
+
+1. Tagesorganizer  (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0) — Felder: Name, Notiz
+2. Backlog         (data_source_id: 0cb18d17-cf70-413d-b29d-adb4675db614) — Felder: Name, Notiz
+3. Task-Archiv     (data_source_id: abb5abd8-e320-4796-bbf6-941feb9007b9) — Felder: Name, Notiz
+4. Lernthemen      (data_source_id: 5a76447f-2b0a-4f6b-81bb-853f39aa04bb) — Felder: Name, Notiz
+5. Spieleideen     (data_source_id: ce6783d1-54fe-421f-8d7d-aa8c34880853) — Felder: Name, Beschreibung
+
+Für jede DB: nutze contains-Filter auf Name ODER das Textfeld (OR-Verknüpfung).
+Zeige nur DBs mit Treffern. Sortiere Treffer pro DB nach Priorität falls vorhanden.
+
+Format:
+Zeile 1: "🔍 Suche: \"[Begriff]\""
+Leerzeile
+Je DB mit Treffern:
+  "[Icon] [DB-Name] ([N])"
+  Je Treffer: "  · [Status-Icon] [Name][— Datum falls gesetzt]"
+  Leerzeile
+Letzte Zeile: "🔍 [Gesamt] Treffer in [M] Datenbank(en)."
+Falls keine Treffer: "🔍 Keine Ergebnisse für \"[Begriff]\"."
+
+Status-Icons: Not started/Offen=⬜ In progress/In Bearbeitung=🔄 Done/Erledigt/Abgeschlossen=✅
+DB-Icons: 📋 Tagesorganizer, 📦 Backlog, 🗂 Archiv, 📚 Lernthemen, 🎮 Spieleideen
 Kein Markdown."""
 
 def _update_index_html(lesson_path):
