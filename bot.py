@@ -102,7 +102,8 @@ HILFE_TEXT = """📋 Befehle:
   erinnerungen — alle offenen Erinnerungen anzeigen
 
 🛠 Sonstiges
-  teach: <text> — Lernkurs erstellen
+  teach: <thema + warum> — Lernkurs erstellen oder planen
+    z.B. teach: Python Grundlagen, weil ich Skripte automatisieren will
   restart — Bot neu starten
 
 🤖 Pläne
@@ -613,6 +614,21 @@ def _run_plan(plan_path, slug=None):
         stderr_snippet = (result.stderr or "")[-500:]
         send_message(MY_CHAT_ID, f"❌ Implementierung fehlgeschlagen: {label}\n{stderr_snippet}")
 
+def _run_teach(topic):
+    prompt = (
+        f"Invoke the /teach skill. "
+        f"Topic and context from user: {topic}. "
+        f"Use telegram relay for questions if notifications_enabled."
+    )
+    cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
+    env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8",
+        timeout=3600, cwd=str(Path(TEACH_DIR).parent), env=env
+    )
+    if result.returncode != 0:
+        send_message(MY_CHAT_ID, f"❌ Teach-Session fehlgeschlagen\n{(result.stderr or '')[-300:]}")
+
 def _plan_loop():
     while True:
         time.sleep(60)
@@ -1100,7 +1116,13 @@ if __name__ == "__main__":
                 else:
                     response = run_claude(query, system_prompt=SUCHE_SYSTEM_PROMPT)
             elif text.lower().startswith("/teach") or text.lower().startswith("teach:"):
-                response = run_claude_with_history(chat_id, text, cwd=os.path.dirname(TEACH_DIR))
+                topic = text.split(":", 1)[1].strip() if ":" in text else text[6:].strip()
+                if not topic:
+                    send_message(chat_id, "Nutzung: teach: <thema + warum>\nz.B. teach: Python Grundlagen, weil ich Skripte automatisieren will", reply_markup=REPLY_KEYBOARD)
+                    continue
+                send_message(chat_id, "📚 Teach-Session gestartet — Fragen kommen gleich über den Chat")
+                threading.Thread(target=_run_teach, args=(topic,), daemon=True).start()
+                continue
             else:
                 response = run_claude_with_history(chat_id, text, system_prompt=CHAT_SYSTEM_PROMPT, cwd=project_cwd)
 

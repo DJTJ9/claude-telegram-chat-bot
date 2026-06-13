@@ -205,3 +205,36 @@ def test_suche_is_known_command():
         "implement-plan:", "abort-plan:", "backlog:", "suche:",
     )
     assert "suche: Python".lower().startswith(known_prefixes)
+
+# --- teach: handler tests ---
+
+def test_teach_prefix_detection():
+    text = "teach: Python Grundlagen, weil ich Skripte automatisieren will"
+    assert text.lower().startswith("teach:")
+    assert text.split(":", 1)[1].strip() == "Python Grundlagen, weil ich Skripte automatisieren will"
+
+def test_teach_slash_prefix_detection():
+    text = "/teach Python Grundlagen"
+    assert text.lower().startswith("/teach")
+    assert text[6:].strip() == "Python Grundlagen"
+
+def test_teach_empty_detection():
+    text = "teach:"
+    assert text.split(":", 1)[1].strip() == ""
+
+def test_teach_is_known_command():
+    known_prefixes = (
+        "task:", "status:", "fokus:", "verschieben:", "lern:",
+        "idee:", "habit:", "termin:", "projekt:", "teach:", "erinnere", "erinnerung:",
+        "implement-plan:", "abort-plan:", "backlog:", "suche:",
+    )
+    assert "teach: Python".lower().startswith(known_prefixes)
+
+def test_run_teach_exists():
+    from bot import _run_teach
+    assert callable(_run_teach)
+
+def test_hilfe_contains_teach_with_context():
+    from bot import HILFE_TEXT
+    assert "teach:" in HILFE_TEXT
+    assert "warum" in HILFE_TEXT.lower() or "thema" in HILFE_TEXT.lower()
