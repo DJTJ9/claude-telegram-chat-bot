@@ -10,10 +10,10 @@ HABITS_DATA_SOURCE_ID = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
 BACKLOG_DATA_SOURCE_ID = "0cb18d17-cf70-413d-b29d-adb4675db614"
 ARCHIV_DATA_SOURCE_ID  = "abb5abd8-e320-4796-bbf6-941feb9007b9"
 BASE = f"https://api.telegram.org/bot{TOKEN}"
-WORK_DIR = r"C:\Projekte\telegram-notion-bot"
+WORK_DIR = os.environ.get("WORK_DIR", r"C:\Projekte\telegram-notion-bot")
 REMINDERS_PATH = Path(WORK_DIR) / "reminders.json"
 PLANS_PATH = Path(WORK_DIR) / "scheduled_plans.json"
-TEACH_DIR = r"C:\Projekte\teach"
+TEACH_DIR = os.environ.get("TEACH_DIR", r"C:\Projekte\teach")
 PAGES_BASE = "https://djtj9.github.io/teach-lessons"
 COURSE_NAMES = {
     "cli-notion-agent":   "Kurs: CLI Notion Agent",
@@ -22,8 +22,8 @@ COURSE_NAMES = {
 }
 
 PROJECTS = {
-    "notion": {"path": r"C:\Projekte\telegram-notion-bot", "notion_name": "Notion-Bot"},
-    "dart":   {"path": r"C:\Unity\Aktuelle Projekte\DartTrainingsApp", "notion_name": "Dart-App"},
+    "notion": {"path": WORK_DIR, "notion_name": "Notion-Bot"},
+    "dart":   {"path": os.environ.get("DART_PROJECT_DIR", r"C:\Unity\Aktuelle Projekte\DartTrainingsApp"), "notion_name": "Dart-App"},
 }
 
 groq_client = Groq(api_key=GROQ_API_KEY)
