@@ -614,6 +614,8 @@ def _run_plan(plan_path, slug=None):
         stderr_snippet = (result.stderr or "")[-500:]
         send_message(MY_CHAT_ID, f"❌ Implementierung fehlgeschlagen: {label}\n{stderr_snippet}")
 
+_brainstorming_active = False
+
 def _run_teach(topic):
     safe_topic = topic[:500]
     prompt = (
@@ -629,6 +631,46 @@ def _run_teach(topic):
     )
     if result.returncode != 0:
         send_message(MY_CHAT_ID, f"❌ Teach-Session fehlgeschlagen\n{(result.stderr or '')[-300:]}")
+
+def _run_brainstorming(topic, basis_slug=None):
+    global _brainstorming_active
+    safe_topic = topic[:500]
+    vision_path = Path(WORK_DIR) / "VISION.md"
+    vision_note = (
+        f"Read {vision_path} first for existing project context and backlog."
+        if vision_path.exists() else ""
+    )
+    basis_note = (
+        f"Also read the spec file in docs/superpowers/specs/ whose name contains '{basis_slug}' "
+        f"as prior session context before starting brainstorming."
+        if basis_slug else ""
+    )
+    prompt = (
+        f"Invoke the superpowers:brainstorming skill. "
+        f"Feature idea from user: {safe_topic}. "
+        f"{vision_note} {basis_note}"
+        f"Use telegram relay for ALL questions and gate decisions "
+        f"(notifications_enabled is true — do not output anything to terminal). "
+        f"After the spec and plan are written and committed, update VISION.md in {WORK_DIR}: "
+        f"add the new feature under Implementiert, move any collected-but-not-chosen ideas to Backlog, "
+        f"record key decisions under Entscheidungen."
+    )
+    cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
+    env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8",
+            timeout=7200, cwd=WORK_DIR, env=env
+        )
+        success = result.returncode == 0
+        if success:
+            send_message(MY_CHAT_ID, "✅ Brainstorming abgeschlossen")
+        else:
+            send_message(MY_CHAT_ID, f"❌ Brainstorming fehlgeschlagen\n{(result.stderr or '')[-300:]}")
+    except subprocess.TimeoutExpired:
+        send_message(MY_CHAT_ID, "❌ Brainstorming-Timeout (2h überschritten)")
+    finally:
+        _brainstorming_active = False
 
 def _plan_loop():
     while True:
