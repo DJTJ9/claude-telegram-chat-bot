@@ -106,6 +106,11 @@ HILFE_TEXT = """📋 Befehle:
     z.B. teach: Python Grundlagen, weil ich Skripte automatisieren will
   restart — Bot neu starten
 
+🧠 Brainstorming
+  brainstorming: <idee> — Feature-Idee brainstormen (Spec → Plan → Scheduling)
+  brainstorming: <idee>, basis: <slug> — Mit vorheriger Spec als Kontext
+  /specs — Alle vorhandenen Specs anzeigen
+
 🤖 Pläne
   /plans — geplante Implementierungen anzeigen
   implement-plan: <slug> um HH:MM — Implementierung planen
@@ -907,6 +912,27 @@ if __name__ == "__main__":
                 send_message(chat_id, _format_plans(), reply_markup=REPLY_KEYBOARD)
                 continue
 
+            if text.lower() == "/specs":
+                specs_dir = Path(WORK_DIR) / "docs" / "superpowers" / "specs"
+                files = sorted(specs_dir.glob("*.md")) if specs_dir.exists() else []
+                if not files:
+                    response = "Keine Specs vorhanden."
+                else:
+                    lines = ["📋 Vorhandene Specs:\n"]
+                    for f in files:
+                        stem = f.stem
+                        parts = stem.split("-", 3)
+                        if len(parts) == 4:
+                            date_str = f"{parts[0]}-{parts[1]}-{parts[2]}"
+                            slug = parts[3].removesuffix("-design")
+                            lines.append(f"{date_str} · {slug}")
+                        else:
+                            lines.append(stem)
+                    lines.append("\nNutzung: brainstorming: <idee>, basis: <slug>")
+                    response = "\n".join(lines)
+                send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                continue
+
             if text.lower().startswith("/bot-notify"):
                 arg = text[11:].strip().lower()
                 s = load_settings()
@@ -940,11 +966,11 @@ if __name__ == "__main__":
 
             if chat_id in pending_task_input:
                 state = pending_task_input[chat_id]
-                _is_command = (text.lower() in ("restart", "projekte", "moin", "abend", "woche", "hilfe", "erinnerungen", "/plans", "backlog")
+                _is_command = (text.lower() in ("restart", "projekte", "moin", "abend", "woche", "hilfe", "erinnerungen", "/plans", "backlog", "/specs")
                                or any(text.lower().startswith(p) for p in
                                       ("task:", "status:", "fokus:", "verschieben:", "lern:",
                                        "idee:", "habit:", "termin:", "projekt:", "teach:", "erinnere", "erinnerung:",
-                                       "implement-plan:", "abort-plan:", "backlog:", "suche:")))
+                                       "implement-plan:", "abort-plan:", "backlog:", "suche:", "brainstorming:")))
                 if _is_command:
                     del pending_task_input[chat_id]
                 elif state == "task_menu":
@@ -1158,6 +1184,29 @@ if __name__ == "__main__":
                     response = "❓ Suchbegriff fehlt. z.B.: suche: Python"
                 else:
                     response = run_claude(query, system_prompt=SUCHE_SYSTEM_PROMPT)
+            elif text.lower().startswith("brainstorming:"):
+                topic = text[14:].strip()
+                if not topic:
+                    response = (
+                        "Nutzung: brainstorming: <idee>\n"
+                        "oder:    brainstorming: <idee>, basis: <slug>\n"
+                        "Specs anzeigen: /specs"
+                    )
+                elif _brainstorming_active:
+                    response = "⚠️ Brainstorming-Session läuft bereits. Bitte warten bis sie abgeschlossen ist."
+                else:
+                    basis_slug = None
+                    lower_topic = topic.lower()
+                    if ", basis:" in lower_topic:
+                        idx = lower_topic.index(", basis:")
+                        basis_slug = topic[idx + 8:].strip()
+                        topic = topic[:idx].strip()
+                    _brainstorming_active = True
+                    send_message(chat_id, "🧠 Brainstorming gestartet — Fragen kommen gleich über den Chat")
+                    threading.Thread(
+                        target=_run_brainstorming, args=(topic, basis_slug), daemon=True
+                    ).start()
+                    continue
             elif text.lower().startswith("/teach") or text.lower().startswith("teach:"):
                 topic = text.split(":", 1)[1].strip() if ":" in text else text[6:].strip()
                 if not topic:
