@@ -238,3 +238,52 @@ def test_hilfe_contains_teach_with_context():
     from bot import HILFE_TEXT
     assert "teach:" in HILFE_TEXT
     assert "warum" in HILFE_TEXT.lower() or "thema" in HILFE_TEXT.lower()
+
+def test_hilfe_contains_brainstorming():
+    assert "brainstorming:" in HILFE_TEXT
+
+def test_hilfe_contains_specs():
+    assert "/specs" in HILFE_TEXT
+
+def test_brainstorming_prefix_parse_simple():
+    text = "brainstorming: Chat-App mit Räumen"
+    topic = text[14:].strip()
+    assert topic == "Chat-App mit Räumen"
+    assert ", basis:" not in topic.lower()
+
+def test_brainstorming_prefix_parse_with_basis():
+    text = "brainstorming: Chat-App, basis: telegram-relay"
+    topic = text[14:].strip()
+    lower = topic.lower()
+    assert ", basis:" in lower
+    idx = lower.index(", basis:")
+    basis_slug = topic[idx + 8:].strip()
+    feature = topic[:idx].strip()
+    assert feature == "Chat-App"
+    assert basis_slug == "telegram-relay"
+
+def test_specs_listing_format(tmp_path):
+    specs_dir = tmp_path / "docs" / "superpowers" / "specs"
+    specs_dir.mkdir(parents=True)
+    (specs_dir / "2026-06-11-telegram-relay-design.md").write_text("")
+    (specs_dir / "2026-06-13-teach-improvements-design.md").write_text("")
+
+    files = sorted(specs_dir.glob("*.md"))
+    lines = []
+    for f in files:
+        stem = f.stem
+        parts = stem.split("-", 3)
+        if len(parts) == 4:
+            date_str = f"{parts[0]}-{parts[1]}-{parts[2]}"
+            slug = parts[3].removesuffix("-design")
+            lines.append(f"{date_str} · {slug}")
+        else:
+            lines.append(stem)
+
+    assert lines[0] == "2026-06-11 · telegram-relay"
+    assert lines[1] == "2026-06-13 · teach-improvements"
+
+def test_specs_listing_empty(tmp_path):
+    specs_dir = tmp_path / "docs" / "superpowers" / "specs"
+    files = sorted(specs_dir.glob("*.md")) if specs_dir.exists() else []
+    assert files == []
