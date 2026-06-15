@@ -696,16 +696,26 @@ def _run_vision(slug):
     registry_json = json.dumps(registry, ensure_ascii=False)
     prompt = (
         f"You are running a project vision session for: {proj['name']} (slug: {slug}). "
+        f"You have full tool access: write files, run Bash commands including git. "
         f"Project registry (all known projects for cross-reference): {registry_json}. "
         f"{code_note} "
         f"{vision_note} "
         f"Through dialogue, explore: project goal, required features (ordered by dependency), "
         f"architecture decisions, open questions. Ask one question at a time via: "
         f'python "{telegram_ask_path}" "your question here". '
-        f"After session, write/update {vision_path}. "
-        f"Then: git -C {HUB_DIR} add -A && "
-        f"git -C {HUB_DIR} commit -m \"vision: update {slug}\" && "
-        f"git -C {HUB_DIR} push"
+        f"If any telegram_ask.py call returns exactly 'vision:end': stop asking questions immediately. "
+        f"Write/update {vision_path} with all discussed content. "
+        f"Then: git -C {HUB_DIR} add -A && git -C {HUB_DIR} commit -m \"vision: update {slug}\" && git -C {HUB_DIR} push. "
+        f"Then exit. "
+        f"When you have covered goal, top features, architecture, and open questions: "
+        f"ask via telegram_ask.py: 'Soll ich die Vision-Session jetzt abschließen? (ja / vision:end / weiter)'. "
+        f"On 'ja' or 'vision:end': write VISION.md and commit. On 'weiter': continue exploring. "
+        f"When writing {vision_path}, always include/update these two sections: "
+        f"'## Letzter Stand' with today's date, summary of topics discussed, and priorities for next session. "
+        f"'## Confidence-Scores' as a markdown table: "
+        f"| Position | Bestätigungen | Anzweiflungen | Bewertung | "
+        f"Fill based on how often each architectural decision was confirmed vs. questioned in the dialogue. "
+        f"Use 🟢 hoch / 🟡 mittel / 🔴 niedrig."
     )
     cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
