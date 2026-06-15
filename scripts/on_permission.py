@@ -21,10 +21,10 @@ if settings_path.exists():
         impl_until = settings.get("implementation_mode_until")
         if impl_mode and impl_until:
             try:
-                if datetime.now().isoformat() <= impl_until:
+                if datetime.now() < datetime.fromisoformat(impl_until):
                     print(json.dumps({"decision": "approve"}))
                     sys.exit(0)
-            except Exception:
+            except (ValueError, TypeError):
                 pass  # malformed timestamp → fall through
         if not settings.get("notifications_enabled", True):
             print(json.dumps({"decision": "approve"}))
