@@ -21,6 +21,19 @@ if not settings.get("notifications_enabled", True):
     print("telegram_ask: notifications_enabled is false — relay not active", file=sys.stderr)
     sys.exit(1)
 
+_HUB_DIR = os.environ.get("HUB_DIR", "")
+_signal_path = Path(_HUB_DIR) / ".vision_end" if _HUB_DIR else None
+
+
+def _check_signal():
+    if _signal_path and _signal_path.exists():
+        _signal_path.unlink()
+        print("vision:end")
+        sys.exit(0)
+
+
+_check_signal()
+
 if len(sys.argv) < 2:
     print("Usage: telegram_ask.py <question>", file=sys.stderr)
     sys.exit(1)
@@ -38,6 +51,7 @@ response_path = PROJECT_DIR / f"question_response_{request_id}.json"
 timeout = 300
 start = time.time()
 
+_last_signal_check = time.time()
 while time.time() - start < timeout:
     if response_path.exists():
         try:
@@ -48,6 +62,9 @@ while time.time() - start < timeout:
             continue
         print(resp.get("answer", "A"))
         sys.exit(0)
+    if time.time() - _last_signal_check >= 5:
+        _check_signal()
+        _last_signal_check = time.time()
     time.sleep(0.5)
 
 pending_path.unlink(missing_ok=True)

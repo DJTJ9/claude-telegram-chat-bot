@@ -55,3 +55,25 @@ def test_returns_answer_from_response_file():
     finally:
         settings_path.write_text(original)
         t.join(timeout=3)
+
+
+def test_signal_file_triggers_vision_end(tmp_path):
+    """Signal file causes telegram_ask to print 'vision:end' and exit 0."""
+    signal_file = tmp_path / ".vision_end"
+    signal_file.write_text("end")
+
+    settings_path = PROJECT_DIR / "settings.json"
+    original = settings_path.read_text()
+    settings_path.write_text(json.dumps({"notifications_enabled": True}))
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "Irgendeine Frage?"],
+            capture_output=True, text=True, timeout=5,
+            env={**os.environ, "HUB_DIR": str(tmp_path)},
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "vision:end"
+        assert not signal_file.exists()
+    finally:
+        settings_path.write_text(original)
