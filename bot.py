@@ -1,5 +1,5 @@
 import os, re, subprocess, requests, tempfile, sys, json, uuid, threading, time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from groq import Groq
 
@@ -121,7 +121,9 @@ HILFE_TEXT = """📋 Befehle:
 
 ⚙️ Einstellungen
   /bot-notify an — Benachrichtigungen aktivieren
-  /bot-notify aus — Benachrichtigungen deaktivieren"""
+  /bot-notify aus — Benachrichtigungen deaktivieren
+  impl-mode: an — Implementierungs-Mode aktivieren (4h)
+  impl-mode: aus — Implementierungs-Mode deaktivieren"""
 
 WOCHE_SYSTEM_PROMPT = """Du bist ein Notion-Wochenassistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
@@ -1269,7 +1271,7 @@ if __name__ == "__main__":
                                or any(text.lower().startswith(p) for p in
                                       ("task:", "status:", "fokus:", "verschieben:", "lern:",
                                        "idee:", "habit:", "termin:", "projekt:", "teach:", "erinnere", "erinnerung:",
-                                       "implement-plan:", "abort-plan:", "backlog:", "suche:", "brainstorming:")))
+                                       "implement-plan:", "abort-plan:", "backlog:", "suche:", "brainstorming:", "impl-mode:")))
                 if _is_command:
                     del pending_task_input[chat_id]
                 elif state == "task_menu":
@@ -1431,6 +1433,29 @@ if __name__ == "__main__":
                     response = "Nutzung: abort-plan: <slug>"
                 else:
                     response = _abort_plan(slug_part)
+                send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
+                continue
+            elif text.lower().startswith("impl-mode:"):
+                arg = text[10:].strip().lower()
+                s = load_settings()
+                if arg == "an":
+                    until = (datetime.now() + timedelta(hours=4)).isoformat(timespec="seconds")
+                    s["implementation_mode"] = True
+                    s["implementation_mode_until"] = until
+                    save_settings(s)
+                    response = f"⚙️ Implementation Mode aktiv bis {until[11:16]}"
+                elif arg == "aus":
+                    s["implementation_mode"] = False
+                    s["implementation_mode_until"] = None
+                    save_settings(s)
+                    response = "⚙️ Implementation Mode deaktiviert"
+                else:
+                    active = s.get("implementation_mode", False)
+                    until = s.get("implementation_mode_until")
+                    if active and until:
+                        response = f"⚙️ Implementation Mode: aktiv bis {until[11:16]}"
+                    else:
+                        response = "⚙️ Implementation Mode: inaktiv\nNutzung: impl-mode: an  oder  impl-mode: aus"
                 send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)
                 continue
             elif text.lower() == "hilfe":

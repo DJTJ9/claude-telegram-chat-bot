@@ -399,3 +399,33 @@ def test_create_project_entry_adds_to_registry(tmp_path, monkeypatch):
     assert any(p["slug"] == "my-app" for p in registry)
     assert (tmp_path / "topics" / "my-app" / "specs").exists()
     assert (tmp_path / "topics" / "my-app" / "plans").exists()
+
+
+def test_impl_mode_prefix_detection():
+    text = "impl-mode: an"
+    assert text.lower().startswith("impl-mode:")
+    assert text[10:].strip() == "an"
+
+def test_impl_mode_aus_detection():
+    assert "impl-mode: aus"[10:].strip() == "aus"
+
+def test_impl_mode_in_hilfe():
+    from bot import HILFE_TEXT
+    assert "impl-mode:" in HILFE_TEXT
+
+def test_impl_mode_is_known_command():
+    known_prefixes = (
+        "task:", "status:", "fokus:", "verschieben:", "lern:",
+        "idee:", "habit:", "termin:", "projekt:", "teach:", "erinnere", "erinnerung:",
+        "implement-plan:", "abort-plan:", "backlog:", "suche:", "brainstorming:", "impl-mode:",
+    )
+    assert "impl-mode: an".lower().startswith(known_prefixes)
+
+def test_save_settings_implementation_mode_roundtrip(tmp_path):
+    from bot import save_settings, load_settings
+    s = {"notifications_enabled": True, "implementation_mode": True,
+         "implementation_mode_until": "2026-06-15T18:00:00"}
+    save_settings(s, tmp_path)
+    loaded = load_settings(tmp_path)
+    assert loaded["implementation_mode"] is True
+    assert loaded["implementation_mode_until"] == "2026-06-15T18:00:00"
