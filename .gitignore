@@ -1,0 +1,6 @@
+settings.json
+__pycache__/
+*.pyc
+.pytest_cache/
+permission_response_*.json
+question_response_*.json
