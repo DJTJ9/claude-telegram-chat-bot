@@ -1,4 +1,5 @@
 import os, sys, json, time, uuid
+from datetime import datetime
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -16,6 +17,15 @@ settings_path = PROJECT_DIR / "settings.json"
 if settings_path.exists():
     try:
         settings = json.loads(settings_path.read_text())
+        impl_mode = settings.get("implementation_mode", False)
+        impl_until = settings.get("implementation_mode_until")
+        if impl_mode and impl_until:
+            try:
+                if datetime.now().isoformat() <= impl_until:
+                    print(json.dumps({"decision": "approve"}))
+                    sys.exit(0)
+            except Exception:
+                pass  # malformed timestamp → fall through
         if not settings.get("notifications_enabled", True):
             print(json.dumps({"decision": "approve"}))
             sys.exit(0)
