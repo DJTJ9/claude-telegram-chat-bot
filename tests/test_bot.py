@@ -1,4 +1,5 @@
 import sys, os, json
+import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from pathlib import Path
 from bot import normalize_voice, REPLY_KEYBOARD, HILFE_TEXT, MOIN_SYSTEM_PROMPT, HABITS_DATA_SOURCE_ID, STATUS_SYSTEM_PROMPT, pending_task_input, load_reminders, save_reminders, REMINDER_PARSE_SYSTEM_PROMPT, SUCHE_SYSTEM_PROMPT
@@ -287,3 +288,29 @@ def test_specs_listing_empty(tmp_path):
     specs_dir = tmp_path / "docs" / "superpowers" / "specs"
     files = sorted(specs_dir.glob("*.md")) if specs_dir.exists() else []
     assert files == []
+
+# --- Task 2: HUB_DIR + registry tests ---
+
+def test_hub_dir_defaults_to_work_dir():
+    from bot import HUB_DIR, WORK_DIR
+    assert HUB_DIR == WORK_DIR or os.environ.get("HUB_DIR") is not None
+
+def test_plans_path_in_hub_dir():
+    from bot import PLANS_PATH, HUB_DIR
+    assert str(PLANS_PATH).startswith(HUB_DIR)
+    assert PLANS_PATH.name == "scheduled_plans.json"
+
+def test_load_registry_empty_when_missing(tmp_path, monkeypatch):
+    import bot
+    monkeypatch.setattr(bot, "HUB_DIR", str(tmp_path))
+    result = bot._load_registry()
+    assert result == []
+
+def test_load_registry_returns_list(tmp_path, monkeypatch):
+    import bot
+    registry = [{"slug": "test", "name": "Test", "path": "", "repo": "", "description": ""}]
+    (tmp_path / "projects-registry.json").write_text(json.dumps(registry))
+    monkeypatch.setattr(bot, "HUB_DIR", str(tmp_path))
+    result = bot._load_registry()
+    assert len(result) == 1
+    assert result[0]["slug"] == "test"

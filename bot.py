@@ -11,8 +11,9 @@ BACKLOG_DATA_SOURCE_ID = "0cb18d17-cf70-413d-b29d-adb4675db614"
 ARCHIV_DATA_SOURCE_ID  = "abb5abd8-e320-4796-bbf6-941feb9007b9"
 BASE = f"https://api.telegram.org/bot{TOKEN}"
 WORK_DIR = os.environ.get("WORK_DIR", r"C:\Projekte\telegram-notion-bot")
+HUB_DIR = os.environ.get("HUB_DIR", WORK_DIR)
 REMINDERS_PATH = Path(WORK_DIR) / "reminders.json"
-PLANS_PATH = Path(WORK_DIR) / "scheduled_plans.json"
+PLANS_PATH = Path(HUB_DIR) / "scheduled_plans.json"
 TEACH_DIR = os.environ.get("TEACH_DIR", r"C:\Projekte\teach")
 PAGES_BASE = "https://djtj9.github.io/teach-lessons"
 COURSE_NAMES = {
@@ -579,6 +580,19 @@ def _load_plans():
 def _save_plans(plans):
     PLANS_PATH.write_text(json.dumps(plans, indent=2, ensure_ascii=False), encoding="utf-8")
 
+def _load_registry():
+    p = Path(HUB_DIR) / "projects-registry.json"
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            pass
+    return []
+
+def _save_registry(registry):
+    p = Path(HUB_DIR) / "projects-registry.json"
+    p.write_text(json.dumps(registry, indent=2, ensure_ascii=False), encoding="utf-8")
+
 def _set_plan_status(slug, status):
     plans = _load_plans()
     for p in plans:
@@ -586,13 +600,18 @@ def _set_plan_status(slug, status):
             p["status"] = status
             break
     _save_plans(plans)
-    subprocess.run(["git", "-C", WORK_DIR, "add", "scheduled_plans.json"], capture_output=True)
-    subprocess.run(["git", "-C", WORK_DIR, "commit", "-m", f"chore: plan {slug} -> {status}"], capture_output=True)
+    subprocess.run(["git", "-C", HUB_DIR, "add", "scheduled_plans.json"], capture_output=True)
+    subprocess.run(["git", "-C", HUB_DIR, "commit", "-m", f"chore: plan {slug} -> {status}"], capture_output=True)
 
 def _run_plan(plan_path, slug=None):
-    # Restrict to trusted plans directory to prevent path traversal
-    resolved = (Path(WORK_DIR) / plan_path).resolve()
-    allowed = (Path(WORK_DIR) / "docs" / "superpowers" / "plans").resolve()
+    if plan_path.startswith("topics/"):
+        base_dir = HUB_DIR
+        resolved = (Path(HUB_DIR) / plan_path).resolve()
+        allowed = (Path(HUB_DIR) / "topics").resolve()
+    else:
+        base_dir = WORK_DIR
+        resolved = (Path(WORK_DIR) / plan_path).resolve()
+        allowed = (Path(WORK_DIR) / "docs" / "superpowers" / "plans").resolve()
     try:
         resolved.relative_to(allowed)
     except ValueError:
@@ -605,10 +624,10 @@ def _run_plan(plan_path, slug=None):
     )
     cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
     result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                            timeout=3600, cwd=WORK_DIR)
+                            timeout=3600, cwd=base_dir)
     if result.returncode != 0:
         result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                                timeout=3600, cwd=WORK_DIR)
+                                timeout=3600, cwd=base_dir)
     success = result.returncode == 0
     if slug:
         _set_plan_status(slug, "done" if success else "failed")
@@ -737,8 +756,8 @@ def _schedule_plan(slug, scheduled_time):
         if plan["slug"] == slug:
             plan["scheduled_time"] = scheduled_time
             _save_plans(plans)
-            subprocess.run(["git", "-C", WORK_DIR, "add", "scheduled_plans.json"], capture_output=True)
-            subprocess.run(["git", "-C", WORK_DIR, "commit", "-m", f"chore: schedule plan {slug} at {scheduled_time}"], capture_output=True)
+            subprocess.run(["git", "-C", HUB_DIR, "add", "scheduled_plans.json"], capture_output=True)
+            subprocess.run(["git", "-C", HUB_DIR, "commit", "-m", f"chore: schedule plan {slug} at {scheduled_time}"], capture_output=True)
             return f"⏰ {slug} geplant für {scheduled_time}"
     return f"❌ Kein Plan mit slug '{slug}' gefunden"
 
@@ -750,8 +769,8 @@ def _abort_plan(slug):
                 return f"⚠️ Plan läuft gerade — abbrechen nicht möglich"
             plans = [p for p in plans if p["slug"] != slug]
             _save_plans(plans)
-            subprocess.run(["git", "-C", WORK_DIR, "add", "scheduled_plans.json"], capture_output=True)
-            subprocess.run(["git", "-C", WORK_DIR, "commit", "-m", f"chore: remove plan {slug}"], capture_output=True)
+            subprocess.run(["git", "-C", HUB_DIR, "add", "scheduled_plans.json"], capture_output=True)
+            subprocess.run(["git", "-C", HUB_DIR, "commit", "-m", f"chore: remove plan {slug}"], capture_output=True)
             return f"🗑 {slug} entfernt"
     return f"❌ Kein Plan mit slug '{slug}' gefunden"
 
