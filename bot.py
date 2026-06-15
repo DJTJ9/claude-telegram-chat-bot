@@ -843,7 +843,7 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"question check error: {e}")
 
-        poll_timeout = 5 if (_active_permission_id or _active_question_id) else 30
+        poll_timeout = 5 if (_active_permission_id or _active_question_id) else 10
         try:
             updates = get_updates(offset, timeout=poll_timeout)
         except requests.exceptions.ReadTimeout:
