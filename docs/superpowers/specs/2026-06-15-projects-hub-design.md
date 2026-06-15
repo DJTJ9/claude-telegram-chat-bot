@@ -64,7 +64,7 @@ Existing repos remain unchanged. Bot-specific specs/plans stay in `telegram-noti
 ```
 
 - `path`: used by PC Claude sessions (direct filesystem access)
-- `repo`: used by Pi Claude sessions (temporary clone for code context if needed)
+- `repo`: used by Pi Claude sessions (temporary clone to `/tmp/<slug>-context/`, deleted after session)
 - `path` may be omitted on Pi entries if project does not exist there
 - New projects added via "➕ Neues Projekt" are appended by the bot automatically
 
@@ -118,6 +118,8 @@ After confirmation: entry appended to registry, vision: session starts automatic
 ### Callback Handling
 
 Bot's `getUpdates` gains `allowed_updates: ["message", "callback_query"]`. New `handle_callback_query()` dispatches based on `callback_data` (structured as `<action>:<slug>:<extra>`).
+
+Actions: `project_select` (show Vision/Brainstorming/Pläne buttons), `project_vision`, `project_brainstorm` (show feature list), `project_plans`, `feature_select:<feature-text>`.
 
 ---
 
@@ -277,6 +279,7 @@ User: [🎯 Statistik-Dashboard]
 | `telegram-notion-bot` | `bot.py` | Add `_run_vision()`, `_vision_active`, `vision:` handler, `projekte` handler, `handle_callback_query()`, update `_run_brainstorming()` for hub paths, update `HILFE_TEXT` |
 | `telegram-notion-bot` | `scripts/restart_bot.sh` | new |
 | `telegram-notion-bot` | `.env` / deployment | Add `HUB_DIR` |
+| `telegram-notion-bot` | `scripts/on_stop.py` or plan-runner | Read `scheduled_plans.json` from `HUB_DIR` instead of `WORK_DIR` |
 | `~/.claude/CLAUDE.md` | Hub section | Add hub path + registry info |
 
 ---
