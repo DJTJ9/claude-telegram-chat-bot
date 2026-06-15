@@ -85,8 +85,9 @@ HILFE_TEXT = """📋 Befehle:
   verschieben: <datum> — Offene Tasks verschieben
     z.B. verschieben: morgen  oder  verschieben: 2026-06-15
 
-📁 Projekte
-  projekte — Alle Projekte anzeigen
+🔭 Projekte & Vision
+  projekte — Alle Projekte anzeigen (interaktiv)
+  vision: <slug> — Vision-Session für ein Projekt starten
   <name>: <frage> — Im Projektkontext fragen
   <name>: tasks — Projekt-Tasks anzeigen
   <name>: task: <text> — Projekt-Task anlegen

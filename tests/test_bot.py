@@ -346,6 +346,14 @@ def test_parse_vision_features_all_returned(tmp_path, monkeypatch):
     assert len(result) == 15
     assert result[0] == "Feature 0"
 
+# --- Task 10: HILFE_TEXT vision/projekte test ---
+
+def test_hilfe_contains_vision_and_projekte():
+    from bot import HILFE_TEXT
+    assert "vision:" in HILFE_TEXT
+    assert "projekte" in HILFE_TEXT
+    assert "Projekte & Vision" in HILFE_TEXT
+
 # --- Task 7: _run_brainstorming backwards-compat test ---
 
 def test_run_brainstorming_without_slug_uses_work_dir(monkeypatch):
