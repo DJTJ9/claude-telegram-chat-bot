@@ -594,6 +594,21 @@ def _save_registry(registry):
     p = Path(HUB_DIR) / "projects-registry.json"
     p.write_text(json.dumps(registry, indent=2, ensure_ascii=False), encoding="utf-8")
 
+def _create_project_entry(slug, name, path, chat_id):
+    global _vision_active
+    registry = _load_registry()
+    if not any(p["slug"] == slug for p in registry):
+        registry.append({"slug": slug, "name": name, "path": path or "", "repo": "", "description": ""})
+        _save_registry(registry)
+        subprocess.run(["git", "-C", HUB_DIR, "add", "projects-registry.json"], capture_output=True)
+        subprocess.run(["git", "-C", HUB_DIR, "commit", "-m", f"chore: add project {slug}"], capture_output=True)
+    topic_dir = Path(HUB_DIR) / "topics" / slug
+    (topic_dir / "specs").mkdir(parents=True, exist_ok=True)
+    (topic_dir / "plans").mkdir(parents=True, exist_ok=True)
+    send_message(chat_id, f"✅ Projekt {name} angelegt. Starte Vision-Session...")
+    _vision_active = True
+    threading.Thread(target=_run_vision, args=(slug,), daemon=True).start()
+
 def _parse_vision_features(slug):
     vision_path = Path(HUB_DIR) / "topics" / slug / "VISION.md"
     if not vision_path.exists():
@@ -651,6 +666,11 @@ def _run_plan(plan_path, slug=None):
         send_message(MY_CHAT_ID, f"❌ Implementierung fehlgeschlagen: {label}\n{stderr_snippet}")
 
 _brainstorming_active = False
+_vision_active = False
+
+def _run_vision(slug):
+    global _vision_active
+    _vision_active = False
 
 def _run_teach(topic):
     safe_topic = topic[:500]
@@ -922,6 +942,24 @@ if __name__ == "__main__":
                     ]]
                     send_message(MY_CHAT_ID, f"{proj['name']} — was möchtest du tun?",
                                  reply_markup={"inline_keyboard": buttons})
+                elif cb_data.startswith("npth_a:"):
+                    proj_slug = cb_data[7:]
+                    requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                    state = _pending_new_project.pop(MY_CHAT_ID, {})
+                    proj_name = state.get("name", proj_slug)
+                    _create_project_entry(proj_slug, proj_name, path=f"C:\\Projekte\\{proj_name}", chat_id=MY_CHAT_ID)
+                elif cb_data.startswith("npth_b:"):
+                    proj_slug = cb_data[7:]
+                    requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                    state = _pending_new_project.get(MY_CHAT_ID, {})
+                    _pending_new_project[MY_CHAT_ID] = {**state, "state": "await_custom_path", "slug": proj_slug}
+                    send_message(MY_CHAT_ID, "Pfad eingeben (z.B. C:\\Projekte\\MeineApp):")
+                elif cb_data.startswith("npth_c:"):
+                    proj_slug = cb_data[7:]
+                    requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                    state = _pending_new_project.pop(MY_CHAT_ID, {})
+                    proj_name = state.get("name", proj_slug)
+                    _create_project_entry(proj_slug, proj_name, path=None, chat_id=MY_CHAT_ID)
                 continue  # Don't process callback_query as a message
 
             msg = update.get("message", {})
@@ -1009,6 +1047,35 @@ if __name__ == "__main__":
                 for proj in registry:
                     buttons.append([{"text": f"🎯 {proj['name']}", "callback_data": f"proj_sel:{proj['slug']}"}])
                 send_message(chat_id, "Deine Projekte:", reply_markup={"inline_keyboard": buttons})
+                continue
+
+            if chat_id in _pending_new_project:
+                state_data = _pending_new_project[chat_id]
+                state = state_data["state"]
+                _is_nav = text.lower() in ("projekte", "hilfe", "moin", "abend", "/plans", "/specs")
+                if _is_nav:
+                    del _pending_new_project[chat_id]
+                elif state == "await_name":
+                    proj_name = text.strip()[:40]
+                    proj_slug = re.sub(r"[^a-z0-9]+", "-", proj_name.lower()).strip("-")[:30]
+                    if not proj_slug:
+                        send_message(chat_id, "❌ Ungültiger Name. Nochmal versuchen.")
+                    else:
+                        default_path = f"C:\\Projekte\\{proj_name}"
+                        _pending_new_project[chat_id] = {"state": "await_path", "slug": proj_slug, "name": proj_name}
+                        buttons = [
+                            [{"text": f"A) {default_path}", "callback_data": f"npth_a:{proj_slug}"}],
+                            [{"text": "B) Anderen Pfad eingeben", "callback_data": f"npth_b:{proj_slug}"}],
+                            [{"text": "C) Noch kein Pfad (nur Planung)", "callback_data": f"npth_c:{proj_slug}"}],
+                        ]
+                        send_message(chat_id, f"Wo soll {proj_name} angelegt werden?",
+                                     reply_markup={"inline_keyboard": buttons})
+                elif state == "await_custom_path":
+                    custom_path = text.strip()
+                    proj_slug = state_data["slug"]
+                    proj_name = state_data["name"]
+                    del _pending_new_project[chat_id]
+                    _create_project_entry(proj_slug, proj_name, path=custom_path, chat_id=chat_id)
                 continue
 
             if chat_id in pending_task_input:

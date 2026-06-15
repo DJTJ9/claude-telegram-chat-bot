@@ -345,3 +345,18 @@ def test_parse_vision_features_all_returned(tmp_path, monkeypatch):
     result = bot._parse_vision_features("big-proj")
     assert len(result) == 15
     assert result[0] == "Feature 0"
+
+# --- Task 4: _create_project_entry tests ---
+
+def test_create_project_entry_adds_to_registry(tmp_path, monkeypatch):
+    import bot
+    monkeypatch.setattr(bot, "HUB_DIR", str(tmp_path))
+    (tmp_path / "projects-registry.json").write_text("[]")
+    monkeypatch.setattr(bot, "_vision_active", False)
+    monkeypatch.setattr(bot, "send_message", lambda *a, **kw: None)
+    monkeypatch.setattr(bot, "_run_vision", lambda slug: None)
+    bot._create_project_entry("my-app", "MyApp", path="C:\\Projekte\\MyApp", chat_id=123)
+    registry = bot._load_registry()
+    assert any(p["slug"] == "my-app" for p in registry)
+    assert (tmp_path / "topics" / "my-app" / "specs").exists()
+    assert (tmp_path / "topics" / "my-app" / "plans").exists()
