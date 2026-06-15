@@ -57,6 +57,10 @@ def test_habit_prefix_empty():
 def test_hilfe_contains_habit():
     assert "habit:" in HILFE_TEXT
 
+def test_hilfe_contains_vision_end():
+    assert "vision:end" in HILFE_TEXT
+
+
 def test_moin_prompt_includes_habits_db():
     assert HABITS_DATA_SOURCE_ID in MOIN_SYSTEM_PROMPT
 

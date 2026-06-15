@@ -88,6 +88,7 @@ HILFE_TEXT = """📋 Befehle:
 🔭 Projekte & Vision
   projekte — Alle Projekte anzeigen (interaktiv)
   vision: <slug> — Vision-Session für ein Projekt starten
+  vision:end — Laufende Vision-Session beenden und VISION.md speichern
   <name>: <frage> — Im Projektkontext fragen
   <name>: tasks — Projekt-Tasks anzeigen
   <name>: task: <text> — Projekt-Task anlegen
@@ -1508,6 +1509,12 @@ if __name__ == "__main__":
                     response = "❓ Suchbegriff fehlt. z.B.: suche: Python"
                 else:
                     response = run_claude(query, system_prompt=SUCHE_SYSTEM_PROMPT)
+            elif text.lower() == "vision:end":
+                if _vision_active:
+                    Path(HUB_DIR, ".vision_end").write_text("end")
+                    response = "⏹ vision:end Signal gesendet — Claude schreibt VISION.md"
+                else:
+                    response = "Keine Vision-Session aktiv."
             elif text.lower().startswith("vision:"):
                 slug = text[7:].strip()
                 if not slug:
