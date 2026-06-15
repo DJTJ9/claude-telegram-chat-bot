@@ -733,38 +733,86 @@ def _run_teach(topic):
     if result.returncode != 0:
         send_message(MY_CHAT_ID, f"❌ Teach-Session fehlgeschlagen\n{(result.stderr or '')[-300:]}")
 
-def _run_brainstorming(topic, basis_slug=None):
+def _run_brainstorming(topic, basis_slug=None, project_slug=None):
     global _brainstorming_active
     safe_topic = topic[:500]
-    vision_path = Path(WORK_DIR) / "VISION.md"
-    vision_note = (
-        f"Read {vision_path} first for existing project context and backlog."
-        if vision_path.exists() else ""
-    )
-    basis_note = (
-        f"Also read the spec file in docs/superpowers/specs/ whose name contains '{basis_slug}' "
-        f"as prior session context before starting brainstorming."
-        if basis_slug else ""
-    )
-    prompt = (
-        f"Invoke the superpowers:brainstorming skill. "
-        f"Feature idea from user: {safe_topic}. "
-        f"{vision_note} {basis_note}"
-        f"Use telegram relay for ALL questions and gate decisions "
-        f"(notifications_enabled is true — do not output anything to terminal). "
-        f"After the spec and plan are written and committed, update VISION.md in {WORK_DIR}: "
-        f"add the new feature under Implementiert, move any collected-but-not-chosen ideas to Backlog, "
-        f"record key decisions under Entscheidungen."
-    )
+    telegram_ask_path = Path(WORK_DIR) / "scripts" / "telegram_ask.py"
+    restart_script = Path(WORK_DIR) / "scripts" / "restart_bot.sh"
+
+    if project_slug:
+        registry = _load_registry()
+        proj = next((p for p in registry if p["slug"] == project_slug),
+                    {"slug": project_slug, "name": project_slug, "path": "", "repo": ""})
+        hub_path = Path(HUB_DIR) / "topics" / project_slug
+        hub_path.mkdir(parents=True, exist_ok=True)
+        vision_path = hub_path / "VISION.md"
+        prior_specs = sorted((hub_path / "specs").glob("*.md")) if (hub_path / "specs").exists() else []
+        registry_json = json.dumps(registry, ensure_ascii=False)
+        proj_path = proj.get("path", "")
+        vision_note = (f"Read {vision_path} for project context, architecture, and feature backlog."
+                       if vision_path.exists() else "")
+        specs_note = (f"Prior specs for cross-session context: {', '.join(str(s) for s in prior_specs[-3:])}"
+                      if prior_specs else "")
+        push_proj = (
+            f"git -C {proj_path!r} add -A && "
+            f"git -C {proj_path!r} commit -m \"feat: {safe_topic[:40]}\" && "
+            f"git -C {proj_path!r} push"
+            if proj_path else ""
+        )
+        post_impl = (
+            f"After successful implementation:\n"
+            f"1. In {vision_path}, change '- [ ] {safe_topic}' to "
+            f"'- [x] {safe_topic} (implementiert {date.today().isoformat()})'.\n"
+            f"2. git -C {HUB_DIR} add -A && git -C {HUB_DIR} commit -m "
+            f"\"chore: {project_slug} after {safe_topic[:30]}\" && git -C {HUB_DIR} push\n"
+            f"3. {push_proj}\n"
+            f"4. If bot.py or scripts/ in {WORK_DIR} were modified: "
+            f"send a Telegram message that the bot is restarting, "
+            f"then run: bash {restart_script}"
+        )
+        prompt = (
+            f"Invoke the superpowers:brainstorming skill. "
+            f"Project: {proj['name']} (slug: {project_slug}). "
+            f"Feature to brainstorm: {safe_topic}. "
+            f"Project registry: {registry_json}. "
+            f"{vision_note} {specs_note} "
+            f"Save spec to {hub_path}/specs/YYYY-MM-DD-<topic>-design.md. "
+            f"Save plan to {hub_path}/plans/YYYY-MM-DD-<topic>.md. "
+            f'Use python "{telegram_ask_path}" for ALL questions and gate decisions. '
+            f"{post_impl}"
+        )
+        exec_cwd = str(hub_path)
+    else:
+        vision_path = Path(WORK_DIR) / "VISION.md"
+        vision_note = (
+            f"Read {vision_path} first for existing project context and backlog."
+            if vision_path.exists() else ""
+        )
+        basis_note = (
+            f"Also read the spec file in docs/superpowers/specs/ whose name contains '{basis_slug}' "
+            f"as prior session context before starting brainstorming."
+            if basis_slug else ""
+        )
+        prompt = (
+            f"Invoke the superpowers:brainstorming skill. "
+            f"Feature idea from user: {safe_topic}. "
+            f"{vision_note} {basis_note}"
+            f'Use python "{telegram_ask_path}" for ALL questions and gate decisions '
+            f"(notifications_enabled is true — do not output anything to terminal). "
+            f"After the spec and plan are written and committed, update VISION.md in {WORK_DIR}: "
+            f"add the new feature under Implementiert, move any collected-but-not-chosen ideas to Backlog, "
+            f"record key decisions under Entscheidungen."
+        )
+        exec_cwd = WORK_DIR
+
     cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, encoding="utf-8",
-            timeout=7200, cwd=WORK_DIR, env=env
+            timeout=7200, cwd=exec_cwd, env=env
         )
-        success = result.returncode == 0
-        if success:
+        if result.returncode == 0:
             send_message(MY_CHAT_ID, "✅ Brainstorming abgeschlossen")
         else:
             send_message(MY_CHAT_ID, f"❌ Brainstorming fehlgeschlagen\n{(result.stderr or '')[-300:]}")
@@ -999,6 +1047,68 @@ if __name__ == "__main__":
                         send_message(MY_CHAT_ID,
                                      f"🔭 Vision-Session für {proj['name']} gestartet — Fragen kommen gleich")
                         threading.Thread(target=_run_vision, args=(slug,), daemon=True).start()
+                elif cb_data.startswith("proj_bs:"):
+                    slug = cb_data[8:]
+                    requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                    features = _parse_vision_features(slug)
+                    if not features:
+                        buttons = [[{"text": "🔭 Vision starten", "callback_data": f"proj_vis:{slug}"}]]
+                        send_message(MY_CHAT_ID, "Keine offenen Features. Starte zuerst eine Vision-Session.",
+                                     reply_markup={"inline_keyboard": buttons})
+                    else:
+                        buttons = []
+                        for i, feat in enumerate(features[:9]):
+                            buttons.append([{"text": f"🎯 {feat[:38]}", "callback_data": f"feat_sel:{slug}:{i}"}])
+                        buttons.append([{"text": "✏️ Neues Feature → erst Vision",
+                                         "callback_data": f"proj_vis:{slug}"}])
+                        registry = _load_registry()
+                        proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
+                        send_message(MY_CHAT_ID, f"{proj['name']} — welches Feature brainstormen?",
+                                     reply_markup={"inline_keyboard": buttons})
+                elif cb_data.startswith("feat_sel:"):
+                    parts = cb_data.split(":", 2)
+                    if len(parts) == 3:
+                        slug, idx_str = parts[1], parts[2]
+                        requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                        try:
+                            idx = int(idx_str)
+                            features = _parse_vision_features(slug)
+                            if 0 <= idx < len(features):
+                                feature = features[idx]
+                                if _brainstorming_active:
+                                    send_message(MY_CHAT_ID, "⚠️ Brainstorming-Session läuft bereits.")
+                                else:
+                                    _brainstorming_active = True
+                                    send_message(MY_CHAT_ID,
+                                                 f"🧠 Brainstorming: {feature[:60]} — Fragen kommen gleich")
+                                    threading.Thread(
+                                        target=_run_brainstorming,
+                                        args=(feature, None, slug),
+                                        daemon=True
+                                    ).start()
+                            else:
+                                send_message(MY_CHAT_ID, "❌ Feature nicht mehr verfügbar — projekte neu laden.")
+                        except (ValueError, IndexError):
+                            send_message(MY_CHAT_ID, "❌ Ungültige Feature-Auswahl.")
+                elif cb_data.startswith("proj_plans:"):
+                    slug = cb_data[11:]
+                    requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                    plans_dir = Path(HUB_DIR) / "topics" / slug / "plans"
+                    if not plans_dir.exists() or not list(plans_dir.glob("*.md")):
+                        send_message(MY_CHAT_ID, f"Keine Pläne für {slug}.")
+                    else:
+                        files = sorted(plans_dir.glob("*.md"), reverse=True)
+                        registry = _load_registry()
+                        proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
+                        lines = [f"📋 Pläne für {proj['name']}:\n"]
+                        for f in files[:10]:
+                            stem = f.stem
+                            parts = stem.split("-", 3)
+                            if len(parts) == 4:
+                                lines.append(f"• {parts[0]}-{parts[1]}-{parts[2]} · {parts[3]}")
+                            else:
+                                lines.append(f"• {stem}")
+                        send_message(MY_CHAT_ID, "\n".join(lines))
                 elif cb_data.startswith("npth_a:"):
                     proj_slug = cb_data[7:]
                     requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
@@ -1055,21 +1165,38 @@ if __name__ == "__main__":
                 continue
 
             if text.lower() == "/specs":
-                specs_dir = Path(WORK_DIR) / "docs" / "superpowers" / "specs"
-                files = sorted(specs_dir.glob("*.md")) if specs_dir.exists() else []
-                if not files:
-                    response = "Keine Specs vorhanden."
-                else:
-                    lines = ["📋 Vorhandene Specs:\n"]
-                    for f in files:
+                lines = ["📋 Specs:\n"]
+                hub_topics = Path(HUB_DIR) / "topics"
+                if hub_topics.exists():
+                    for slug_dir in sorted(hub_topics.iterdir()):
+                        if not slug_dir.is_dir():
+                            continue
+                        specs_subdir = slug_dir / "specs"
+                        if not specs_subdir.exists():
+                            continue
+                        for f in sorted(specs_subdir.glob("*.md")):
+                            stem = f.stem
+                            parts = stem.split("-", 3)
+                            if len(parts) == 4:
+                                date_str = f"{parts[0]}-{parts[1]}-{parts[2]}"
+                                slug_label = parts[3].removesuffix("-design")
+                                lines.append(f"{date_str} · [{slug_dir.name}] {slug_label}")
+                            else:
+                                lines.append(f"[{slug_dir.name}] {stem}")
+                local_specs = Path(WORK_DIR) / "docs" / "superpowers" / "specs"
+                if local_specs.exists():
+                    for f in sorted(local_specs.glob("*.md")):
                         stem = f.stem
                         parts = stem.split("-", 3)
                         if len(parts) == 4:
                             date_str = f"{parts[0]}-{parts[1]}-{parts[2]}"
-                            slug = parts[3].removesuffix("-design")
-                            lines.append(f"{date_str} · {slug}")
+                            slug_label = parts[3].removesuffix("-design")
+                            lines.append(f"{date_str} · [bot] {slug_label}")
                         else:
-                            lines.append(stem)
+                            lines.append(f"[bot] {stem}")
+                if len(lines) == 1:
+                    response = "Keine Specs vorhanden."
+                else:
                     lines.append("\nNutzung: brainstorming: <idee>, basis: <slug>")
                     response = "\n".join(lines)
                 send_message(chat_id, response, reply_markup=REPLY_KEYBOARD)

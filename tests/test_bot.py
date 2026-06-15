@@ -346,6 +346,21 @@ def test_parse_vision_features_all_returned(tmp_path, monkeypatch):
     assert len(result) == 15
     assert result[0] == "Feature 0"
 
+# --- Task 7: _run_brainstorming backwards-compat test ---
+
+def test_run_brainstorming_without_slug_uses_work_dir(monkeypatch):
+    import bot, subprocess as sp
+    calls = []
+    def fake_run(cmd, **kw):
+        calls.append(kw.get("cwd"))
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+    monkeypatch.setattr(sp, "run", fake_run)
+    monkeypatch.setattr(bot, "subprocess", sp)
+    monkeypatch.setattr(bot, "send_message", lambda *a, **kw: None)
+    bot._brainstorming_active = True
+    bot._run_brainstorming("test topic")
+    assert any(c == bot.WORK_DIR for c in calls)
+
 # --- Task 4: _create_project_entry tests ---
 
 # --- Task 5: _vision_active + vision: handler tests ---
