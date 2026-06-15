@@ -314,3 +314,34 @@ def test_load_registry_returns_list(tmp_path, monkeypatch):
     result = bot._load_registry()
     assert len(result) == 1
     assert result[0]["slug"] == "test"
+
+# --- Task 3: _parse_vision_features tests ---
+
+def test_parse_vision_features_empty(tmp_path, monkeypatch):
+    import bot
+    monkeypatch.setattr(bot, "HUB_DIR", str(tmp_path))
+    result = bot._parse_vision_features("no-such-project")
+    assert result == []
+
+def test_parse_vision_features_parses_unchecked(tmp_path, monkeypatch):
+    import bot
+    monkeypatch.setattr(bot, "HUB_DIR", str(tmp_path))
+    slug_dir = tmp_path / "topics" / "test-proj"
+    slug_dir.mkdir(parents=True)
+    (slug_dir / "VISION.md").write_text(
+        "## Features\n- [ ] Feature A\n- [x] Done Feature\n- [ ] Feature B\n"
+    )
+    result = bot._parse_vision_features("test-proj")
+    assert result == ["Feature A", "Feature B"]
+    assert "Done Feature" not in result
+
+def test_parse_vision_features_all_returned(tmp_path, monkeypatch):
+    import bot
+    monkeypatch.setattr(bot, "HUB_DIR", str(tmp_path))
+    slug_dir = tmp_path / "topics" / "big-proj"
+    slug_dir.mkdir(parents=True)
+    lines = "\n".join(f"- [ ] Feature {i}" for i in range(15))
+    (slug_dir / "VISION.md").write_text(f"## Features\n{lines}\n")
+    result = bot._parse_vision_features("big-proj")
+    assert len(result) == 15
+    assert result[0] == "Feature 0"

@@ -508,6 +508,7 @@ def normalize_voice(text: str) -> str:
 
 conversation_history = {}
 pending_task_input = {}
+_pending_new_project = {}
 _active_permission_id = None
 _active_question_id = None
 
@@ -592,6 +593,17 @@ def _load_registry():
 def _save_registry(registry):
     p = Path(HUB_DIR) / "projects-registry.json"
     p.write_text(json.dumps(registry, indent=2, ensure_ascii=False), encoding="utf-8")
+
+def _parse_vision_features(slug):
+    vision_path = Path(HUB_DIR) / "topics" / slug / "VISION.md"
+    if not vision_path.exists():
+        return []
+    features = []
+    for line in vision_path.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"^- \[ \] (.+)$", line.strip())
+        if m:
+            features.append(m.group(1).strip())
+    return features
 
 def _set_plan_status(slug, status):
     plans = _load_plans()
@@ -894,6 +906,22 @@ if __name__ == "__main__":
                     send_message(MY_CHAT_ID, f"Permission {action}")
                     if _active_permission_id == request_id:
                         _active_permission_id = None
+                elif cb_data == "new_proj":
+                    requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                    _pending_new_project[MY_CHAT_ID] = {"state": "await_name"}
+                    send_message(MY_CHAT_ID, "Name des neuen Projekts?")
+                elif cb_data.startswith("proj_sel:"):
+                    slug = cb_data[9:]
+                    requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                    registry = _load_registry()
+                    proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
+                    buttons = [[
+                        {"text": "🔭 Vision", "callback_data": f"proj_vis:{slug}"},
+                        {"text": "🧠 Brainstorming", "callback_data": f"proj_bs:{slug}"},
+                        {"text": "📋 Pläne", "callback_data": f"proj_plans:{slug}"},
+                    ]]
+                    send_message(MY_CHAT_ID, f"{proj['name']} — was möchtest du tun?",
+                                 reply_markup={"inline_keyboard": buttons})
                 continue  # Don't process callback_query as a message
 
             msg = update.get("message", {})
@@ -975,12 +1003,12 @@ if __name__ == "__main__":
                 os.execv(sys.executable, [sys.executable] + sys.argv[:1])
                 continue
 
-            if text.lower() == "projekte":
-                lines = ["📁 Verfügbare Projekte:"]
-                for name, info in PROJECTS.items():
-                    lines.append(f"  {name}: → {info['path']}")
-                lines.append("\nNutzung: <name>: <frage>  |  <name>: tasks  |  <name>: task: <aufgabe>")
-                send_message(chat_id, "\n".join(lines))
+            if text.lower() in ("projekte", "/projekte"):
+                registry = _load_registry()
+                buttons = [[{"text": "➕ Neues Projekt", "callback_data": "new_proj"}]]
+                for proj in registry:
+                    buttons.append([{"text": f"🎯 {proj['name']}", "callback_data": f"proj_sel:{proj['slug']}"}])
+                send_message(chat_id, "Deine Projekte:", reply_markup={"inline_keyboard": buttons})
                 continue
 
             if chat_id in pending_task_input:
