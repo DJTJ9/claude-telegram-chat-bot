@@ -1,5 +1,5 @@
 {
   "notifications_enabled": false,
   "archive_migration_done": true,
-  "pi_host": "raspberrypi.local"
+  "pi_host": "raspberry-pi.local"
 }
