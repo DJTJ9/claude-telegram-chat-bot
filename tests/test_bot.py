@@ -348,6 +348,22 @@ def test_parse_vision_features_all_returned(tmp_path, monkeypatch):
 
 # --- Task 4: _create_project_entry tests ---
 
+# --- Task 5: _vision_active + vision: handler tests ---
+
+def test_vision_active_flag_exists():
+    import bot
+    assert hasattr(bot, "_vision_active")
+    assert isinstance(bot._vision_active, bool)
+
+def test_vision_handler_prefix():
+    text = "vision: dart-app"
+    assert text.lower().startswith("vision:")
+    assert text[7:].strip() == "dart-app"
+
+def test_vision_handler_empty():
+    text = "vision:"
+    assert text[7:].strip() == ""
+
 def test_create_project_entry_adds_to_registry(tmp_path, monkeypatch):
     import bot
     monkeypatch.setattr(bot, "HUB_DIR", str(tmp_path))

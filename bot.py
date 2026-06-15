@@ -670,7 +670,52 @@ _vision_active = False
 
 def _run_vision(slug):
     global _vision_active
-    _vision_active = False
+    registry = _load_registry()
+    proj = next((p for p in registry if p["slug"] == slug),
+                {"slug": slug, "name": slug, "path": "", "repo": ""})
+    hub_path = Path(HUB_DIR) / "topics" / slug
+    hub_path.mkdir(parents=True, exist_ok=True)
+    vision_path = hub_path / "VISION.md"
+    telegram_ask_path = Path(WORK_DIR) / "scripts" / "telegram_ask.py"
+    vision_note = (
+        f"Read {vision_path} first — it exists. Append/refine sections, do NOT overwrite entirely."
+        if vision_path.exists() else
+        f"Create {vision_path} with this structure:\n"
+        f"# {proj['name']} — Vision\n\n## Ziel\n\n"
+        f"## Features (Backlog — priorisiert)\n- [ ] ...\n\n"
+        f"## Architektur\n\n## Offene Fragen\n\n## Entscheidungen\n"
+    )
+    code_note = (
+        f"Project code is at {proj['path']} — read its structure for architecture context."
+        if proj.get("path") and Path(proj["path"]).exists() else ""
+    )
+    registry_json = json.dumps(registry, ensure_ascii=False)
+    prompt = (
+        f"You are running a project vision session for: {proj['name']} (slug: {slug}). "
+        f"Project registry (all known projects for cross-reference): {registry_json}. "
+        f"{code_note} "
+        f"{vision_note} "
+        f"Through dialogue, explore: project goal, required features (ordered by dependency), "
+        f"architecture decisions, open questions. Ask one question at a time via: "
+        f'python "{telegram_ask_path}" "your question here". '
+        f"After session, write/update {vision_path}. "
+        f"Then: git -C {HUB_DIR} add -A && "
+        f"git -C {HUB_DIR} commit -m \"vision: update {slug}\" && "
+        f"git -C {HUB_DIR} push"
+    )
+    cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
+    env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                                timeout=3600, cwd=str(hub_path), env=env)
+        if result.returncode == 0:
+            send_message(MY_CHAT_ID, f"🔭 Vision-Session für {proj['name']} abgeschlossen")
+        else:
+            send_message(MY_CHAT_ID, f"❌ Vision-Session fehlgeschlagen\n{(result.stderr or '')[-300:]}")
+    except subprocess.TimeoutExpired:
+        send_message(MY_CHAT_ID, "❌ Vision-Timeout (1h überschritten)")
+    finally:
+        _vision_active = False
 
 def _run_teach(topic):
     safe_topic = topic[:500]
@@ -942,6 +987,18 @@ if __name__ == "__main__":
                     ]]
                     send_message(MY_CHAT_ID, f"{proj['name']} — was möchtest du tun?",
                                  reply_markup={"inline_keyboard": buttons})
+                elif cb_data.startswith("proj_vis:"):
+                    slug = cb_data[9:]
+                    requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                    if _vision_active:
+                        send_message(MY_CHAT_ID, "⚠️ Vision-Session läuft bereits.")
+                    else:
+                        registry = _load_registry()
+                        proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
+                        _vision_active = True
+                        send_message(MY_CHAT_ID,
+                                     f"🔭 Vision-Session für {proj['name']} gestartet — Fragen kommen gleich")
+                        threading.Thread(target=_run_vision, args=(slug,), daemon=True).start()
                 elif cb_data.startswith("npth_a:"):
                     proj_slug = cb_data[7:]
                     requests.post(f"{BASE}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
@@ -1298,6 +1355,28 @@ if __name__ == "__main__":
                     response = "❓ Suchbegriff fehlt. z.B.: suche: Python"
                 else:
                     response = run_claude(query, system_prompt=SUCHE_SYSTEM_PROMPT)
+            elif text.lower().startswith("vision:"):
+                slug = text[7:].strip()
+                if not slug:
+                    response = "Nutzung: vision: <slug>  z.B. vision: dart-app\nProjekte anzeigen: projekte"
+                elif _vision_active:
+                    response = "⚠️ Vision-Session läuft bereits. Warten bis abgeschlossen."
+                else:
+                    registry = _load_registry()
+                    proj = next(
+                        (p for p in registry
+                         if p["slug"] == slug or p["name"].lower() == slug.lower()),
+                        None
+                    )
+                    if not proj:
+                        response = (f"❌ Projekt '{slug}' nicht gefunden. "
+                                    f"Erst anlegen: projekte → ➕ Neues Projekt")
+                    else:
+                        _vision_active = True
+                        send_message(chat_id,
+                                     f"🔭 Vision-Session für {proj['name']} gestartet — Fragen kommen gleich")
+                        threading.Thread(target=_run_vision, args=(proj["slug"],), daemon=True).start()
+                        continue
             elif text.lower().startswith("brainstorming:"):
                 topic = text[14:].strip()
                 if not topic:
