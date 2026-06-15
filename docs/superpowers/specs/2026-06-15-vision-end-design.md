@@ -42,14 +42,21 @@ Platzierung: im `elif`-Kette des Message-Handlers, vor dem allgemeinen `else`.
 Am Anfang der Hauptlogik, vor dem Senden der Frage:
 
 ```python
-signal_path = Path(HUB_DIR) / ".vision_end"
-if signal_path.exists():
-    signal_path.unlink()
-    print("vision:end")
-    sys.exit(0)
+HUB_DIR = os.environ.get("HUB_DIR", "")  # aus .env geladen (bereits am Anfang der Datei)
+signal_path = Path(HUB_DIR) / ".vision_end" if HUB_DIR else None
+
+def _check_signal():
+    if signal_path and signal_path.exists():
+        signal_path.unlink()
+        print("vision:end")
+        sys.exit(0)
+
+_check_signal()  # beim Start prüfen
 ```
 
-`HUB_DIR` muss in `telegram_ask.py` verfügbar sein (aus env oder settings.json lesen — bereits vorhanden wenn bot läuft).
+Außerdem in der Warte-Schleife (beim Polling auf User-Antwort) alle 5s `_check_signal()` aufrufen. Hintergrund: bot.py und telegram_ask.py pollen denselben Telegram-Token. Wenn bot.py die "vision:end"-Nachricht vor telegram_ask.py konsumiert, wird die Signal-Datei geschrieben — aber telegram_ask.py wartet noch auf eine Antwort. Ohne periodischen Check würde es hängen.
+
+`HUB_DIR` kommt aus `.env` (dort bereits für bot.py definiert).
 
 ### 4. _run_vision Prompt-Änderungen
 
