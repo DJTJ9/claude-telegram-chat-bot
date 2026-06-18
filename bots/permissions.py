@@ -47,7 +47,7 @@ def main():
 
     while True:
         try:
-            updates = get_updates(TOKEN, offset=offset)
+            updates = get_updates(TOKEN, offset=offset, timeout=1)
             for upd in updates:
                 offset = upd["update_id"] + 1
 
