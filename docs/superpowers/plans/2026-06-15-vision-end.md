@@ -283,23 +283,20 @@ git commit -m "feat: update _run_vision prompt — tool rights, vision:end signa
 
 ---
 
-## Task 4: Deploy to Pi
+## Task 4: Deploy
 
 - [ ] **Step 1: Push to remote**
 
 ```bash
-git push
+git -C /root/projekte/telegram-bot-army push
 ```
 
-- [ ] **Step 2: SSH deploy**
-
-Read `pi_host` from `settings.json`, then:
+- [ ] **Step 2: Restart brain bot**
 
 ```bash
-ssh pi@<pi_host> '~/deploy.sh'
+sudo systemctl restart bot-brain
+sudo systemctl status bot-brain
 ```
-
-Expected: deploy.sh pulls and restarts bot.
 
 - [ ] **Step 3: Smoke test**
 
