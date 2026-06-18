@@ -45,9 +45,6 @@ active_session = settings.get("active_session")
 bot_name = _get_target_bot_name(active_session)
 token_key = f"TOKEN_{bot_name.upper()}"
 token = os.environ.get(token_key)
-if not token:
-    print(f"telegram_ask: token {token_key} not set", file=sys.stderr)
-    sys.exit(1)
 
 pending_path = PROJECT_DIR / "pending_question.json"
 pending_path.write_text(json.dumps({
@@ -56,12 +53,19 @@ pending_path.write_text(json.dumps({
     "target_bot": bot_name,
 }))
 
-keyboard = build_inline_keyboard(question)
-requests.post(
-    f"https://api.telegram.org/bot{token}/sendMessage",
-    json={"chat_id": chat_id, "text": f"❓ {question}",
-          "reply_markup": {"inline_keyboard": keyboard}},
-)
+if token:
+    keyboard = build_inline_keyboard(question)
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat_id, "text": f"❓ {question}",
+                  "reply_markup": {"inline_keyboard": keyboard}},
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"telegram_ask: send failed: {e}", file=sys.stderr)
+else:
+    print(f"telegram_ask: {token_key} not set — file IPC only", file=sys.stderr)
 
 response_path = PROJECT_DIR / f"question_response_{request_id}.json"
 timeout = 300

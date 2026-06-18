@@ -1,0 +1,16 @@
+[Unit]
+Description=Telegram Bot Army — Brain Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/projekte/telegram-bot-army
+EnvironmentFile=/root/projekte/telegram-bot-army/.env
+ExecStart=/usr/bin/python3 /root/projekte/telegram-bot-army/bots/brain.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
