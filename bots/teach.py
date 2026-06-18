@@ -230,7 +230,9 @@ def main():
                         continue
                     answer_callback_query(TOKEN, cq["id"])
                     data = cq.get("data", "")
-                    if data == "__freitext__":
+                    if data.startswith("lessons__"):
+                        _send_lesson_list(data[9:])
+                    elif data == "__freitext__":
                         send_message(TOKEN, CHAT_ID, "Bitte Antwort eintippen:")
                     elif _active_question_id:
                         _write_question_response(_active_question_id, data)
@@ -264,6 +266,14 @@ def main():
                     else:
                         send_message(TOKEN, CHAT_ID, "📚 Teach-Session gestartet — Fragen kommen gleich über den Chat")
                         threading.Thread(target=_run_teach, args=(topic,), daemon=True).start()
+                elif t.startswith("/lessons") or t.startswith("lessons:") or t == "lessons":
+                    topics = _get_topics()
+                    if not topics:
+                        send_message(TOKEN, CHAT_ID, "Noch keine Lektionen vorhanden.")
+                    else:
+                        kb = _build_lessons_keyboard(topics)
+                        send_message(TOKEN, CHAT_ID, "📚 Welches Thema?",
+                                     reply_markup={"inline_keyboard": kb})
                 elif t == "hilfe":
                     send_message(TOKEN, CHAT_ID, HILFE_TEXT)
                 else:
