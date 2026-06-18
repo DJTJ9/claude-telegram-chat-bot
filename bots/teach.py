@@ -31,7 +31,60 @@ HILFE_TEXT = """📚 Teach Bot
 
 teach: <thema + warum> — Lernkurs erstellen oder planen
   z.B. teach: Python Grundlagen, weil ich Skripte automatisieren will
+lessons: — Alle Lernthemen anzeigen
 hilfe — Diese Hilfe"""
+
+
+def _lesson_title_from_filename(filename: str) -> str:
+    name = filename.replace(".html", "")
+    name = re.sub(r"^lektion-\d+-", "", name)
+    name = re.sub(r"^\d+-", "", name)
+    return name.replace("-", " ").title()
+
+
+def _get_topics(teach_dir=None) -> list:
+    base = teach_dir or TEACH_DIR
+    topics = []
+    for d in sorted(base.iterdir()):
+        if not d.is_dir():
+            continue
+        lessons_dir = d / "lessons"
+        if not lessons_dir.exists():
+            continue
+        if not any(lessons_dir.glob("*.html")):
+            continue
+        slug = d.name
+        label = slug.replace("-", " ").title()
+        topics.append((slug, label))
+    return topics
+
+
+def _build_lessons_keyboard(topics: list) -> list:
+    rows = []
+    for i in range(0, len(topics), 2):
+        row = [
+            {"text": label, "callback_data": f"lessons__{slug}"}
+            for slug, label in topics[i:i + 2]
+        ]
+        rows.append(row)
+    return rows
+
+
+def _send_lesson_list(slug: str, teach_dir=None) -> None:
+    base = teach_dir or TEACH_DIR
+    label = slug.replace("-", " ").title()
+    lessons_dir = base / slug / "lessons"
+    files = sorted(f.name for f in lessons_dir.glob("*.html"))
+    if not files:
+        send_message(TOKEN, CHAT_ID, f"Keine Lektionen für {label} gefunden.")
+        return
+    parts = [f"📚 {label} — {len(files)} Lektionen:"]
+    for i, fname in enumerate(files, 1):
+        title = _lesson_title_from_filename(fname)
+        url = f"{PAGES_BASE}/{slug}/lessons/{fname}"
+        parts.append(f"\n{i}. {title}\n   {url}")
+    send_message(TOKEN, CHAT_ID, "\n".join(parts))
+
 
 _active_question_id = None
 
