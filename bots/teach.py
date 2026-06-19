@@ -21,6 +21,7 @@ WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
 TEACH_DIR = Path(os.environ.get("TEACH_DIR", str(PROJECT_DIR.parent / "teach")))
 
 PAGES_BASE = "https://djtj9.github.io/teach-lessons"
+ABORT_SIGNAL = WORK_DIR / ".teach_abort"
 
 HILFE_TEXT = """📚 Teach Bot
 
@@ -227,19 +228,57 @@ def _run_teach(topic):
     )
     cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
+
+    kb = [[{"text": "🛑 Abbrechen", "callback_data": "teach_abort"}]]
+    send_message(TOKEN, CHAT_ID,
+                 "📚 Teach-Session gestartet — Fragen kommen gleich über den Chat",
+                 reply_markup={"inline_keyboard": kb})
+
+    aborted = False
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, encoding="utf-8",
-            timeout=3600, cwd=str(TEACH_DIR.parent), env=env
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", cwd=str(TEACH_DIR.parent), env=env
         )
-        if result.returncode == 0:
-            send_message(TOKEN, CHAT_ID, "✅ Teach-Session abgeschlossen")
-            publish_new_lessons()
+
+        def _monitor():
+            nonlocal aborted
+            while proc.poll() is None:
+                if ABORT_SIGNAL.exists():
+                    ABORT_SIGNAL.unlink(missing_ok=True)
+                    proc.terminate()
+                    aborted = True
+                    return
+                time.sleep(2)
+
+        t = threading.Thread(target=_monitor, daemon=True)
+        t.start()
+
+        try:
+            _, stderr = proc.communicate(timeout=3600)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            _, stderr = proc.communicate()
+            send_message(TOKEN, CHAT_ID, "❌ Teach-Timeout (1h überschritten)")
+            return
+        finally:
+            t.join(timeout=3)
+
+        count = publish_new_lessons()
+
+        if aborted:
+            send_message(TOKEN, CHAT_ID,
+                         f"🛑 Abgebrochen — {count} Lektion(en) gespeichert — tippe 'lessons' zum Öffnen")
+        elif proc.returncode == 0:
+            send_message(TOKEN, CHAT_ID,
+                         f"✅ {count} Lektion(en) erstellt — tippe 'lessons' zum Öffnen")
         else:
-            send_message(TOKEN, CHAT_ID, f"❌ Teach-Session fehlgeschlagen\n{(result.stderr or '')[-300:]}")
-    except subprocess.TimeoutExpired:
-        send_message(TOKEN, CHAT_ID, "❌ Teach-Timeout (1h überschritten)")
+            send_message(TOKEN, CHAT_ID,
+                         f"❌ Teach-Session fehlgeschlagen\n{(stderr or '')[-300:]}")
+    except Exception as e:
+        send_message(TOKEN, CHAT_ID, f"❌ Fehler: {e}")
     finally:
+        ABORT_SIGNAL.unlink(missing_ok=True)
         _clear_session()
 
 
@@ -263,6 +302,9 @@ def main():
                     data = cq.get("data", "")
                     if data.startswith("lessons__"):
                         _send_lesson_list(data[9:])
+                    elif data == "teach_abort":
+                        (WORK_DIR / ".teach_abort").write_text("")
+                        send_message(TOKEN, CHAT_ID, "⏳ Abbruch wird nach aktueller Lektion wirksam...")
                     elif data == "__freitext__":
                         send_message(TOKEN, CHAT_ID, "Bitte Antwort eintippen:")
                     elif _active_question_id:
