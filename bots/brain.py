@@ -13,7 +13,7 @@ if env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
-from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, edit_message_keyboard
+from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, edit_message_keyboard, transcribe_voice, normalize_voice
 from core.settings import load_settings, save_settings
 from core.state import load_registry, save_registry, load_plans
 
@@ -409,6 +409,14 @@ def main():
                 if chat_id != CHAT_ID:
                     continue
                 text = msg.get("text", "").strip()
+                if not text and "voice" in msg:
+                    try:
+                        raw = transcribe_voice(TOKEN, msg["voice"]["file_id"])
+                        text = normalize_voice(raw)
+                        send_message(TOKEN, CHAT_ID, f"🎤 {text}")
+                    except Exception as e:
+                        send_message(TOKEN, CHAT_ID, f"❌ Spracherkennung fehlgeschlagen: {e}")
+                        continue
                 if not text:
                     continue
 
@@ -494,7 +502,12 @@ def main():
                 elif t == "hilfe":
                     send_message(TOKEN, CHAT_ID, HILFE_TEXT)
                 else:
-                    send_message(TOKEN, CHAT_ID, f"Unbekannt: {text}\nTippe 'hilfe'")
+                    if not _brainstorming_active:
+                        _brainstorming_active = True
+                        send_message(TOKEN, CHAT_ID, "🧠 Brainstorming gestartet — Fragen kommen gleich")
+                        threading.Thread(target=_run_brainstorming, args=(text,), daemon=True).start()
+                    else:
+                        send_message(TOKEN, CHAT_ID, "⚠️ Brainstorming läuft bereits. Bitte warten.")
 
             q_path = WORK_DIR / "pending_question.json"
             if not _active_question_id and q_path.exists():

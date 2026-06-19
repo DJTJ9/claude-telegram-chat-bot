@@ -112,3 +112,40 @@ def test_proj_msg_id_state_exists():
     import bots.brain as brain
     assert hasattr(brain, "_proj_msg_id")
     assert isinstance(brain._proj_msg_id, dict)
+
+
+def test_voice_import_available():
+    from core.telegram import transcribe_voice, normalize_voice
+    assert callable(transcribe_voice)
+    assert callable(normalize_voice)
+
+
+def test_free_text_fallthrough_logic():
+    import bots.brain as brain
+    messages = []
+    brain._brainstorming_active = False
+    original_send = brain.send_message
+    brain.send_message = lambda *a, **kw: messages.append(a[2]) or 1
+    if not brain._brainstorming_active:
+        brain._brainstorming_active = True
+        brain.send_message(brain.TOKEN, brain.CHAT_ID, "🧠 Brainstorming gestartet — Fragen kommen gleich")
+    assert brain._brainstorming_active is True
+    assert any("Brainstorming" in m for m in messages)
+    brain.send_message = original_send
+    brain._brainstorming_active = False
+
+
+def test_free_text_fallthrough_blocked_when_active():
+    import bots.brain as brain
+    messages = []
+    brain._brainstorming_active = True
+    original_send = brain.send_message
+    brain.send_message = lambda *a, **kw: messages.append(a[2]) or 1
+    if not brain._brainstorming_active:
+        brain._brainstorming_active = True
+        brain.send_message(brain.TOKEN, brain.CHAT_ID, "🧠 Brainstorming gestartet — Fragen kommen gleich")
+    else:
+        brain.send_message(brain.TOKEN, brain.CHAT_ID, "⚠️ Brainstorming läuft bereits. Bitte warten.")
+    assert any("läuft bereits" in m for m in messages)
+    brain.send_message = original_send
+    brain._brainstorming_active = False
