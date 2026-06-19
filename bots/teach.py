@@ -228,7 +228,7 @@ def _run_teach(topic):
         f'Use python "{telegram_ask_path}" for ALL questions '
         f"(notifications_enabled is true — do not output anything to terminal)."
     )
-    cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
+    cmd = ["claude", "--allowedTools", "Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
 
     kb = [[{"text": "🛑 Abbrechen", "callback_data": "teach_abort"}]]
