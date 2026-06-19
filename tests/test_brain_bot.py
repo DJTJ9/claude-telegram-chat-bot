@@ -38,3 +38,54 @@ def test_edit_message_keyboard_calls_correct_endpoint():
     assert payload["chat_id"] == 123
     assert payload["message_id"] == 99
     assert payload["reply_markup"]["inline_keyboard"][0][0]["text"] == "A"
+
+
+def test_parse_backlog_returns_features(tmp_path, monkeypatch):
+    import bots.brain as brain
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    vision = tmp_path / "topics" / "my-app" / "VISION.md"
+    vision.parent.mkdir(parents=True)
+    vision.write_text(
+        "# My App\n\n## Features (Backlog)\n- [ ] Feature A\n- [x] Done Feature\n- [ ] Feature B\n\n## Architektur\n"
+    )
+    result = brain._parse_backlog("my-app")
+    assert result == ["Feature A", "Feature B"]
+
+
+def test_parse_backlog_no_vision(tmp_path, monkeypatch):
+    import bots.brain as brain
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    result = brain._parse_backlog("missing-slug")
+    assert result == []
+
+
+def test_parse_backlog_no_section(tmp_path, monkeypatch):
+    import bots.brain as brain
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    vision = tmp_path / "topics" / "my-app" / "VISION.md"
+    vision.parent.mkdir(parents=True)
+    vision.write_text("# My App\n\n## Ziel\nKein Backlog hier.\n")
+    result = brain._parse_backlog("my-app")
+    assert result == []
+
+
+def test_mark_feature_done(tmp_path, monkeypatch):
+    import bots.brain as brain
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    vision = tmp_path / "topics" / "my-app" / "VISION.md"
+    vision.parent.mkdir(parents=True)
+    vision.write_text("## Features\n- [ ] Feature A\n- [ ] Feature B\n")
+    brain._mark_feature_done("my-app", "Feature A")
+    content = vision.read_text()
+    assert "- [x] Feature A (geplant" in content
+    assert "- [ ] Feature B" in content
+
+
+def test_mark_feature_done_missing_feature(tmp_path, monkeypatch):
+    import bots.brain as brain
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    vision = tmp_path / "topics" / "my-app" / "VISION.md"
+    vision.parent.mkdir(parents=True)
+    vision.write_text("## Features\n- [ ] Feature A\n")
+    brain._mark_feature_done("my-app", "Nonexistent")
+    assert "- [ ] Feature A" in vision.read_text()

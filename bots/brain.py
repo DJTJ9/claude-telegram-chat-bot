@@ -88,6 +88,35 @@ def _format_plans_for_slug(slug):
     return "\n".join(lines)
 
 
+def _parse_backlog(slug):
+    vision_path = HUB_DIR / "topics" / slug / "VISION.md"
+    if not vision_path.exists():
+        return []
+    in_section = False
+    features = []
+    for line in vision_path.read_text(encoding="utf-8").splitlines():
+        if re.match(r"^## (features|backlog)", line, re.IGNORECASE):
+            in_section = True
+            continue
+        if in_section and line.startswith("## "):
+            break
+        if in_section and line.startswith("- [ ] "):
+            features.append(line[6:].strip())
+    return features
+
+
+def _mark_feature_done(slug, feature_text):
+    vision_path = HUB_DIR / "topics" / slug / "VISION.md"
+    if not vision_path.exists():
+        return
+    today = date.today().isoformat()
+    content = vision_path.read_text(encoding="utf-8")
+    vision_path.write_text(
+        content.replace(f"- [ ] {feature_text}", f"- [x] {feature_text} (geplant {today})", 1),
+        encoding="utf-8",
+    )
+
+
 def _show_projects():
     registry = load_registry()
     if not registry:
