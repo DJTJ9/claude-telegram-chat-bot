@@ -13,7 +13,7 @@ if env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
-from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query
+from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, edit_message_keyboard
 from core.settings import load_settings, save_settings
 from core.state import load_registry, save_registry, load_plans
 
@@ -36,6 +36,7 @@ _brainstorming_active = False
 _vision_active = False
 _pending_new_project: dict = {}
 _active_question_id = None
+_proj_msg_id: dict = {}  # chat_id → message_id of last project list message
 
 
 def _set_session(session_type):
@@ -117,18 +118,13 @@ def _mark_feature_done(slug, feature_text):
     )
 
 
-def _show_projects():
+def _project_list_keyboard():
     registry = load_registry()
-    if not registry:
-        buttons = [[{"text": "➕ Neues Projekt", "callback_data": "new_proj"}]]
-        return "Keine Projekte.", buttons
-    lines = ["📁 Projekte:"]
     buttons = []
     for proj in registry:
-        lines.append(f"• {proj['name']} ({proj['slug']})")
         buttons.append([{"text": proj["name"], "callback_data": f"proj_sel:{proj['slug']}"}])
     buttons.append([{"text": "➕ Neues Projekt", "callback_data": "new_proj"}])
-    return "\n".join(lines), buttons
+    return buttons
 
 
 def _run_vision(slug):
@@ -284,6 +280,8 @@ def _run_brainstorming(topic, basis_slug=None, project_slug=None):
         result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                 timeout=7200, cwd=exec_cwd, env=env)
         if result.returncode == 0:
+            if project_slug:
+                _mark_feature_done(project_slug, safe_topic)
             send_message(TOKEN, CHAT_ID, "✅ Brainstorming abgeschlossen")
         else:
             send_message(TOKEN, CHAT_ID, f"❌ Brainstorming fehlgeschlagen\n{(result.stderr or '')[-300:]}")
@@ -330,13 +328,31 @@ def main():
                         slug = data[9:]
                         registry = load_registry()
                         proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
-                        buttons = [[
-                            {"text": "🔭 Vision", "callback_data": f"proj_vis:{slug}"},
-                            {"text": "🧠 Brainstorming", "callback_data": f"proj_bs:{slug}"},
-                            {"text": "📋 Pläne", "callback_data": f"proj_plans:{slug}"},
-                        ]]
-                        send_message(TOKEN, CHAT_ID, f"📁 {proj['name']}\nWas möchtest du tun?",
-                                     reply_markup={"inline_keyboard": buttons})
+                        sub_buttons = [
+                            [
+                                {"text": "🔭 Vision", "callback_data": f"proj_vis:{slug}"},
+                                {"text": "🧠 Brainstorming", "callback_data": f"proj_bs:{slug}"},
+                            ],
+                            [{"text": "← Zurück", "callback_data": "proj_back"}],
+                        ]
+                        stored_msg_id = _proj_msg_id.get(CHAT_ID)
+                        if stored_msg_id:
+                            edit_message_keyboard(TOKEN, CHAT_ID, stored_msg_id, sub_buttons)
+                        else:
+                            mid = send_message(TOKEN, CHAT_ID, f"📁 {proj['name']}",
+                                               reply_markup={"inline_keyboard": sub_buttons})
+                            if mid:
+                                _proj_msg_id[CHAT_ID] = mid
+                    elif data == "proj_back":
+                        buttons = _project_list_keyboard()
+                        stored_msg_id = _proj_msg_id.get(CHAT_ID)
+                        if stored_msg_id:
+                            edit_message_keyboard(TOKEN, CHAT_ID, stored_msg_id, buttons)
+                        else:
+                            mid = send_message(TOKEN, CHAT_ID, "📁 Projekte:",
+                                               reply_markup={"inline_keyboard": buttons})
+                            if mid:
+                                _proj_msg_id[CHAT_ID] = mid
                     elif data.startswith("proj_vis:"):
                         slug = data[9:]
                         if _vision_active:
@@ -347,14 +363,30 @@ def main():
                             threading.Thread(target=_run_vision, args=(slug,), daemon=True).start()
                     elif data.startswith("proj_bs:"):
                         slug = data[8:]
-                        if _brainstorming_active:
-                            send_message(TOKEN, CHAT_ID, "⚠️ Brainstorming läuft bereits.")
+                        features = _parse_backlog(slug)
+                        if not features:
+                            send_message(TOKEN, CHAT_ID,
+                                         f"Kein Backlog für {slug}. Starte zuerst eine Vision-Session.")
                         else:
-                            _pending_new_project[CHAT_ID] = {"state": "await_bs_topic", "slug": slug}
-                            send_message(TOKEN, CHAT_ID, "Welches Feature soll gebrainstormt werden?")
-                    elif data.startswith("proj_plans:"):
-                        slug = data[11:]
-                        send_message(TOKEN, CHAT_ID, _format_plans_for_slug(slug))
+                            buttons = []
+                            for i, feat in enumerate(features[:10]):
+                                label = (feat[:40] + "…") if len(feat) > 40 else feat
+                                buttons.append([{"text": label, "callback_data": f"backlog_feat:{slug}:{i}"}])
+                            send_message(TOKEN, CHAT_ID, "Welches Feature brainstormen?",
+                                         reply_markup={"inline_keyboard": buttons})
+                    elif data.startswith("backlog_feat:"):
+                        _, slug, idx_str = data.split(":", 2)
+                        features = _parse_backlog(slug)
+                        idx = int(idx_str)
+                        if idx >= len(features):
+                            send_message(TOKEN, CHAT_ID, "⚠️ Feature nicht mehr im Backlog.")
+                        elif _brainstorming_active:
+                            send_message(TOKEN, CHAT_ID, "⚠️ Brainstorming läuft bereits. Bitte warten.")
+                        else:
+                            feature = features[idx]
+                            _brainstorming_active = True
+                            send_message(TOKEN, CHAT_ID, f"🧠 Brainstorming: {feature}")
+                            threading.Thread(target=_run_brainstorming, args=(feature, None, slug), daemon=True).start()
                     elif data.startswith("npth_a:"):
                         slug = data[7:]
                         state_data = _pending_new_project.pop(CHAT_ID, {})
@@ -409,15 +441,6 @@ def main():
                         name = state_data["name"]
                         del _pending_new_project[chat_id]
                         _create_project_entry(slug, name, path=text.strip())
-                    elif state == "await_bs_topic":
-                        slug = state_data["slug"]
-                        del _pending_new_project[chat_id]
-                        if _brainstorming_active:
-                            send_message(TOKEN, CHAT_ID, "⚠️ Brainstorming läuft bereits.")
-                        else:
-                            _brainstorming_active = True
-                            send_message(TOKEN, CHAT_ID, f"🧠 Brainstorming für {slug}: {text}")
-                            threading.Thread(target=_run_brainstorming, args=(text, None, slug), daemon=True).start()
                     continue
 
                 t = text.lower()
@@ -462,8 +485,10 @@ def main():
                             send_message(TOKEN, CHAT_ID, f"🔭 Vision-Session für {proj['name']} gestartet — Fragen kommen gleich")
                             threading.Thread(target=_run_vision, args=(proj["slug"],), daemon=True).start()
                 elif t == "projekte":
-                    text_out, buttons = _show_projects()
-                    send_message(TOKEN, CHAT_ID, text_out, reply_markup={"inline_keyboard": buttons})
+                    buttons = _project_list_keyboard()
+                    mid = send_message(TOKEN, CHAT_ID, "📁 Projekte:", reply_markup={"inline_keyboard": buttons})
+                    if mid:
+                        _proj_msg_id[CHAT_ID] = mid
                 elif t == "/specs":
                     send_message(TOKEN, CHAT_ID, _format_specs())
                 elif t == "hilfe":

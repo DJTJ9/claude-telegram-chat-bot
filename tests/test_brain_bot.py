@@ -89,3 +89,26 @@ def test_mark_feature_done_missing_feature(tmp_path, monkeypatch):
     vision.write_text("## Features\n- [ ] Feature A\n")
     brain._mark_feature_done("my-app", "Nonexistent")
     assert "- [ ] Feature A" in vision.read_text()
+
+
+def test_project_list_keyboard_structure(tmp_path, monkeypatch):
+    import bots.brain as brain
+    import core.state as st
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    monkeypatch.setattr(st, "HUB_DIR", str(tmp_path))
+    registry_path = tmp_path / "projects-registry.json"
+    registry_path.write_text(json.dumps([
+        {"slug": "app-a", "name": "App A", "path": "", "repo": "", "description": ""},
+        {"slug": "app-b", "name": "App B", "path": "", "repo": "", "description": ""},
+    ]))
+    kb = brain._project_list_keyboard()
+    slugs = [row[0]["callback_data"] for row in kb[:-1]]
+    assert "proj_sel:app-a" in slugs
+    assert "proj_sel:app-b" in slugs
+    assert kb[-1][0]["callback_data"] == "new_proj"
+
+
+def test_proj_msg_id_state_exists():
+    import bots.brain as brain
+    assert hasattr(brain, "_proj_msg_id")
+    assert isinstance(brain._proj_msg_id, dict)
