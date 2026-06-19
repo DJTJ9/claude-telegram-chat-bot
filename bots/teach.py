@@ -21,11 +21,6 @@ WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
 TEACH_DIR = Path(os.environ.get("TEACH_DIR", str(PROJECT_DIR.parent / "teach")))
 
 PAGES_BASE = "https://djtj9.github.io/teach-lessons"
-COURSE_NAMES = {
-    "cli-notion-agent":  "Kurs: CLI Notion Agent",
-    "projekt-planung":   "Kurs: Projekt-Planung",
-    "python-grundlagen": "Kurs: Python Grundlagen",
-}
 
 HILFE_TEXT = """📚 Teach Bot
 
@@ -107,7 +102,8 @@ def _clear_session():
     save_settings(s)
 
 
-def _update_index_html(lesson_path):
+def _update_index_html(lesson_path, teach_dir=None):
+    base = teach_dir or TEACH_DIR
     parts = lesson_path.replace("\\", "/").split("/")
     if len(parts) < 3:
         return
@@ -118,8 +114,9 @@ def _update_index_html(lesson_path):
         return
     num = m.group(1)
 
-    title = filename.replace(".html", "").replace("-", " ").title()
-    html_file = TEACH_DIR / lesson_path.replace("/", os.sep)
+    display_name = course_slug.replace("-", " ").title()
+    title = display_name
+    html_file = base / lesson_path.replace("/", os.sep)
     try:
         with open(html_file, encoding="utf-8") as f:
             for line in f:
@@ -134,19 +131,20 @@ def _update_index_html(lesson_path):
     href = lesson_path.replace("\\", "/")
     new_li = f'  <li><span class="num">{num}</span><a href="{href}">{title}</a></li>\n'
 
-    section_header = COURSE_NAMES.get(course_slug)
-    if not section_header:
-        return
-
-    index_path = TEACH_DIR / "index.html"
+    index_path = base / "index.html"
     with open(index_path, encoding="utf-8") as f:
         content = f.read()
 
-    h2_pos = content.find(f"<h2>{section_header}</h2>")
-    if h2_pos == -1:
-        return
     if href in content:
         return
+
+    h2_tag = f"<h2>{display_name}</h2>"
+    h2_pos = content.find(h2_tag)
+    if h2_pos == -1:
+        new_section = f"\n<h2>{display_name}</h2>\n<ul>\n</ul>\n"
+        content = content.replace("</body>", new_section + "</body>")
+        h2_pos = content.find(h2_tag)
+
     ul_close = content.find("</ul>", h2_pos)
     if ul_close == -1:
         return

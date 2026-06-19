@@ -12,6 +12,7 @@ from bots.teach import (
     _get_topics,
     _build_lessons_keyboard,
     _send_lesson_list,
+    _update_index_html,
 )
 
 
@@ -88,6 +89,53 @@ def test_send_lesson_list_format(tmp_path):
     assert "Erste Schritte" in msg
     assert "https://djtj9.github.io/teach-lessons/python-grundlagen/lessons/lektion-01-erste-schritte.html" in msg
     assert "Variablen" in msg
+
+MINIMAL_INDEX = """\
+<!DOCTYPE html>
+<html><body>
+<h2>Python Grundlagen</h2>
+<ul>
+</ul>
+</body></html>"""
+
+def test_update_index_adds_li_to_existing_section(tmp_path):
+    index = tmp_path / "index.html"
+    index.write_text(MINIMAL_INDEX, encoding="utf-8")
+    (tmp_path / "python-grundlagen" / "lessons").mkdir(parents=True)
+    (tmp_path / "python-grundlagen" / "lessons" / "lektion-01-erste-schritte.html").write_text(
+        "<title>Lektion 1 – Erste Schritte</title>", encoding="utf-8"
+    )
+    _update_index_html("python-grundlagen/lessons/lektion-01-erste-schritte.html", teach_dir=tmp_path)
+    content = index.read_text(encoding="utf-8")
+    assert 'href="python-grundlagen/lessons/lektion-01-erste-schritte.html"' in content
+    assert "Erste Schritte" in content
+
+def test_update_index_creates_new_section_for_unknown_course(tmp_path):
+    index = tmp_path / "index.html"
+    index.write_text("<!DOCTYPE html><html><body></body></html>", encoding="utf-8")
+    (tmp_path / "neuer-kurs" / "lessons").mkdir(parents=True)
+    (tmp_path / "neuer-kurs" / "lessons" / "lektion-01-intro.html").write_text("", encoding="utf-8")
+    _update_index_html("neuer-kurs/lessons/lektion-01-intro.html", teach_dir=tmp_path)
+    content = index.read_text(encoding="utf-8")
+    assert "<h2>Neuer Kurs</h2>" in content
+    assert 'href="neuer-kurs/lessons/lektion-01-intro.html"' in content
+
+def test_update_index_no_duplicate(tmp_path):
+    existing = """\
+<!DOCTYPE html><html><body>
+<h2>Python Grundlagen</h2>
+<ul>
+  <li><a href="python-grundlagen/lessons/lektion-01-erste-schritte.html">Erste Schritte</a></li>
+</ul>
+</body></html>"""
+    index = tmp_path / "index.html"
+    index.write_text(existing, encoding="utf-8")
+    (tmp_path / "python-grundlagen" / "lessons").mkdir(parents=True)
+    (tmp_path / "python-grundlagen" / "lessons" / "lektion-01-erste-schritte.html").write_text("", encoding="utf-8")
+    _update_index_html("python-grundlagen/lessons/lektion-01-erste-schritte.html", teach_dir=tmp_path)
+    content = index.read_text(encoding="utf-8")
+    assert content.count('href="python-grundlagen/lessons/lektion-01-erste-schritte.html"') == 1
+
 
 def test_send_lesson_list_empty(tmp_path):
     (tmp_path / "python-grundlagen" / "lessons").mkdir(parents=True)
