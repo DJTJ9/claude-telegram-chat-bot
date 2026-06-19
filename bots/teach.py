@@ -12,7 +12,7 @@ if env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
-from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query
+from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, transcribe_voice, normalize_voice
 from core.settings import load_settings, save_settings
 
 TOKEN = os.environ["TOKEN_TEACH"]
@@ -322,6 +322,14 @@ def main():
                 if chat_id != CHAT_ID:
                     continue
                 text = msg.get("text", "").strip()
+                if not text and "voice" in msg:
+                    try:
+                        raw = transcribe_voice(TOKEN, msg["voice"]["file_id"])
+                        text = normalize_voice(raw)
+                        send_message(TOKEN, CHAT_ID, f"🎤 {text}")
+                    except Exception as e:
+                        send_message(TOKEN, CHAT_ID, f"❌ Spracherkennung fehlgeschlagen: {e}")
+                        continue
                 if not text:
                     continue
 
