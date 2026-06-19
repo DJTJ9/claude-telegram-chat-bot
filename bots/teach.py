@@ -73,12 +73,16 @@ def _send_lesson_list(slug: str, teach_dir=None) -> None:
     if not files:
         send_message(TOKEN, CHAT_ID, f"Keine Lektionen für {label} gefunden.")
         return
-    parts = [f"📚 {label} — {len(files)} Lektionen:"]
+    buttons = []
     for i, fname in enumerate(files, 1):
         title = _lesson_title_from_filename(fname)
         url = f"{PAGES_BASE}/{slug}/lessons/{fname}"
-        parts.append(f"\n{i}. {title}\n   {url}")
-    send_message(TOKEN, CHAT_ID, "\n".join(parts))
+        buttons.append([{"text": f"{i}. {title}", "url": url}])
+    send_message(
+        TOKEN, CHAT_ID,
+        f"📚 {label} — {len(files)} Lektionen:",
+        reply_markup={"inline_keyboard": buttons},
+    )
 
 
 _active_question_id = None

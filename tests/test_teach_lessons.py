@@ -79,16 +79,20 @@ def test_send_lesson_list_format(tmp_path):
     (lessons / "lektion-01-erste-schritte.html").write_text("")
     (lessons / "lektion-02-variablen.html").write_text("")
 
-    sent = []
-    with patch("bots.teach.send_message", lambda tok, cid, text, **kw: sent.append(text)):
+    sent_kwargs = []
+    with patch("bots.teach.send_message", lambda tok, cid, text, **kw: sent_kwargs.append((text, kw))):
         _send_lesson_list("python-grundlagen", teach_dir=tmp_path)
 
-    msg = sent[0]
-    assert "Python Grundlagen" in msg
-    assert "2 Lektionen" in msg
-    assert "Erste Schritte" in msg
-    assert "https://djtj9.github.io/teach-lessons/python-grundlagen/lessons/lektion-01-erste-schritte.html" in msg
-    assert "Variablen" in msg
+    text, kw = sent_kwargs[0]
+    assert "Python Grundlagen" in text
+    assert "2 Lektionen" in text
+    kb = kw["reply_markup"]["inline_keyboard"]
+    assert len(kb) == 2
+    btn1 = kb[0][0]
+    assert btn1["url"] == "https://djtj9.github.io/teach-lessons/python-grundlagen/lessons/lektion-01-erste-schritte.html"
+    assert "Erste Schritte" in btn1["text"]
+    btn2 = kb[1][0]
+    assert btn2["url"] == "https://djtj9.github.io/teach-lessons/python-grundlagen/lessons/lektion-02-variablen.html"
 
 MINIMAL_INDEX = """\
 <!DOCTYPE html>
