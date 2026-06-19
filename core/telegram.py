@@ -22,11 +22,22 @@ def send_message(token, chat_id, text, reply_markup=None):
     payload = {"chat_id": chat_id, "text": text}
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    requests.post(f"{_base(token)}/sendMessage", json=payload)
+    r = requests.post(f"{_base(token)}/sendMessage", json=payload)
+    return r.json().get("result", {}).get("message_id")
 
 def answer_callback_query(token, callback_query_id):
     requests.post(f"{_base(token)}/answerCallbackQuery",
                   json={"callback_query_id": callback_query_id})
+
+def edit_message_keyboard(token, chat_id, message_id, inline_keyboard):
+    requests.post(
+        f"{_base(token)}/editMessageReplyMarkup",
+        json={
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "reply_markup": {"inline_keyboard": inline_keyboard},
+        },
+    )
 
 def build_inline_keyboard(question):
     """Parse question text and return InlineKeyboardMarkup rows."""
