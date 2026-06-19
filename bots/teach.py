@@ -197,6 +197,7 @@ def publish_new_lessons() -> int:
             line[3:].strip()
             for line in result.stdout.strip().splitlines()
             if len(line) > 3 and "/lessons/" in line and line[3:].strip().endswith(".html")
+            and line[:2] in ("??", "A ", "AM", "M ", " M")
         ]
         if not new_lessons:
             return 0
@@ -222,11 +223,22 @@ def _run_teach(topic):
     _set_session()
     safe_topic = topic[:500]
     telegram_ask_path = WORK_DIR / "scripts" / "telegram_ask.py"
+    settings = load_settings()
+    if settings.get("notifications_enabled"):
+        question_instruction = (
+            f'Use python "{telegram_ask_path}" for ALL questions '
+            f"(notifications_enabled is true — do not output anything to terminal)."
+        )
+    else:
+        question_instruction = (
+            "notifications_enabled is false — do NOT use telegram_ask.py. "
+            "Skip all clarifying questions. Assume beginner level. "
+            "Immediately write all lessons (6-8 lessons) without waiting for user input."
+        )
     prompt = (
         f"Invoke the /teach skill. "
         f"Topic and context from user: {safe_topic}. "
-        f'Use python "{telegram_ask_path}" for ALL questions '
-        f"(notifications_enabled is true — do not output anything to terminal)."
+        f"{question_instruction}"
     )
     cmd = ["claude", "--allowedTools", "Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
