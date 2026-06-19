@@ -25,10 +25,12 @@ ABORT_SIGNAL = WORK_DIR / ".teach_abort"
 
 HILFE_TEXT = """📚 Teach Bot
 
-teach: <thema + warum> — Lernkurs erstellen oder planen
-  z.B. teach: Python Grundlagen, weil ich Skripte automatisieren will
+Schreib einfach was du lernen willst — z.B.:
+  "Python lernen, weil ich Skripte schreiben will"
+  "SQL Grundlagen für Datenbankabfragen"
+
 lessons: — Alle Lernthemen anzeigen
-hilfe — Diese Hilfe"""
+hilfe    — Diese Hilfe"""
 
 
 def _lesson_title_from_filename(filename: str) -> str:
@@ -331,15 +333,7 @@ def main():
 
                 t = text.lower()
 
-                if t.startswith("/teach") or t.startswith("teach:"):
-                    topic = text.split(":", 1)[1].strip() if ":" in text else text[6:].strip()
-                    if not topic:
-                        send_message(TOKEN, CHAT_ID,
-                            "Nutzung: teach: <thema + warum>\nz.B. teach: Python Grundlagen, weil ich Skripte automatisieren will")
-                    else:
-                        send_message(TOKEN, CHAT_ID, "📚 Teach-Session gestartet — Fragen kommen gleich über den Chat")
-                        threading.Thread(target=_run_teach, args=(topic,), daemon=True).start()
-                elif t.startswith("/lessons") or t.startswith("lessons:") or t == "lessons":
+                if t.startswith("/lessons") or t.startswith("lessons:") or t == "lessons":
                     topics = _get_topics()
                     if not topics:
                         send_message(TOKEN, CHAT_ID, "Noch keine Lektionen vorhanden.")
@@ -350,7 +344,7 @@ def main():
                 elif t == "hilfe":
                     send_message(TOKEN, CHAT_ID, HILFE_TEXT)
                 else:
-                    send_message(TOKEN, CHAT_ID, f"Unbekannt: {text}\nTippe 'hilfe'")
+                    threading.Thread(target=_run_teach, args=(text,), daemon=True).start()
 
             q_path = WORK_DIR / "pending_question.json"
             if not _active_question_id and q_path.exists():
