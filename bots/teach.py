@@ -158,7 +158,33 @@ def _update_index_html(lesson_path, teach_dir=None):
         f.write(content)
 
 
-def publish_new_lessons():
+def _inject_lesson_navigation(course_slug, teach_dir=None):
+    base = teach_dir or TEACH_DIR
+    lessons_dir = base / course_slug / "lessons"
+    files = sorted(f.name for f in lessons_dir.glob("*.html"))
+    if not files:
+        return
+    for i, fname in enumerate(files):
+        fpath = lessons_dir / fname
+        try:
+            content = fpath.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        if "<footer>" not in content:
+            continue
+        parts = []
+        if i > 0:
+            parts.append(f'<a href="{files[i-1]}">← Lektion {i}</a>')
+        if i < len(files) - 1:
+            parts.append(f'<a href="{files[i+1]}">Weiter: Lektion {i+2} →</a>')
+        else:
+            parts.append("✅ Kurs abgeschlossen")
+        new_footer = f'<footer>{" &nbsp;|&nbsp; ".join(parts)}</footer>'
+        content = re.sub(r"<footer>.*?</footer>", new_footer, content, flags=re.DOTALL)
+        fpath.write_text(content, encoding="utf-8")
+
+
+def publish_new_lessons() -> int:
     try:
         result = subprocess.run(
             ["git", "-C", str(TEACH_DIR), "status", "--porcelain"],
@@ -170,9 +196,12 @@ def publish_new_lessons():
             if len(line) > 3 and "/lessons/" in line and line[3:].strip().endswith(".html")
         ]
         if not new_lessons:
-            return
+            return 0
         for p in new_lessons:
             _update_index_html(p)
+        course_slugs = {p.split("/")[0] for p in new_lessons}
+        for slug in course_slugs:
+            _inject_lesson_navigation(slug)
         subprocess.run(["git", "-C", str(TEACH_DIR), "add", "."], capture_output=True)
         names = ", ".join(os.path.basename(p) for p in new_lessons)
         subprocess.run(
@@ -180,10 +209,10 @@ def publish_new_lessons():
             capture_output=True, text=True, encoding="utf-8"
         )
         subprocess.run(["git", "-C", str(TEACH_DIR), "push"], capture_output=True)
-        urls = "\n".join(f"{PAGES_BASE}/{p}" for p in new_lessons)
-        send_message(TOKEN, CHAT_ID, f"📚 Neue Lektion verfügbar:\n{urls}")
+        return len(new_lessons)
     except Exception as e:
         print(f"publish_new_lessons error: {e}")
+        return 0
 
 
 def _run_teach(topic):

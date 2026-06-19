@@ -13,6 +13,7 @@ from bots.teach import (
     _build_lessons_keyboard,
     _send_lesson_list,
     _update_index_html,
+    _inject_lesson_navigation,
 )
 
 
@@ -147,3 +148,61 @@ def test_send_lesson_list_empty(tmp_path):
     with patch("bots.teach.send_message", lambda tok, cid, text, **kw: sent.append(text)):
         _send_lesson_list("python-grundlagen", teach_dir=tmp_path)
     assert "Keine Lektionen" in sent[0]
+
+
+# --- _inject_lesson_navigation ---
+
+FOOTER_HTML = """\
+<!DOCTYPE html><html><body>
+<footer>Weiter: <strong>Lektion 02</strong></footer>
+</body></html>"""
+
+def test_inject_nav_first_lesson_has_only_next(tmp_path):
+    lessons = tmp_path / "my-kurs" / "lessons"
+    lessons.mkdir(parents=True)
+    (lessons / "lektion-01-intro.html").write_text(FOOTER_HTML, encoding="utf-8")
+    (lessons / "lektion-02-vertiefung.html").write_text(FOOTER_HTML, encoding="utf-8")
+    _inject_lesson_navigation("my-kurs", teach_dir=tmp_path)
+    content = (lessons / "lektion-01-intro.html").read_text(encoding="utf-8")
+    assert 'href="lektion-02-vertiefung.html"' in content
+    assert "←" not in content
+
+def test_inject_nav_last_lesson_shows_done(tmp_path):
+    lessons = tmp_path / "my-kurs" / "lessons"
+    lessons.mkdir(parents=True)
+    (lessons / "lektion-01-intro.html").write_text(FOOTER_HTML, encoding="utf-8")
+    (lessons / "lektion-02-vertiefung.html").write_text(FOOTER_HTML, encoding="utf-8")
+    _inject_lesson_navigation("my-kurs", teach_dir=tmp_path)
+    content = (lessons / "lektion-02-vertiefung.html").read_text(encoding="utf-8")
+    assert "Kurs abgeschlossen" in content
+    assert 'href="lektion-01-intro.html"' in content
+
+def test_inject_nav_middle_lesson_has_both(tmp_path):
+    lessons = tmp_path / "my-kurs" / "lessons"
+    lessons.mkdir(parents=True)
+    for name in ["lektion-01-a.html", "lektion-02-b.html", "lektion-03-c.html"]:
+        (lessons / name).write_text(FOOTER_HTML, encoding="utf-8")
+    _inject_lesson_navigation("my-kurs", teach_dir=tmp_path)
+    content = (lessons / "lektion-02-b.html").read_text(encoding="utf-8")
+    assert 'href="lektion-01-a.html"' in content
+    assert 'href="lektion-03-c.html"' in content
+
+def test_inject_nav_skips_file_without_footer(tmp_path):
+    lessons = tmp_path / "my-kurs" / "lessons"
+    lessons.mkdir(parents=True)
+    (lessons / "lektion-01-a.html").write_text("<html><body>no footer</body></html>", encoding="utf-8")
+    (lessons / "lektion-02-b.html").write_text(FOOTER_HTML, encoding="utf-8")
+    _inject_lesson_navigation("my-kurs", teach_dir=tmp_path)
+    content = (lessons / "lektion-01-a.html").read_text(encoding="utf-8")
+    assert "<footer>" not in content
+
+def test_inject_nav_idempotent(tmp_path):
+    lessons = tmp_path / "my-kurs" / "lessons"
+    lessons.mkdir(parents=True)
+    (lessons / "lektion-01-intro.html").write_text(FOOTER_HTML, encoding="utf-8")
+    (lessons / "lektion-02-end.html").write_text(FOOTER_HTML, encoding="utf-8")
+    _inject_lesson_navigation("my-kurs", teach_dir=tmp_path)
+    first_run = (lessons / "lektion-01-intro.html").read_text(encoding="utf-8")
+    _inject_lesson_navigation("my-kurs", teach_dir=tmp_path)
+    second_run = (lessons / "lektion-01-intro.html").read_text(encoding="utf-8")
+    assert first_run == second_run
