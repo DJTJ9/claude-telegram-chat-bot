@@ -193,12 +193,21 @@ def publish_new_lessons() -> int:
             ["git", "-C", str(TEACH_DIR), "status", "--porcelain"],
             capture_output=True, text=True, encoding="utf-8"
         )
-        new_lessons = [
-            line[3:].strip()
-            for line in result.stdout.strip().splitlines()
-            if len(line) > 3 and "/lessons/" in line and line[3:].strip().endswith(".html")
-            and line[:2] in ("??", "A ", "AM", "M ", " M")
-        ]
+        new_lessons = []
+        for line in result.stdout.strip().splitlines():
+            if len(line) <= 3:
+                continue
+            status = line[:2]
+            path = line[3:].strip()
+            if status not in ("??", "A ", "AM", "M ", " M"):
+                continue
+            if "/lessons/" in path and path.endswith(".html"):
+                new_lessons.append(path)
+            elif status == "??" and path.endswith("/"):
+                # Untracked directory — expand to find lesson files inside
+                dir_path = TEACH_DIR / path.rstrip("/")
+                for f in dir_path.glob("lessons/*.html"):
+                    new_lessons.append(str(f.relative_to(TEACH_DIR)))
         if not new_lessons:
             return 0
         for p in new_lessons:
@@ -233,7 +242,7 @@ def _run_teach(topic):
         question_instruction = (
             "notifications_enabled is false — do NOT use telegram_ask.py. "
             "Skip all clarifying questions. Assume beginner level. "
-            "Immediately write all lessons (6-8 lessons) without waiting for user input."
+            "Immediately write exactly 4 concise lessons (max 400 words each) without waiting for user input."
         )
     prompt = (
         f"Invoke the /teach skill. "
