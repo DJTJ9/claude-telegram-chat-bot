@@ -238,9 +238,12 @@ def _run_teach(topic):
     prompt = (
         f"Invoke the /teach skill. "
         f"Topic and context from user: {safe_topic}. "
-        f"{question_instruction}"
+        f"{question_instruction} "
+        f"IMPORTANT: After writing all lesson HTML files, STOP. "
+        f"Do NOT run git commands. Do NOT call telegram_notify.py. "
+        f"The calling process handles git commit, push, and user notification."
     )
-    cmd = ["claude", "--allowedTools", "Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch", "-p", prompt]
+    cmd = ["claude", "--allowedTools", "Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,Skill", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
 
     kb = [[{"text": "🛑 Abbrechen", "callback_data": "teach_abort"}]]
