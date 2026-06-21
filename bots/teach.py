@@ -187,7 +187,10 @@ def _inject_lesson_navigation(course_slug, teach_dir=None):
         fpath.write_text(content, encoding="utf-8")
 
 
-def publish_new_lessons() -> int:
+PAGES_BASE_URL = "https://djtj9.github.io/teach-lessons"
+
+
+def publish_new_lessons() -> tuple[int, list[str]]:
     try:
         result = subprocess.run(
             ["git", "-C", str(TEACH_DIR), "status", "--porcelain"],
@@ -206,10 +209,10 @@ def publish_new_lessons() -> int:
             elif status == "??" and path.endswith("/"):
                 # Untracked directory — expand to find lesson files inside
                 dir_path = TEACH_DIR / path.rstrip("/")
-                for f in dir_path.glob("lessons/*.html"):
+                for f in sorted(dir_path.glob("lessons/*.html")):
                     new_lessons.append(str(f.relative_to(TEACH_DIR)))
         if not new_lessons:
-            return 0
+            return 0, []
         for p in new_lessons:
             _update_index_html(p)
         course_slugs = {p.split("/")[0] for p in new_lessons}
@@ -222,10 +225,10 @@ def publish_new_lessons() -> int:
             capture_output=True, text=True, encoding="utf-8"
         )
         subprocess.run(["git", "-C", str(TEACH_DIR), "push"], capture_output=True)
-        return len(new_lessons)
+        return len(new_lessons), new_lessons
     except Exception as e:
         print(f"publish_new_lessons error: {e}")
-        return 0
+        return 0, []
 
 
 def _run_teach(topic):
@@ -290,14 +293,16 @@ def _run_teach(topic):
         finally:
             t.join(timeout=3)
 
-        count = publish_new_lessons()
+        count, lesson_paths = publish_new_lessons()
+
+        if count > 0:
+            url_lines = "\n".join(f"• {PAGES_BASE_URL}/{p.replace(chr(92), '/')}" for p in lesson_paths)
+            send_message(TOKEN, CHAT_ID, f"📚 {count} Lektion(en) verfügbar:\n{url_lines}")
 
         if aborted:
-            send_message(TOKEN, CHAT_ID,
-                         f"🛑 Abgebrochen — {count} Lektion(en) gespeichert — tippe 'lessons' zum Öffnen")
+            send_message(TOKEN, CHAT_ID, f"🛑 Abgebrochen — {count} Lektion(en) gespeichert")
         elif proc.returncode == 0:
-            send_message(TOKEN, CHAT_ID,
-                         f"✅ {count} Lektion(en) erstellt — tippe 'lessons' zum Öffnen")
+            send_message(TOKEN, CHAT_ID, f"✅ Fertig — tippe 'lessons' zum Öffnen")
         else:
             send_message(TOKEN, CHAT_ID,
                          f"❌ Teach-Session fehlgeschlagen\n{(stderr or '')[-300:]}")
