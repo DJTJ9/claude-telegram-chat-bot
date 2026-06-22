@@ -38,6 +38,12 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 question = sys.argv[1]
+
+from core import session_manager as _sm
+_comment = _sm.read_and_clear_comment()
+if _comment:
+    question = f"{question}\n\n💬 Nutzerkommentar: {_comment}"
+
 request_id = str(uuid.uuid4())[:8]
 chat_id = get_chat_id()
 
