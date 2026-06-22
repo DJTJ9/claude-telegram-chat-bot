@@ -414,6 +414,48 @@ Nutzer-Eingabe: "<taskname> <feld> <wert>"
 Antworte NUR mit: ✏️ <Task-Name> · <Feld> → <Wert>
 Falls nicht gefunden: ❌ Task nicht gefunden: "<Eingabe>" """
 
+PRIO_ICONS = {"Hoch": "🔴", "Mittel": "🟡", "Niedrig": "🟢"}
+
+callback_state: dict = {}   # {chat_id: {action, page_id, task_name, field?, msg_id?}}
+vs_state: dict = {}         # {chat_id: {pending, selected, tasks}}
+
+
+def _extract_name_from_message(text: str) -> str:
+    first_line = text.split("\n")[0].strip()
+    for icon in ("🔴 ", "🟡 ", "🟢 ", "⏳ ", "⚠️ ", "🔄 "):
+        if first_line.startswith(icon):
+            first_line = first_line[len(icon):]
+            break
+    if "  →" in first_line:
+        first_line = first_line[:first_line.index("  →")]
+    return first_line.strip()
+
+
+def _resolve_date_key(key: str, today: str) -> str:
+    d = date.fromisoformat(today)
+    offsets = {"heute": 0, "morgen": 1, "uebermorgen": 2, "naechste_woche": 7}
+    return (d + timedelta(days=offsets.get(key, 0))).isoformat()
+
+
+def _resolve_value(field: str, value_key: str, today: str) -> str:
+    if field == "prio":
+        return {"hoch": "Hoch", "mittel": "Mittel", "niedrig": "Niedrig"}.get(value_key, value_key)
+    if field == "bereich":
+        return {"arbeit": "Arbeit", "privat": "Privat",
+                "lernen": "Lernen", "gesundheit": "Gesundheit"}.get(value_key, value_key)
+    if field == "datum":
+        return _resolve_date_key(value_key, today)
+    return value_key
+
+
+def _task_buttons(page_id: str) -> list:
+    return [[
+        {"text": "✅ Erledigt",    "callback_data": f"done:{page_id}"},
+        {"text": "📅 Verschieben", "callback_data": f"reschedule:{page_id}"},
+        {"text": "✏️ Bearbeiten",  "callback_data": f"edit:{page_id}"},
+    ]]
+
+
 conversation_history: dict = {}
 pending_task_input: dict = {}
 
