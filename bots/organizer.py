@@ -33,7 +33,8 @@ REPLY_KEYBOARD = {
         ["moin", "abend"],
         ["task:", "status:"],
         ["woche", "fokus:"],
-        ["verschieben:", "hilfe"],
+        ["verschieben:", "edit:"],
+        ["hilfe"],
         ["backlog"],
     ],
     "resize_keyboard": True,
@@ -57,6 +58,7 @@ HILFE_TEXT = """📋 Organizer Bot
   backlog: <text> — Undatierte Aufgabe speichern
   backlog — Alle offenen Backlog-Tasks anzeigen
   status: <name> <status> — Status ändern
+  edit: <task> <feld> <wert> — Task bearbeiten (prio/datum/bereich/notiz)
   verschieben: <datum> — Offene Tasks verschieben
 
 📚 Listen
@@ -756,6 +758,39 @@ def _handle_callback(cq: dict) -> None:
             _run_vs_bulk(chat_id, _resolve_date_key(date_key, today), today)
 
 
+def _dispatch_command(text: str, chat_id: int) -> None:
+    today = date.today().isoformat()
+    t = text.lower().strip()
+
+    if t in ("moin", "morgen", "guten morgen"):
+        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=MOIN_JSON_SYSTEM_PROMPT)
+        try:
+            data = json.loads(raw)
+            _send_moin_messages(data)
+        except (json.JSONDecodeError, KeyError, ValueError):
+            response = run_claude(f"Heute ist {today}.", system_prompt=MOIN_SYSTEM_PROMPT)
+            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+
+    elif t in ("abend", "feierabend", "guten abend"):
+        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=ABEND_JSON_SYSTEM_PROMPT)
+        try:
+            data = json.loads(raw)
+            _send_abend_messages(data)
+        except (json.JSONDecodeError, KeyError, ValueError):
+            response = run_claude(f"Heute ist {today}.", system_prompt=ABEND_SYSTEM_PROMPT)
+            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+
+    elif t.startswith("edit:"):
+        edit_text = text[5:].strip()
+        if not edit_text:
+            send_message(TOKEN, chat_id,
+                         "Nutzung: edit: <task> <feld> <wert>\nz.B.: edit: PR Review prio Hoch",
+                         reply_markup=REPLY_KEYBOARD)
+        else:
+            response = run_claude(f"Heute ist {today}. {edit_text}", system_prompt=EDIT_SYSTEM_PROMPT)
+            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+
+
 def _add_reminder(text, due_iso):
     reminders = load_reminders()
     reminders.append({
@@ -942,6 +977,8 @@ def main():
                     answer_callback_query(TOKEN, cq["id"])
                     if cq.get("data") == "__freitext__":
                         send_message(TOKEN, CHAT_ID, "Bitte Antwort eintippen:")
+                    else:
+                        _handle_callback(cq)
                     continue
 
                 msg = upd.get("message", {})
@@ -965,6 +1002,36 @@ def main():
 
                 today = date.today().isoformat()
 
+                if chat_id in callback_state and text:
+                    cb = callback_state[chat_id]
+                    _is_interrupt = (
+                        text.lower() in ("moin", "abend", "woche", "hilfe", "erinnerungen", "/plans", "backlog")
+                        or any(text.lower().startswith(p) for p in (
+                            "task:", "status:", "fokus:", "verschieben:", "lern:", "idee:",
+                            "habit:", "termin:", "erinnere", "erinnerung:", "implement-plan:",
+                            "abort-plan:", "backlog:", "suche:", "impl-mode:", "edit:"))
+                    )
+                    if _is_interrupt:
+                        del callback_state[chat_id]
+                    elif cb["action"] == "edit_text":
+                        del callback_state[chat_id]
+                        _apply_task_update(cb["page_id"], cb["field"], text, today)
+                        send_message(TOKEN, CHAT_ID,
+                                     f"✏️ {cb['task_name']} · {cb['field'].capitalize()} aktualisiert",
+                                     reply_markup=REPLY_KEYBOARD)
+                        continue
+                    elif cb["action"] == "reschedule_text":
+                        del callback_state[chat_id]
+                        _apply_task_update(cb["page_id"], "datum", text, today)
+                        send_message(TOKEN, CHAT_ID,
+                                     f"📅 {cb.get('task_name', '')} — Datum aktualisiert",
+                                     reply_markup=REPLY_KEYBOARD)
+                        continue
+                    elif cb["action"] == "vs_date":
+                        del callback_state[chat_id]
+                        _run_vs_bulk(chat_id, text, today)
+                        continue
+
                 if chat_id in pending_task_input:
                     state = pending_task_input[chat_id]
                     _is_cmd = (
@@ -972,7 +1039,7 @@ def main():
                         or any(text.lower().startswith(p) for p in (
                             "task:", "status:", "fokus:", "verschieben:", "lern:", "idee:",
                             "habit:", "termin:", "erinnere", "erinnerung:",
-                            "implement-plan:", "abort-plan:", "backlog:", "suche:", "impl-mode:"))
+                            "implement-plan:", "abort-plan:", "backlog:", "suche:", "impl-mode:", "edit:"))
                     )
                     if _is_cmd:
                         del pending_task_input[chat_id]
@@ -1044,9 +1111,11 @@ def main():
                     task_text = text[5:].strip()
                     response = run_claude(f"Heute ist {today}. Projektname: {project_notion_name}. Aufgabe: {task_text}", system_prompt=PROJEKT_TASK_SYSTEM_PROMPT)
                 elif t in ("moin", "morgen", "guten morgen"):
-                    response = run_claude(f"Heute ist {today}.", system_prompt=MOIN_SYSTEM_PROMPT)
+                    _dispatch_command(text, chat_id)
+                    continue
                 elif t in ("abend", "feierabend", "guten abend"):
-                    response = run_claude(f"Heute ist {today}.", system_prompt=ABEND_SYSTEM_PROMPT)
+                    _dispatch_command(text, chat_id)
+                    continue
                 elif t.startswith("task:"):
                     task_text = text[5:].strip()
                     if not task_text:
@@ -1064,8 +1133,35 @@ def main():
                         response = run_claude(f"Heute ist {today}. Bereich: {bereich}", system_prompt=FOKUS_SYSTEM_PROMPT)
                 elif t.startswith("verschieben:"):
                     ziel = text[12:].strip()
-                    response = (run_claude(f"Heute ist {today}. Zieldatum: {ziel}", system_prompt=VERSCHIEBEN_SYSTEM_PROMPT)
-                                if ziel else "Nutzung: verschieben: morgen  oder  verschieben: 2026-06-15")
+                    if ziel:
+                        response = run_claude(f"Heute ist {today}. Zieldatum: {ziel}",
+                                             system_prompt=VERSCHIEBEN_SYSTEM_PROMPT)
+                    else:
+                        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=MOIN_JSON_SYSTEM_PROMPT)
+                        try:
+                            moin_data = json.loads(raw)
+                            open_tasks = moin_data.get("tasks", [])
+                            if not open_tasks:
+                                response = "Keine offenen Tasks zum Verschieben."
+                            else:
+                                vs_state[chat_id] = {
+                                    "pending": [tk["id"].replace("-", "") for tk in open_tasks],
+                                    "selected": [],
+                                    "tasks": {tk["id"].replace("-", ""): tk["name"] for tk in open_tasks},
+                                }
+                                send_message(TOKEN, CHAT_ID, "📋 Offene Tasks — welche verschieben?")
+                                for tk in open_tasks:
+                                    pid = tk["id"].replace("-", "")
+                                    prio_icon = PRIO_ICONS.get(tk.get("prio", ""), "")
+                                    msg = f"{prio_icon} {tk['name']}" if prio_icon else tk["name"]
+                                    buttons = [[
+                                        {"text": "☐ Auswählen",  "callback_data": f"vs_select:{pid}"},
+                                        {"text": "Überspringen", "callback_data": f"vs_skip:{pid}"},
+                                    ]]
+                                    send_message(TOKEN, CHAT_ID, msg, reply_markup={"inline_keyboard": buttons})
+                                continue
+                        except (json.JSONDecodeError, KeyError, ValueError):
+                            response = "❌ Fehler beim Laden der Tasks. Versuche: verschieben: morgen"
                 elif t.startswith("lern:"):
                     response = run_claude(text[5:].strip(), system_prompt=LERN_SYSTEM_PROMPT)
                 elif t.startswith("idee:"):
@@ -1117,6 +1213,9 @@ def main():
                             due_dt = datetime.fromisoformat(r["due"])
                             lines.append(f"· {due_dt.strftime('%d.%m. %H:%M')} — {r['text']}")
                         response = "\n".join(lines)
+                elif t.startswith("edit:"):
+                    _dispatch_command(text, chat_id)
+                    continue
                 elif t.startswith("suche:"):
                     query = text[6:].strip()
                     response = (run_claude(query, system_prompt=SUCHE_SYSTEM_PROMPT)

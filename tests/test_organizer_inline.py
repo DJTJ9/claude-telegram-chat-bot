@@ -265,3 +265,39 @@ def test_callback_edit_f_notiz_sets_state():
         assert 999 in org.callback_state
         assert org.callback_state[999]["action"] == "edit_text"
         assert org.callback_state[999]["field"] == "notiz"
+
+# ── Integration: _dispatch_command ──────────────────────────────────────────
+
+def test_dispatch_moin_calls_send_moin_messages():
+    from bots.organizer import _dispatch_command
+    with patch("bots.organizer.run_claude_parse", return_value=SAMPLE_MOIN_JSON), \
+         patch("bots.organizer._send_moin_messages") as mock_fn, \
+         patch("bots.organizer.send_message"):
+        _dispatch_command("moin", 123)
+        mock_fn.assert_called_once()
+        data = mock_fn.call_args[0][0]
+        assert data["tasks"][0]["name"] == "PR Review"
+
+def test_dispatch_moin_fallback_on_bad_json():
+    from bots.organizer import _dispatch_command
+    with patch("bots.organizer.run_claude_parse", return_value="not valid json"), \
+         patch("bots.organizer.run_claude", return_value="🌅 Guten Morgen!"), \
+         patch("bots.organizer.send_message") as mock_send:
+        _dispatch_command("moin", 123)
+        texts = [c[0][2] for c in mock_send.call_args_list]
+        assert any("Guten Morgen" in t for t in texts)
+
+def test_dispatch_edit_calls_claude():
+    from bots.organizer import _dispatch_command
+    with patch("bots.organizer.run_claude", return_value="✏️ PR Review · Priorität → Hoch") as mock_claude, \
+         patch("bots.organizer.send_message") as mock_send:
+        _dispatch_command("edit: PR Review prio hoch", 123)
+        assert mock_claude.called
+        assert any("✏️" in c[0][2] for c in mock_send.call_args_list)
+
+def test_dispatch_edit_empty_shows_usage():
+    from bots.organizer import _dispatch_command
+    with patch("bots.organizer.send_message") as mock_send:
+        _dispatch_command("edit:", 123)
+        text = mock_send.call_args[0][2]
+        assert "Nutzung" in text
