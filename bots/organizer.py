@@ -13,7 +13,7 @@ if env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
-from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, transcribe_voice, normalize_voice
+from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, transcribe_voice, normalize_voice, edit_message
 from core.settings import load_settings, save_settings
 from core.claude import run_claude, run_claude_with_history, run_claude_parse
 from core.state import load_reminders, save_reminders, load_plans, save_plans, load_registry
@@ -563,6 +563,197 @@ def _send_abend_messages(data: dict) -> None:
         send_message(TOKEN, CHAT_ID,
                      f"⚠️ {habit['name']} — heute fällig, nicht erledigt",
                      reply_markup={"inline_keyboard": buttons})
+
+
+def _check_vs_done(chat_id: int, today: str) -> None:
+    state = vs_state.get(chat_id)
+    if not state or state.get("pending"):
+        return
+    if not state.get("selected"):
+        send_message(TOKEN, chat_id, "Keine Tasks ausgewählt.")
+        vs_state.pop(chat_id, None)
+        return
+    n = len(state["selected"])
+    buttons = [[
+        {"text": "Morgen",        "callback_data": "vs_confirm:morgen"},
+        {"text": "Übermorgen",     "callback_data": "vs_confirm:uebermorgen"},
+    ], [
+        {"text": "Nächste Woche",  "callback_data": "vs_confirm:naechste_woche"},
+        {"text": "Datum eingeben", "callback_data": "vs_confirm:freitext"},
+    ]]
+    send_message(TOKEN, chat_id,
+                 f"{n} Task(s) ausgewählt. Auf welches Datum verschieben?",
+                 reply_markup={"inline_keyboard": buttons})
+
+
+def _run_vs_bulk(chat_id: int, target_date: str, today: str) -> None:
+    state = vs_state.pop(chat_id, {})
+    selected = state.get("selected", [])
+    if not selected:
+        send_message(TOKEN, chat_id, "Keine Tasks ausgewählt.", reply_markup=REPLY_KEYBOARD)
+        return
+    for pid in selected:
+        run_claude(
+            f"Heute ist {today}. page_id: {pid}. Feld: datum. Wert: {target_date}.",
+            system_prompt=TASK_UPDATE_SYSTEM_PROMPT, automated=True,
+        )
+    d = date.fromisoformat(target_date)
+    send_message(TOKEN, chat_id,
+                 f"📆 {len(selected)} Task(s) verschoben auf {d.strftime('%d.%m.%Y')}.",
+                 reply_markup=REPLY_KEYBOARD)
+
+
+def _handle_callback(cq: dict) -> None:
+    chat_id: int = cq["from"]["id"]
+    data: str = cq.get("data", "")
+    msg_id: int = cq["message"]["message_id"]
+    msg_text: str = cq["message"].get("text", "")
+    today: str = date.today().isoformat()
+
+    if data.startswith("done:"):
+        pid = data[5:]
+        run_claude(
+            f"Heute ist {today}. page_id: {pid}. Feld: status. Wert: Done.",
+            system_prompt=TASK_UPDATE_SYSTEM_PROMPT, automated=True,
+        )
+        edit_message(TOKEN, chat_id, msg_id, f"✅ {_extract_name_from_message(msg_text)} — erledigt!")
+        threading.Thread(target=_run_archive_once, daemon=True).start()
+
+    elif data.startswith("habit_done:"):
+        pid = data[11:]
+        result = run_claude(
+            f"Heute ist {today}. page_id: {pid}.",
+            system_prompt=HABIT_DONE_SYSTEM_PROMPT, automated=True,
+        )
+        edit_message(TOKEN, chat_id, msg_id, result)
+
+    elif data.startswith("reschedule:") and data.count(":") == 1:
+        pid = data[11:]
+        buttons = [[
+            {"text": "Morgen",        "callback_data": f"reschedule_d:{pid}:morgen"},
+            {"text": "Übermorgen",     "callback_data": f"reschedule_d:{pid}:uebermorgen"},
+        ], [
+            {"text": "Nächste Woche",  "callback_data": f"reschedule_d:{pid}:naechste_woche"},
+            {"text": "Datum eingeben", "callback_data": f"reschedule_d:{pid}:freitext"},
+        ]]
+        edit_message(TOKEN, chat_id, msg_id, msg_text, {"inline_keyboard": buttons})
+
+    elif data.startswith("reschedule_d:"):
+        parts = data.split(":", 2)
+        pid, date_key = parts[1], parts[2]
+        if date_key == "freitext":
+            callback_state[chat_id] = {
+                "action": "reschedule_text", "page_id": pid,
+                "task_name": _extract_name_from_message(msg_text), "msg_id": msg_id,
+            }
+            send_message(TOKEN, chat_id, "Welches Datum? (z.B. 2026-06-25)")
+        else:
+            target = _resolve_date_key(date_key, today)
+            _apply_task_update(pid, "datum", target, today)
+            d = date.fromisoformat(target)
+            edit_message(TOKEN, chat_id, msg_id,
+                         f"📅 {_extract_name_from_message(msg_text)} → {d.strftime('%d.%m.')}")
+
+    elif data.startswith("edit:") and data.count(":") == 1:
+        pid = data[5:]
+        buttons = [[
+            {"text": "Priorität", "callback_data": f"edit_f:{pid}:prio"},
+            {"text": "Datum",     "callback_data": f"edit_f:{pid}:datum"},
+        ], [
+            {"text": "Bereich",   "callback_data": f"edit_f:{pid}:bereich"},
+            {"text": "Notiz",     "callback_data": f"edit_f:{pid}:notiz"},
+        ]]
+        edit_message(TOKEN, chat_id, msg_id, msg_text, {"inline_keyboard": buttons})
+
+    elif data.startswith("edit_f:"):
+        parts = data.split(":", 2)
+        pid, field = parts[1], parts[2]
+        if field == "prio":
+            buttons = [[
+                {"text": "Hoch",    "callback_data": f"edit_v:{pid}:prio:hoch"},
+                {"text": "Mittel",  "callback_data": f"edit_v:{pid}:prio:mittel"},
+                {"text": "Niedrig", "callback_data": f"edit_v:{pid}:prio:niedrig"},
+            ]]
+        elif field == "datum":
+            buttons = [[
+                {"text": "Heute",      "callback_data": f"edit_v:{pid}:datum:heute"},
+                {"text": "Morgen",     "callback_data": f"edit_v:{pid}:datum:morgen"},
+            ], [
+                {"text": "Übermorgen", "callback_data": f"edit_v:{pid}:datum:uebermorgen"},
+                {"text": "Eingeben",   "callback_data": f"edit_v:{pid}:datum:freitext"},
+            ]]
+        elif field == "bereich":
+            buttons = [[
+                {"text": "Arbeit",      "callback_data": f"edit_v:{pid}:bereich:arbeit"},
+                {"text": "Privat",      "callback_data": f"edit_v:{pid}:bereich:privat"},
+            ], [
+                {"text": "Lernen",      "callback_data": f"edit_v:{pid}:bereich:lernen"},
+                {"text": "Gesundheit",  "callback_data": f"edit_v:{pid}:bereich:gesundheit"},
+            ]]
+        elif field == "notiz":
+            task_name = _extract_name_from_message(msg_text)
+            callback_state[chat_id] = {
+                "action": "edit_text", "page_id": pid, "field": "notiz",
+                "task_name": task_name, "msg_id": msg_id,
+            }
+            send_message(TOKEN, chat_id, f"Neue Notiz für '{task_name}':")
+            return
+        else:
+            return
+        edit_message(TOKEN, chat_id, msg_id, msg_text, {"inline_keyboard": buttons})
+
+    elif data.startswith("edit_v:"):
+        parts = data.split(":", 3)
+        pid, field, value_key = parts[1], parts[2], parts[3]
+        if value_key == "freitext":
+            callback_state[chat_id] = {
+                "action": "edit_text" if field != "datum" else "reschedule_text",
+                "page_id": pid, "field": field,
+                "task_name": _extract_name_from_message(msg_text), "msg_id": msg_id,
+            }
+            send_message(TOKEN, chat_id,
+                         "Neue Notiz eingeben:" if field == "notiz" else "Neues Datum? (z.B. 2026-06-25)")
+            return
+        value = _resolve_value(field, value_key, today)
+        _apply_task_update(pid, field, value, today)
+        edit_message(TOKEN, chat_id, msg_id,
+                     f"✏️ {_extract_name_from_message(msg_text)} · {field.capitalize()} → {value}")
+
+    elif data.startswith("vs_select:"):
+        pid = data[10:]
+        state = vs_state.get(chat_id)
+        if not state:
+            return
+        if pid in state["selected"]:
+            state["selected"].remove(pid)
+            icon = "☐"
+        else:
+            state["selected"].append(pid)
+            if pid in state.get("pending", []):
+                state["pending"].remove(pid)
+            icon = "☑"
+        buttons = [[
+            {"text": f"{icon} Auswählen", "callback_data": f"vs_select:{pid}"},
+            {"text": "Überspringen",       "callback_data": f"vs_skip:{pid}"},
+        ]]
+        edit_message(TOKEN, chat_id, msg_id, msg_text, {"inline_keyboard": buttons})
+        _check_vs_done(chat_id, today)
+
+    elif data.startswith("vs_skip:"):
+        pid = data[8:]
+        state = vs_state.get(chat_id)
+        if state and pid in state.get("pending", []):
+            state["pending"].remove(pid)
+        edit_message(TOKEN, chat_id, msg_id, msg_text)
+        _check_vs_done(chat_id, today)
+
+    elif data.startswith("vs_confirm:"):
+        date_key = data[11:]
+        if date_key == "freitext":
+            callback_state[chat_id] = {"action": "vs_date", "msg_id": msg_id}
+            send_message(TOKEN, chat_id, "Welches Datum? (z.B. 2026-06-25)")
+        else:
+            _run_vs_bulk(chat_id, _resolve_date_key(date_key, today), today)
 
 
 def _add_reminder(text, due_iso):

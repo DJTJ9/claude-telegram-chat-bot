@@ -166,3 +166,102 @@ def test_apply_task_update_calls_claude():
         assert "abc123" in prompt
         assert "prio" in prompt
         assert "Hoch" in prompt
+
+# ── Callback handler tests ───────────────────────────────────────────────────
+
+def _make_cq(data: str, text: str = "🔴 PR Review  →dart-app", msg_id: int = 42, chat_id: int = 123):
+    return {
+        "id": "cq1",
+        "from": {"id": chat_id},
+        "data": data,
+        "message": {"message_id": msg_id, "chat": {"id": chat_id}, "text": text},
+    }
+
+def test_callback_done_updates_message():
+    from bots.organizer import _handle_callback
+    import bots.organizer as org
+    org.callback_state.clear()
+    cq = _make_cq("done:abc123def456")
+    with patch("bots.organizer.run_claude", return_value="✏️ status → Done"), \
+         patch("bots.organizer.edit_message") as mock_edit, \
+         patch("bots.organizer._run_archive_once"), \
+         patch("bots.organizer.threading"):
+        _handle_callback(cq)
+        mock_edit.assert_called_once()
+        text = mock_edit.call_args[0][3]
+        assert "✅" in text
+        assert "PR Review" in text
+
+def test_callback_habit_done():
+    from bots.organizer import _handle_callback
+    cq = _make_cq("habit_done:hab001", text="🔄 Sport (täglich)")
+    with patch("bots.organizer.run_claude", return_value="✅ Sport — nächste Fälligkeit: 23.06.2026"), \
+         patch("bots.organizer.edit_message") as mock_edit:
+        _handle_callback(cq)
+        text = mock_edit.call_args[0][3]
+        assert "Sport" in text
+
+def test_callback_reschedule_shows_buttons():
+    from bots.organizer import _handle_callback
+    cq = _make_cq("reschedule:abc123")
+    with patch("bots.organizer.edit_message") as mock_edit:
+        _handle_callback(cq)
+        markup = mock_edit.call_args[0][4]
+        all_texts = [btn["text"] for row in markup["inline_keyboard"] for btn in row]
+        assert "Morgen" in all_texts
+        assert "Übermorgen" in all_texts
+
+def test_callback_reschedule_d_updates_task():
+    from bots.organizer import _handle_callback
+    cq = _make_cq("reschedule_d:abc123:morgen")
+    with patch("bots.organizer._apply_task_update") as mock_update, \
+         patch("bots.organizer.edit_message"):
+        _handle_callback(cq)
+        mock_update.assert_called_once()
+        pid, field = mock_update.call_args[0][0], mock_update.call_args[0][1]
+        assert pid == "abc123"
+        assert field == "datum"
+
+def test_callback_edit_shows_field_buttons():
+    from bots.organizer import _handle_callback
+    cq = _make_cq("edit:abc123")
+    with patch("bots.organizer.edit_message") as mock_edit:
+        _handle_callback(cq)
+        markup = mock_edit.call_args[0][4]
+        all_texts = [btn["text"] for row in markup["inline_keyboard"] for btn in row]
+        assert "Priorität" in all_texts
+        assert "Datum" in all_texts
+        assert "Bereich" in all_texts
+        assert "Notiz" in all_texts
+
+def test_callback_edit_f_prio_shows_values():
+    from bots.organizer import _handle_callback
+    cq = _make_cq("edit_f:abc123:prio")
+    with patch("bots.organizer.edit_message") as mock_edit:
+        _handle_callback(cq)
+        markup = mock_edit.call_args[0][4]
+        all_texts = [btn["text"] for row in markup["inline_keyboard"] for btn in row]
+        assert "Hoch" in all_texts
+        assert "Mittel" in all_texts
+        assert "Niedrig" in all_texts
+
+def test_callback_edit_v_prio_applies_update():
+    from bots.organizer import _handle_callback
+    cq = _make_cq("edit_v:abc123:prio:hoch")
+    with patch("bots.organizer._apply_task_update") as mock_update, \
+         patch("bots.organizer.edit_message"):
+        _handle_callback(cq)
+        mock_update.assert_called_once()
+        assert mock_update.call_args[0][2] == "Hoch"
+
+def test_callback_edit_f_notiz_sets_state():
+    from bots.organizer import _handle_callback
+    import bots.organizer as org
+    org.callback_state.clear()
+    cq = _make_cq("edit_f:abc123:notiz", chat_id=999)
+    with patch("bots.organizer.send_message"), \
+         patch("bots.organizer.edit_message"):
+        _handle_callback(cq)
+        assert 999 in org.callback_state
+        assert org.callback_state[999]["action"] == "edit_text"
+        assert org.callback_state[999]["field"] == "notiz"
