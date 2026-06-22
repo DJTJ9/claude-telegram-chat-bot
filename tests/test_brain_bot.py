@@ -49,7 +49,7 @@ def test_parse_backlog_returns_features(tmp_path, monkeypatch):
         "# My App\n\n## Features (Backlog)\n- [ ] Feature A\n- [x] Done Feature\n- [ ] Feature B\n\n## Architektur\n"
     )
     result = brain._parse_backlog("my-app")
-    assert result == ["Feature A", "Feature B"]
+    assert [f["title"] for f in result] == ["Feature A", "Feature B"]
 
 
 def test_parse_backlog_no_vision(tmp_path, monkeypatch):
@@ -120,32 +120,44 @@ def test_voice_import_available():
     assert callable(normalize_voice)
 
 
-def test_free_text_fallthrough_logic():
-    import bots.brain as brain
+def test_free_text_starts_brainstorming_when_no_session(tmp_path, monkeypatch):
+    from core import session_manager as sm
+    monkeypatch.setattr(sm, "_STATE_PATH", tmp_path / "session_state.json")
+    monkeypatch.setattr(sm, "_COMMENT_PATH", tmp_path / "pending_comment.json")
     messages = []
-    brain._brainstorming_active = False
-    original_send = brain.send_message
-    brain.send_message = lambda *a, **kw: messages.append(a[2]) or 1
-    if not brain._brainstorming_active:
-        brain._brainstorming_active = True
-        brain.send_message(brain.TOKEN, brain.CHAT_ID, "🧠 Brainstorming gestartet — Fragen kommen gleich")
-    assert brain._brainstorming_active is True
-    assert any("Brainstorming" in m for m in messages)
-    brain.send_message = original_send
-    brain._brainstorming_active = False
-
-
-def test_free_text_fallthrough_blocked_when_active():
-    import bots.brain as brain
-    messages = []
-    brain._brainstorming_active = True
-    original_send = brain.send_message
-    brain.send_message = lambda *a, **kw: messages.append(a[2]) or 1
-    if not brain._brainstorming_active:
-        brain._brainstorming_active = True
-        brain.send_message(brain.TOKEN, brain.CHAT_ID, "🧠 Brainstorming gestartet — Fragen kommen gleich")
+    assert not sm.is_session_active()
+    if sm.is_session_active():
+        sm.write_comment("some text")
+        messages.append("💬 Kommentar gespeichert — wird bei nächster Frage angehängt")
     else:
-        brain.send_message(brain.TOKEN, brain.CHAT_ID, "⚠️ Brainstorming läuft bereits. Bitte warten.")
-    assert any("läuft bereits" in m for m in messages)
-    brain.send_message = original_send
-    brain._brainstorming_active = False
+        messages.append("🧠 Brainstorming gestartet — Fragen kommen gleich")
+    assert any("Brainstorming" in m for m in messages)
+
+
+def test_free_text_saves_comment_when_session_active(tmp_path, monkeypatch):
+    from core import session_manager as sm
+    monkeypatch.setattr(sm, "_STATE_PATH", tmp_path / "session_state.json")
+    monkeypatch.setattr(sm, "_COMMENT_PATH", tmp_path / "pending_comment.json")
+    sm.save_session("vision", "my-proj", pid=1234)
+    messages = []
+    if sm.is_session_active():
+        sm.write_comment("some text")
+        messages.append("💬 Kommentar gespeichert — wird bei nächster Frage angehängt")
+    else:
+        messages.append("🧠 Brainstorming gestartet — Fragen kommen gleich")
+    assert any("Kommentar" in m for m in messages)
+    assert sm.read_and_clear_comment() == "some text"
+
+
+def test_project_submenu_has_status_button():
+    slug = "app-a"
+    sub_buttons = [
+        [
+            {"text": "🔭 Vision", "callback_data": f"proj_vis:{slug}"},
+            {"text": "🧠 Brainstorming", "callback_data": f"proj_bs:{slug}"},
+        ],
+        [{"text": "📊 Status", "callback_data": f"proj_status:{slug}"}],
+        [{"text": "← Zurück", "callback_data": "proj_back"}],
+    ]
+    callbacks = [btn["callback_data"] for row in sub_buttons for btn in row]
+    assert f"proj_status:{slug}" in callbacks

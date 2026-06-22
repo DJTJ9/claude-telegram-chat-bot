@@ -299,6 +299,58 @@ def _run_brainstorming(topic, basis_slug=None, project_slug=None):
         _clear_session()
 
 
+def _run_status(slug):
+    registry = load_registry()
+    proj = next((p for p in registry if p["slug"] == slug),
+                {"slug": slug, "name": slug, "path": "", "repo": ""})
+    hub_path = HUB_DIR / "topics" / slug
+    hub_path.mkdir(parents=True, exist_ok=True)
+    vision_path = hub_path / "VISION.md"
+    output_path = hub_path / "status_output.txt"
+    output_path.unlink(missing_ok=True)
+
+    specs = sorted((hub_path / "specs").glob("*.md")) if (hub_path / "specs").exists() else []
+    specs_note = (f"Also read last 3 specs: {', '.join(str(s) for s in specs[-3:])}"
+                  if specs else "")
+
+    git_log = ""
+    if proj.get("path") and Path(proj["path"]).exists():
+        r = subprocess.run(["git", "-C", proj["path"], "log", "--oneline", "-10"],
+                           capture_output=True, text=True)
+        git_log = r.stdout.strip()
+
+    plans_info = json.dumps(load_plans(), ensure_ascii=False)
+
+    prompt = (
+        f"Generate a status report for project: {proj['name']} (slug: {slug}). "
+        f"Read {vision_path} for goal, backlog, confidence scores, and last session summary. "
+        f"{specs_note} "
+        f"Recent git log:\n{git_log}\n"
+        f"Scheduled plans: {plans_info}\n"
+        f"Write the report to {output_path} in this exact format:\n"
+        f"📊 {proj['name']} — Status {date.today().isoformat()}\n\n"
+        f"🎯 Ziel: <one line>\n\n"
+        f"✅ Zuletzt implementiert:\n• <bullet>\n\n"
+        f"🔲 Nächste Schritte (nach Prio):\n1. <step>\n\n"
+        f"❓ Offene Fragen:\n• <question>\n\n"
+        f"📅 Letzter Commit: <info>\n"
+        f"Write ONLY the report to the file. Then exit."
+    )
+    cmd = ["claude", "--allowedTools", "Bash,Read,Write", "-p", prompt]
+    env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                encoding="utf-8", timeout=120, cwd=str(hub_path), env=env)
+        if output_path.exists():
+            report = output_path.read_text(encoding="utf-8").strip()
+            output_path.unlink(missing_ok=True)
+            send_message(TOKEN, CHAT_ID, report[:4000])
+        else:
+            send_message(TOKEN, CHAT_ID, f"❌ Status-Report fehlgeschlagen\n{(result.stderr or '')[-200:]}")
+    except subprocess.TimeoutExpired:
+        send_message(TOKEN, CHAT_ID, "❌ Status-Timeout (2 Min überschritten)")
+
+
 def main():
     global _active_question_id
 
@@ -340,6 +392,7 @@ def main():
                                 {"text": "🔭 Vision", "callback_data": f"proj_vis:{slug}"},
                                 {"text": "🧠 Brainstorming", "callback_data": f"proj_bs:{slug}"},
                             ],
+                            [{"text": "📊 Status", "callback_data": f"proj_status:{slug}"}],
                             [{"text": "← Zurück", "callback_data": "proj_back"}],
                         ]
                         stored_msg_id = _proj_msg_id.get(CHAT_ID)
@@ -381,6 +434,13 @@ def main():
                                 buttons.append([{"text": label, "callback_data": f"backlog_feat:{slug}:{i}"}])
                             send_message(TOKEN, CHAT_ID, "Welches Feature brainstormen?",
                                          reply_markup={"inline_keyboard": buttons})
+                    elif data.startswith("proj_status:"):
+                        slug = data[12:]
+                        if session_manager.is_session_active():
+                            send_message(TOKEN, CHAT_ID, "⚠️ Session läuft bereits.")
+                        else:
+                            send_message(TOKEN, CHAT_ID, f"📊 Status-Report für {slug} wird erstellt...")
+                            threading.Thread(target=_run_status, args=(slug,), daemon=True).start()
                     elif data.startswith("backlog_feat:"):
                         _, slug, idx_str = data.split(":", 2)
                         features = _parse_backlog(slug)
