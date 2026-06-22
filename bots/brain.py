@@ -30,6 +30,8 @@ brainstorming: <idee>, basis: <slug> — Mit vorheriger Spec als Kontext
 vision: <slug> — Vision-Session für Projekt starten
 vision:end — Laufende Vision-Session beenden
 projekte — Alle Projekte anzeigen / anlegen
+idee: <text> — Idee schnell in Projekt-Backlog speichern
+status — Aktive Session anzeigen / beenden
 /specs — Alle vorhandenen Specs anzeigen
 hilfe — Diese Hilfe"""
 
@@ -466,6 +468,30 @@ def main():
                         slug = data[7:]
                         state_data = _pending_new_project.pop(CHAT_ID, {})
                         _create_project_entry(slug, state_data.get("name", slug), path="")
+                    elif data == "kill_session":
+                        if session_manager.kill_session():
+                            session_manager.clear_session()
+                            _clear_session()
+                            send_message(TOKEN, CHAT_ID, "⏹ Session beendet.")
+                        else:
+                            session_manager.clear_session()
+                            send_message(TOKEN, CHAT_ID, "⏹ Session bereits beendet.")
+                    elif data == "session_cancel":
+                        session_manager.clear_session()
+                        _clear_session()
+                        send_message(TOKEN, CHAT_ID, "❌ Session abgebrochen.")
+                    elif data.startswith("resume:"):
+                        parts = data.split(":", 2)
+                        if len(parts) == 3:
+                            _, r_slug, r_type = parts
+                            if session_manager.is_session_active():
+                                send_message(TOKEN, CHAT_ID, "⚠️ Session läuft bereits.")
+                            elif r_type == "vision":
+                                send_message(TOKEN, CHAT_ID, f"🔄 Vision-Session für {r_slug} wird fortgesetzt...")
+                                threading.Thread(target=_run_vision, args=(r_slug,), daemon=True).start()
+                            elif r_type == "brainstorming":
+                                send_message(TOKEN, CHAT_ID, f"🔄 Brainstorming für {r_slug} wird fortgesetzt...")
+                                threading.Thread(target=_run_brainstorming, args=("", None, r_slug), daemon=True).start()
                     continue
 
                 msg = upd.get("message", {})
@@ -563,6 +589,22 @@ def main():
                         _proj_msg_id[CHAT_ID] = mid
                 elif t == "/specs":
                     send_message(TOKEN, CHAT_ID, _format_specs())
+                elif t == "status":
+                    s = session_manager.load_session()
+                    if not s:
+                        send_message(TOKEN, CHAT_ID, "✅ Keine Session aktiv.")
+                    else:
+                        from datetime import datetime as _dt
+                        elapsed = int((_dt.now() - _dt.fromisoformat(s["started_at"])).total_seconds() / 60)
+                        send_message(TOKEN, CHAT_ID,
+                            f"⚙️ Aktive Session: {s['active']}\n"
+                            f"Projekt: {s['slug']}\n"
+                            f"Läuft seit: {elapsed} Min\n"
+                            f"PID: {s['pid']}",
+                            reply_markup={"inline_keyboard": [[
+                                {"text": "⏹ Session beenden", "callback_data": "kill_session"}
+                            ]]}
+                        )
                 elif t == "hilfe":
                     send_message(TOKEN, CHAT_ID, HILFE_TEXT)
                 else:

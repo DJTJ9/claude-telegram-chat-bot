@@ -161,3 +161,38 @@ def test_project_submenu_has_status_button():
     ]
     callbacks = [btn["callback_data"] for row in sub_buttons for btn in row]
     assert f"proj_status:{slug}" in callbacks
+
+
+def test_status_command_no_session(tmp_path, monkeypatch):
+    import bots.brain as brain
+    import core.session_manager as sm
+    monkeypatch.setattr(sm, "_STATE_PATH", tmp_path / "session_state.json")
+    messages = []
+    monkeypatch.setattr(brain, "send_message", lambda *a, **kw: messages.append(a[2]) or 1)
+    s = sm.load_session()
+    if not s:
+        brain.send_message(brain.TOKEN, brain.CHAT_ID, "✅ Keine Session aktiv.")
+    assert any("Keine Session" in m for m in messages)
+
+
+def test_status_command_active_session(tmp_path, monkeypatch):
+    import bots.brain as brain
+    import core.session_manager as sm
+    from datetime import datetime, timedelta
+    monkeypatch.setattr(sm, "_STATE_PATH", tmp_path / "session_state.json")
+    monkeypatch.setattr(sm, "_COMMENT_PATH", tmp_path / "pending_comment.json")
+    sm.save_session("vision", "my-proj", pid=1234)
+    s = sm.load_session()
+    s["started_at"] = (datetime.now() - timedelta(minutes=10)).isoformat(timespec="seconds")
+    (tmp_path / "session_state.json").write_text(json.dumps(s))
+    messages = []
+    monkeypatch.setattr(brain, "send_message", lambda *a, **kw: messages.append(a[2]) or 1)
+    session = sm.load_session()
+    if session:
+        elapsed = int((datetime.now() - datetime.fromisoformat(session["started_at"])).total_seconds() / 60)
+        brain.send_message(brain.TOKEN, brain.CHAT_ID,
+            f"⚙️ Aktive Session: {session['active']}\nProjekt: {session['slug']}\n"
+            f"Läuft seit: {elapsed} Min\nPID: {session['pid']}")
+    assert any("vision" in m for m in messages)
+    assert any("my-proj" in m for m in messages)
+    sm.clear_session()
