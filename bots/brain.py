@@ -36,6 +36,7 @@ status — Aktive Session anzeigen / beenden
 hilfe — Diese Hilfe"""
 
 _pending_new_project: dict = {}
+_pending_idea: dict = {}
 _active_question_id = None
 _proj_msg_id: dict = {}  # chat_id → message_id of last project list message
 
@@ -301,6 +302,47 @@ def _run_brainstorming(topic, basis_slug=None, project_slug=None):
         _clear_session()
 
 
+def _append_idea_to_backlog(slug, text):
+    hub_path = HUB_DIR / "topics" / slug
+    hub_path.mkdir(parents=True, exist_ok=True)
+    vision_path = hub_path / "VISION.md"
+    new_line = f"- [ ] {text}  <!-- prio:99 -->"
+    if not vision_path.exists():
+        registry = load_registry()
+        proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
+        vision_path.write_text(
+            f"# {proj['name']} — Vision\n\n## Features (Backlog — priorisiert)\n{new_line}\n",
+            encoding="utf-8",
+        )
+    else:
+        content = vision_path.read_text(encoding="utf-8")
+        if re.search(r"^## (features|backlog)", content, re.IGNORECASE | re.MULTILINE):
+            lines = content.splitlines()
+            insert_idx = None
+            in_section = False
+            for i, line in enumerate(lines):
+                if re.match(r"^## (features|backlog)", line, re.IGNORECASE):
+                    in_section = True
+                    continue
+                if in_section and line.startswith("## "):
+                    insert_idx = i
+                    break
+            if insert_idx is not None:
+                lines.insert(insert_idx, new_line)
+            else:
+                lines.append(new_line)
+            vision_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        else:
+            vision_path.write_text(
+                content + f"\n## Features (Backlog — priorisiert)\n{new_line}\n",
+                encoding="utf-8",
+            )
+    subprocess.run(["git", "-C", str(HUB_DIR), "add", "-A"], capture_output=True)
+    subprocess.run(["git", "-C", str(HUB_DIR), "commit", "-m",
+                    f"chore({slug}): quick capture — {text[:50]}"], capture_output=True)
+    subprocess.run(["git", "-C", str(HUB_DIR), "push"], capture_output=True)
+
+
 def _run_status(slug):
     registry = load_registry()
     proj = next((p for p in registry if p["slug"] == slug),
@@ -354,7 +396,7 @@ def _run_status(slug):
 
 
 def main():
-    global _active_question_id
+    global _active_question_id, _pending_idea
 
     offset = None
     print(f"Brain Bot gestartet (chat_id={CHAT_ID})")
@@ -468,6 +510,17 @@ def main():
                         slug = data[7:]
                         state_data = _pending_new_project.pop(CHAT_ID, {})
                         _create_project_entry(slug, state_data.get("name", slug), path="")
+                    elif data.startswith("idea_proj:"):
+                        slug = data[10:]
+                        idea_data = _pending_idea.pop(CHAT_ID, {})
+                        idea_text = idea_data.get("text", "")
+                        if idea_text:
+                            registry = load_registry()
+                            proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
+                            _append_idea_to_backlog(slug, idea_text)
+                            send_message(TOKEN, CHAT_ID, f"✅ Idee gespeichert in {proj['name']}")
+                        else:
+                            send_message(TOKEN, CHAT_ID, "❌ Idee nicht mehr verfügbar.")
                     elif data == "kill_session":
                         if session_manager.kill_session():
                             session_manager.clear_session()
@@ -589,6 +642,23 @@ def main():
                         _proj_msg_id[CHAT_ID] = mid
                 elif t == "/specs":
                     send_message(TOKEN, CHAT_ID, _format_specs())
+                elif t.startswith("idee:"):
+                    idea_text = text[5:].strip()
+                    if not idea_text:
+                        send_message(TOKEN, CHAT_ID, "Nutzung: idee: <deine Idee>")
+                    else:
+                        registry = load_registry()
+                        if not registry:
+                            send_message(TOKEN, CHAT_ID, "Keine Projekte. Erst anlegen: projekte")
+                        elif len(registry) == 1:
+                            _append_idea_to_backlog(registry[0]["slug"], idea_text)
+                            send_message(TOKEN, CHAT_ID, f"✅ Idee gespeichert in {registry[0]['name']}")
+                        else:
+                            _pending_idea[chat_id] = {"text": idea_text}
+                            buttons = [[{"text": p["name"], "callback_data": f"idea_proj:{p['slug']}"}]
+                                       for p in registry]
+                            send_message(TOKEN, CHAT_ID, "Zu welchem Projekt?",
+                                         reply_markup={"inline_keyboard": buttons})
                 elif t == "status":
                     s = session_manager.load_session()
                     if not s:

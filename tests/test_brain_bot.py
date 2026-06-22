@@ -196,3 +196,29 @@ def test_status_command_active_session(tmp_path, monkeypatch):
     assert any("vision" in m for m in messages)
     assert any("my-proj" in m for m in messages)
     sm.clear_session()
+
+
+def test_append_idea_creates_vision_if_missing(tmp_path, monkeypatch):
+    import bots.brain as brain
+    from unittest.mock import patch
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    with patch("subprocess.run"):
+        brain._append_idea_to_backlog("new-proj", "Push notifications")
+    vision = tmp_path / "topics" / "new-proj" / "VISION.md"
+    assert vision.exists()
+    assert "Push notifications" in vision.read_text()
+    assert "<!-- prio:99 -->" in vision.read_text()
+
+
+def test_append_idea_adds_to_existing_backlog(tmp_path, monkeypatch):
+    import bots.brain as brain
+    from unittest.mock import patch
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    vision = tmp_path / "topics" / "my-app" / "VISION.md"
+    vision.parent.mkdir(parents=True)
+    vision.write_text("# My App\n\n## Features (Backlog — priorisiert)\n- [ ] Existing  <!-- prio:1 -->\n")
+    with patch("subprocess.run"):
+        brain._append_idea_to_backlog("my-app", "New idea")
+    content = vision.read_text()
+    assert "- [ ] New idea  <!-- prio:99 -->" in content
+    assert "- [ ] Existing" in content
