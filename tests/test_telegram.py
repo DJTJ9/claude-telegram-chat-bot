@@ -45,6 +45,27 @@ def test_normalize_voice_case_insensitive():
     assert normalize_voice("test DOPPELPUNKT wert") == "test: wert"
 
 
+def test_edit_message_calls_api():
+    from core.telegram import edit_message
+    with patch("core.telegram.requests.post") as mock_post:
+        mock_post.return_value = MagicMock()
+        edit_message("tok", 123, 456, "updated text")
+        url = mock_post.call_args[0][0]
+        body = mock_post.call_args[1]["json"]
+        assert "editMessageText" in url
+        assert body["message_id"] == 456
+        assert body["text"] == "updated text"
+        assert body["chat_id"] == 123
+
+def test_edit_message_with_markup():
+    from core.telegram import edit_message
+    markup = {"inline_keyboard": [[{"text": "X", "callback_data": "x"}]]}
+    with patch("core.telegram.requests.post") as mock_post:
+        mock_post.return_value = MagicMock()
+        edit_message("tok", 1, 2, "txt", reply_markup=markup)
+        body = mock_post.call_args[1]["json"]
+        assert body["reply_markup"] == markup
+
 def test_transcribe_voice_returns_text():
     from core.telegram import transcribe_voice
 

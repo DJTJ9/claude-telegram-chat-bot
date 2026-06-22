@@ -39,6 +39,12 @@ def edit_message_keyboard(token, chat_id, message_id, inline_keyboard):
         },
     )
 
+def edit_message(token: str, chat_id: int, message_id: int, text: str, reply_markup=None) -> None:
+    payload = {"chat_id": chat_id, "message_id": message_id, "text": text}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    requests.post(f"{_base(token)}/editMessageText", json=payload)
+
 def build_inline_keyboard(question):
     """Parse question text and return InlineKeyboardMarkup rows."""
     q = question.lower()
