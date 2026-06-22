@@ -101,7 +101,13 @@ def _parse_backlog(slug):
         if in_section and line.startswith("## "):
             break
         if in_section and line.startswith("- [ ] "):
-            features.append(line[6:].strip())
+            raw = line[6:].strip()
+            meta_match = re.search(r"<!--\s*prio:(\d+)(?:\s+deps:([\w,\-]+))?\s*-->", raw)
+            title = re.sub(r"\s*<!--.*?-->", "", raw).strip()
+            prio = int(meta_match.group(1)) if meta_match else 99
+            deps = meta_match.group(2).split(",") if (meta_match and meta_match.group(2)) else []
+            features.append({"title": title, "prio": prio, "deps": deps})
+    features.sort(key=lambda f: f["prio"])
     return features
 
 
@@ -370,7 +376,8 @@ def main():
                         else:
                             buttons = []
                             for i, feat in enumerate(features[:10]):
-                                label = (feat[:40] + "…") if len(feat) > 40 else feat
+                                title = feat["title"]
+                                label = (title[:40] + "…") if len(title) > 40 else title
                                 buttons.append([{"text": label, "callback_data": f"backlog_feat:{slug}:{i}"}])
                             send_message(TOKEN, CHAT_ID, "Welches Feature brainstormen?",
                                          reply_markup={"inline_keyboard": buttons})
@@ -383,7 +390,7 @@ def main():
                         elif session_manager.is_session_active():
                             send_message(TOKEN, CHAT_ID, "⚠️ Session läuft bereits. Bitte warten.")
                         else:
-                            feature = features[idx]
+                            feature = features[idx]["title"]
                             send_message(TOKEN, CHAT_ID, f"🧠 Brainstorming: {feature}")
                             threading.Thread(target=_run_brainstorming, args=(feature, None, slug), daemon=True).start()
                     elif data.startswith("npth_a:"):
