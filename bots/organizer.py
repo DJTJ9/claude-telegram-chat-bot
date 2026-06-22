@@ -460,6 +460,111 @@ conversation_history: dict = {}
 pending_task_input: dict = {}
 
 
+def _apply_task_update(page_id: str, field: str, value: str, today: str = None) -> str:
+    today = today or date.today().isoformat()
+    prompt = f"Heute ist {today}. page_id: {page_id}. Feld: {field}. Wert: {value}."
+    return run_claude(prompt, system_prompt=TASK_UPDATE_SYSTEM_PROMPT, automated=True)
+
+
+def _send_task_message(task: dict) -> None:
+    pid = task["id"].replace("-", "")
+    prio_icon = PRIO_ICONS.get(task.get("prio", ""), "")
+    text = f"{prio_icon} {task['name']}" if prio_icon else task["name"]
+    if task.get("projekt"):
+        text += f"  →{task['projekt']}"
+    send_message(TOKEN, CHAT_ID, text, reply_markup={"inline_keyboard": _task_buttons(pid)})
+
+
+def _send_habit_message(habit: dict) -> None:
+    pid = habit["id"].replace("-", "")
+    freq = "täglich" if habit.get("interval", 1) == 1 else f"alle {habit['interval']} Tage"
+    text = f"🔄 {habit['name']} ({freq})"
+    buttons = [[{"text": "✅ Erledigt", "callback_data": f"habit_done:{pid}"}]]
+    send_message(TOKEN, CHAT_ID, text, reply_markup={"inline_keyboard": buttons})
+
+
+def _send_moin_messages(data: dict) -> None:
+    try:
+        d = date.fromisoformat(data.get("date", date.today().isoformat()))
+        today_str = d.strftime("%d.%m.%Y")
+    except ValueError:
+        today_str = data.get("date", "")
+
+    tasks = data.get("tasks", [])
+    projects: dict = {}
+    for t in tasks:
+        if t.get("projekt"):
+            projects[t["projekt"]] = projects.get(t["projekt"], 0) + 1
+
+    header = f"🌅 Guten Morgen! {today_str}"
+    if projects:
+        proj_str = " · ".join(f"{p} ({n})" for p, n in sorted(projects.items()))
+        header += f"\n📁 {proj_str}"
+    send_message(TOKEN, CHAT_ID, header, reply_markup=REPLY_KEYBOARD)
+
+    appts = data.get("appointments", [])
+    if appts:
+        lines = [f"📅 Termine heute ({len(appts)}):"]
+        for a in appts:
+            lines.append(f"· {a['time']} · {a['name']}")
+        send_message(TOKEN, CHAT_ID, "\n".join(lines))
+
+    for task in tasks:
+        _send_task_message(task)
+
+    for habit in data.get("habits", []):
+        _send_habit_message(habit)
+
+    if not tasks and not data.get("habits"):
+        send_message(TOKEN, CHAT_ID, "Nichts zu tun heute 🎉")
+
+
+def _send_abend_messages(data: dict) -> None:
+    try:
+        d = date.fromisoformat(data.get("date", date.today().isoformat()))
+        today_str = d.strftime("%d.%m.%Y")
+    except ValueError:
+        today_str = data.get("date", "")
+
+    done = data.get("done", [])
+    open_tasks = data.get("open", [])
+    bilanz = data.get("projekt_bilanz", [])
+
+    lines = [f"🌙 Tagesabschluss {today_str}", ""]
+    lines.append(f"✅ Heute erledigt ({len(done)}):")
+    if done:
+        for t in done:
+            prefix = f"→{t['projekt']} " if t.get("projekt") else ""
+            lines.append(f"· {prefix}{t['name']}")
+    else:
+        lines.append("· (nichts heute abgehakt)")
+
+    if bilanz:
+        lines.append("")
+        lines.append("📊 Projekt-Bilanz:")
+        for p in bilanz:
+            lines.append(f"· {p['name']}: {p['done']} erledigt / {p['open']} offen")
+
+    send_message(TOKEN, CHAT_ID, "\n".join(lines), reply_markup=REPLY_KEYBOARD)
+
+    for task in open_tasks:
+        pid = task["id"].replace("-", "")
+        prio_icon = PRIO_ICONS.get(task.get("prio", ""), "")
+        text = f"⏳ {task['name']}"
+        if task.get("projekt"):
+            text += f"  →{task['projekt']}"
+        if prio_icon:
+            text += f"\n{prio_icon} ({task.get('prio', '')})"
+        send_message(TOKEN, CHAT_ID, text, reply_markup={"inline_keyboard": _task_buttons(pid)})
+
+    for habit in data.get("missed_habits", []):
+        pid = habit["id"].replace("-", "")
+        buttons = [[{"text": "✅ Nachträglich erledigen", "callback_data": f"habit_done:{pid}"}]]
+        send_message(TOKEN, CHAT_ID,
+                     f"⚠️ {habit['name']} — heute fällig, nicht erledigt",
+                     reply_markup={"inline_keyboard": buttons})
+
+
 def _add_reminder(text, due_iso):
     reminders = load_reminders()
     reminders.append({

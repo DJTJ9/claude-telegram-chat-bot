@@ -89,3 +89,80 @@ def test_task_buttons_structure():
     assert buttons[0][0]["callback_data"] == "done:abc123def456"
     assert buttons[0][1]["callback_data"] == "reschedule:abc123def456"
     assert buttons[0][2]["callback_data"] == "edit:abc123def456"
+
+# ── Message sender tests ─────────────────────────────────────────────────────
+
+from unittest.mock import patch, MagicMock
+
+def test_send_task_message_builds_correct_text():
+    from bots.organizer import _send_task_message
+    task = {"name": "PR Review", "prio": "Hoch", "projekt": "dart-app", "id": "abc123def456"}
+    with patch("bots.organizer.send_message") as mock_send:
+        _send_task_message(task)
+        args = mock_send.call_args[0]
+        text = args[2]
+        markup = args[3] if len(args) > 3 else mock_send.call_args[1].get("reply_markup")
+        assert "🔴" in text
+        assert "PR Review" in text
+        assert "→dart-app" in text
+        assert markup["inline_keyboard"][0][0]["callback_data"] == "done:abc123def456"
+
+def test_send_task_message_no_projekt():
+    from bots.organizer import _send_task_message
+    task = {"name": "Einkaufen", "prio": "Mittel", "projekt": None, "id": "xyz999"}
+    with patch("bots.organizer.send_message") as mock_send:
+        _send_task_message(task)
+        text = mock_send.call_args[0][2]
+        assert "→" not in text
+        assert "Einkaufen" in text
+
+def test_send_habit_message_taglich():
+    from bots.organizer import _send_habit_message
+    habit = {"name": "Sport", "interval": 1, "id": "hab001"}
+    with patch("bots.organizer.send_message") as mock_send:
+        _send_habit_message(habit)
+        args = mock_send.call_args[0]
+        text = args[2]
+        markup = args[3] if len(args) > 3 else mock_send.call_args[1].get("reply_markup")
+        assert "Sport" in text
+        assert "täglich" in text
+        assert markup["inline_keyboard"][0][0]["callback_data"] == "habit_done:hab001"
+
+def test_send_habit_message_interval():
+    from bots.organizer import _send_habit_message
+    habit = {"name": "Yoga", "interval": 3, "id": "hab002"}
+    with patch("bots.organizer.send_message") as mock_send:
+        _send_habit_message(habit)
+        assert "alle 3 Tage" in mock_send.call_args[0][2]
+
+def test_send_moin_messages_header_task_habit():
+    from bots.organizer import _send_moin_messages
+    data = json.loads(SAMPLE_MOIN_JSON)
+    with patch("bots.organizer.send_message") as mock_send:
+        _send_moin_messages(data)
+        all_texts = [c[0][2] for c in mock_send.call_args_list]
+        assert any("Guten Morgen" in t for t in all_texts)
+        assert any("Zahnarzt" in t for t in all_texts)
+        assert any("PR Review" in t for t in all_texts)
+        assert any("Sport" in t for t in all_texts)
+
+def test_send_abend_messages_header_open_missed():
+    from bots.organizer import _send_abend_messages
+    data = json.loads(SAMPLE_ABEND_JSON)
+    with patch("bots.organizer.send_message") as mock_send:
+        _send_abend_messages(data)
+        all_texts = [c[0][2] for c in mock_send.call_args_list]
+        assert any("Tagesabschluss" in t for t in all_texts)
+        assert any("PR Review" in t for t in all_texts)
+        assert any("Einkaufen" in t for t in all_texts)
+        assert any("Sport" in t for t in all_texts)
+
+def test_apply_task_update_calls_claude():
+    from bots.organizer import _apply_task_update
+    with patch("bots.organizer.run_claude", return_value="✏️ Prio → Hoch") as mock_claude:
+        result = _apply_task_update("abc123", "prio", "Hoch", "2026-06-22")
+        assert result == "✏️ Prio → Hoch"
+        prompt = mock_claude.call_args[0][0]
+        assert "abc123" in prompt
+        assert "prio" in prompt
+        assert "Hoch" in prompt
