@@ -1,4 +1,4 @@
-import os, sys, json, re, subprocess, threading, time
+import os, sys, json, re, subprocess, threading, time, signal
 from datetime import date
 from pathlib import Path
 
@@ -16,6 +16,7 @@ if env_file.exists():
 from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, edit_message_keyboard, transcribe_voice, normalize_voice
 from core.settings import load_settings, save_settings
 from core.state import load_registry, save_registry, load_plans
+from core import session_manager
 
 TOKEN = os.environ["TOKEN_BRAIN"]
 CHAT_ID = int(os.environ.get("CHAT_ID", "8896609541"))
@@ -32,8 +33,6 @@ projekte — Alle Projekte anzeigen / anlegen
 /specs — Alle vorhandenen Specs anzeigen
 hilfe — Diese Hilfe"""
 
-_brainstorming_active = False
-_vision_active = False
 _pending_new_project: dict = {}
 _active_question_id = None
 _proj_msg_id: dict = {}  # chat_id → message_id of last project list message
@@ -128,7 +127,6 @@ def _project_list_keyboard():
 
 
 def _run_vision(slug):
-    global _vision_active
     _set_session("vision")
     registry = load_registry()
     proj = next((p for p in registry if p["slug"] == slug),
@@ -173,19 +171,22 @@ def _run_vision(slug):
         f"Fill based on how often each architectural decision was confirmed vs. questioned in the dialogue. "
         f"Use 🟢 hoch / 🟡 mittel / 🔴 niedrig."
     )
-    cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
+    cmd = ["claude", "--allowedTools", "Bash,Read,Write,Edit,Grep,Glob", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                                timeout=3600, cwd=str(hub_path), env=env)
-        if result.returncode == 0:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, encoding="utf-8", cwd=str(hub_path), env=env)
+        session_manager.save_session("vision", slug, proc.pid)
+        stdout, stderr = proc.communicate(timeout=3600)
+        if proc.returncode == 0:
             send_message(TOKEN, CHAT_ID, f"🔭 Vision-Session für {proj['name']} abgeschlossen")
         else:
-            send_message(TOKEN, CHAT_ID, f"❌ Vision-Session fehlgeschlagen\n{(result.stderr or '')[-300:]}")
+            send_message(TOKEN, CHAT_ID, f"❌ Vision-Session fehlgeschlagen\n{(stderr or '')[-300:]}")
     except subprocess.TimeoutExpired:
+        proc.kill()
         send_message(TOKEN, CHAT_ID, "❌ Vision-Timeout (1h überschritten)")
     finally:
-        _vision_active = False
+        session_manager.clear_session()
         _clear_session()
 
 
@@ -200,13 +201,10 @@ def _create_project_entry(slug, name, path):
     (topic_dir / "specs").mkdir(parents=True, exist_ok=True)
     (topic_dir / "plans").mkdir(parents=True, exist_ok=True)
     send_message(TOKEN, CHAT_ID, f"✅ Projekt {name} angelegt. Starte Vision-Session...")
-    global _vision_active
-    _vision_active = True
     threading.Thread(target=_run_vision, args=(slug,), daemon=True).start()
 
 
 def _run_brainstorming(topic, basis_slug=None, project_slug=None):
-    global _brainstorming_active
     _set_session("brainstorming")
     safe_topic = topic[:500]
     telegram_ask_path = WORK_DIR / "scripts" / "telegram_ask.py"
@@ -274,26 +272,29 @@ def _run_brainstorming(topic, basis_slug=None, project_slug=None):
         )
         exec_cwd = str(WORK_DIR)
 
-    cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
+    cmd = ["claude", "--allowedTools", "Bash,Read,Write,Edit,Grep,Glob", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                                timeout=7200, cwd=exec_cwd, env=env)
-        if result.returncode == 0:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, encoding="utf-8", cwd=exec_cwd, env=env)
+        session_manager.save_session("brainstorming", project_slug or "general", proc.pid)
+        stdout, stderr = proc.communicate(timeout=7200)
+        if proc.returncode == 0:
             if project_slug:
                 _mark_feature_done(project_slug, safe_topic)
             send_message(TOKEN, CHAT_ID, "✅ Brainstorming abgeschlossen")
         else:
-            send_message(TOKEN, CHAT_ID, f"❌ Brainstorming fehlgeschlagen\n{(result.stderr or '')[-300:]}")
+            send_message(TOKEN, CHAT_ID, f"❌ Brainstorming fehlgeschlagen\n{(stderr or '')[-300:]}")
     except subprocess.TimeoutExpired:
+        proc.kill()
         send_message(TOKEN, CHAT_ID, "❌ Brainstorming-Timeout (2h überschritten)")
     finally:
-        _brainstorming_active = False
+        session_manager.clear_session()
         _clear_session()
 
 
 def main():
-    global _brainstorming_active, _vision_active, _active_question_id
+    global _active_question_id
 
     offset = None
     print(f"Brain Bot gestartet (chat_id={CHAT_ID})")
@@ -355,10 +356,9 @@ def main():
                                 _proj_msg_id[CHAT_ID] = mid
                     elif data.startswith("proj_vis:"):
                         slug = data[9:]
-                        if _vision_active:
-                            send_message(TOKEN, CHAT_ID, "⚠️ Vision-Session läuft bereits.")
+                        if session_manager.is_session_active():
+                            send_message(TOKEN, CHAT_ID, "⚠️ Session läuft bereits.")
                         else:
-                            _vision_active = True
                             send_message(TOKEN, CHAT_ID, f"🔭 Vision-Session für {slug} gestartet")
                             threading.Thread(target=_run_vision, args=(slug,), daemon=True).start()
                     elif data.startswith("proj_bs:"):
@@ -380,11 +380,10 @@ def main():
                         idx = int(idx_str)
                         if idx >= len(features):
                             send_message(TOKEN, CHAT_ID, "⚠️ Feature nicht mehr im Backlog.")
-                        elif _brainstorming_active:
-                            send_message(TOKEN, CHAT_ID, "⚠️ Brainstorming läuft bereits. Bitte warten.")
+                        elif session_manager.is_session_active():
+                            send_message(TOKEN, CHAT_ID, "⚠️ Session läuft bereits. Bitte warten.")
                         else:
                             feature = features[idx]
-                            _brainstorming_active = True
                             send_message(TOKEN, CHAT_ID, f"🧠 Brainstorming: {feature}")
                             threading.Thread(target=_run_brainstorming, args=(feature, None, slug), daemon=True).start()
                     elif data.startswith("npth_a:"):
@@ -460,19 +459,18 @@ def main():
                             "Nutzung: brainstorming: <idee>\n"
                             "oder:    brainstorming: <idee>, basis: <slug>\n"
                             "Specs anzeigen: /specs")
-                    elif _brainstorming_active:
-                        send_message(TOKEN, CHAT_ID, "⚠️ Brainstorming-Session läuft bereits. Bitte warten.")
+                    elif session_manager.is_session_active():
+                        send_message(TOKEN, CHAT_ID, "⚠️ Session läuft bereits. Bitte warten.")
                     else:
                         basis_slug = None
                         if ", basis:" in topic.lower():
                             idx = topic.lower().index(", basis:")
                             basis_slug = topic[idx + 8:].strip()
                             topic = topic[:idx].strip()
-                        _brainstorming_active = True
                         send_message(TOKEN, CHAT_ID, "🧠 Brainstorming gestartet — Fragen kommen gleich über den Chat")
                         threading.Thread(target=_run_brainstorming, args=(topic, basis_slug), daemon=True).start()
                 elif t == "vision:end":
-                    if _vision_active:
+                    if session_manager.is_session_active():
                         (HUB_DIR / ".vision_end").write_text("end")
                         send_message(TOKEN, CHAT_ID, "⏹ vision:end Signal gesendet — Claude schreibt VISION.md")
                     else:
@@ -481,15 +479,14 @@ def main():
                     slug = text[7:].strip()
                     if not slug:
                         send_message(TOKEN, CHAT_ID, "Nutzung: vision: <slug>  z.B. vision: dart-app\nProjekte anzeigen: projekte")
-                    elif _vision_active:
-                        send_message(TOKEN, CHAT_ID, "⚠️ Vision-Session läuft bereits. Warten bis abgeschlossen.")
+                    elif session_manager.is_session_active():
+                        send_message(TOKEN, CHAT_ID, "⚠️ Session läuft bereits. Warten bis abgeschlossen.")
                     else:
                         registry = load_registry()
                         proj = next((p for p in registry if p["slug"] == slug or p["name"].lower() == slug.lower()), None)
                         if not proj:
                             send_message(TOKEN, CHAT_ID, f"❌ Projekt '{slug}' nicht gefunden.\nErst anlegen: projekte → ➕ Neues Projekt")
                         else:
-                            _vision_active = True
                             send_message(TOKEN, CHAT_ID, f"🔭 Vision-Session für {proj['name']} gestartet — Fragen kommen gleich")
                             threading.Thread(target=_run_vision, args=(proj["slug"],), daemon=True).start()
                 elif t == "projekte":
@@ -502,12 +499,12 @@ def main():
                 elif t == "hilfe":
                     send_message(TOKEN, CHAT_ID, HILFE_TEXT)
                 else:
-                    if not _brainstorming_active:
-                        _brainstorming_active = True
+                    if session_manager.is_session_active():
+                        session_manager.write_comment(text)
+                        send_message(TOKEN, CHAT_ID, "💬 Kommentar gespeichert — wird bei nächster Frage angehängt")
+                    else:
                         send_message(TOKEN, CHAT_ID, "🧠 Brainstorming gestartet — Fragen kommen gleich")
                         threading.Thread(target=_run_brainstorming, args=(text,), daemon=True).start()
-                    else:
-                        send_message(TOKEN, CHAT_ID, "⚠️ Brainstorming läuft bereits. Bitte warten.")
 
             q_path = WORK_DIR / "pending_question.json"
             if not _active_question_id and q_path.exists():
