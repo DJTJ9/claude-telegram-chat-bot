@@ -144,6 +144,12 @@ def _run_vision(slug):
     hub_path.mkdir(parents=True, exist_ok=True)
     vision_path = hub_path / "VISION.md"
     telegram_ask_path = WORK_DIR / "scripts" / "telegram_ask.py"
+    prior_checkpoint = ""
+    s_prev = session_manager.load_session()
+    if s_prev and s_prev.get("slug") == slug and s_prev.get("session_id"):
+        prev_cp = session_manager.load_checkpoint(s_prev["session_id"])
+        if prev_cp:
+            prior_checkpoint = f"Prior session checkpoint (resume from here):\n{prev_cp}\n\n"
     vision_note = (
         f"Read {vision_path} first — it exists. Append/refine sections, do NOT overwrite entirely."
         if vision_path.exists() else
@@ -158,6 +164,7 @@ def _run_vision(slug):
     )
     registry_json = json.dumps(registry, ensure_ascii=False)
     prompt = (
+        prior_checkpoint +
         f"You are running a project vision session for: {proj['name']} (slug: {slug}). "
         f"You have full tool access: write files, run Bash commands including git. "
         f"Project registry (all known projects for cross-reference): {registry_json}. "
@@ -178,7 +185,11 @@ def _run_vision(slug):
         f"'## Confidence-Scores' as a markdown table: "
         f"| Position | Bestätigungen | Anzweiflungen | Bewertung | "
         f"Fill based on how often each architectural decision was confirmed vs. questioned in the dialogue. "
-        f"Use 🟢 hoch / 🟡 mittel / 🔴 niedrig."
+        f"Use 🟢 hoch / 🟡 mittel / 🔴 niedrig. "
+        f"Every 15 exchanges, write a checkpoint to {hub_path / 'checkpoint.md'} with:\n"
+        f"## Checkpoint\n**Erledigt:** [what was discussed/decided]\n"
+        f"**Nächster Schritt:** [exact next question or action]\n"
+        f"**Offene Punkte:** [unresolved questions]\nWrite BEFORE asking the next question. "
     )
     cmd = ["claude", "--allowedTools", "Bash,Read,Write,Edit,Grep,Glob", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
@@ -190,7 +201,19 @@ def _run_vision(slug):
         if proc.returncode == 0:
             send_message(TOKEN, CHAT_ID, f"🔭 Vision-Session für {proj['name']} abgeschlossen")
         else:
-            send_message(TOKEN, CHAT_ID, f"❌ Vision-Session fehlgeschlagen\n{(stderr or '')[-300:]}")
+            s = session_manager.load_session()
+            session_id = s["session_id"] if s else None
+            checkpoint = session_manager.load_checkpoint(session_id) if session_id else None
+            if checkpoint:
+                send_message(TOKEN, CHAT_ID,
+                    f"⚠️ Vision-Session unterbrochen\n\n{checkpoint[:500]}",
+                    reply_markup={"inline_keyboard": [[
+                        {"text": "🔄 Fortsetzen", "callback_data": f"resume:{slug}:vision"},
+                        {"text": "❌ Abbrechen", "callback_data": "session_cancel"},
+                    ]]}
+                )
+            else:
+                send_message(TOKEN, CHAT_ID, f"❌ Vision-Session fehlgeschlagen\n{(stderr or '')[-300:]}")
     except subprocess.TimeoutExpired:
         proc.kill()
         send_message(TOKEN, CHAT_ID, "❌ Vision-Timeout (1h überschritten)")
@@ -259,6 +282,7 @@ def _run_brainstorming(topic, basis_slug=None, project_slug=None):
         )
         exec_cwd = str(hub_path)
     else:
+        exec_cwd = str(WORK_DIR)
         vision_path = WORK_DIR / "VISION.md"
         vision_note = (
             f"Read {vision_path} first for existing project context and backlog."
@@ -279,7 +303,21 @@ def _run_brainstorming(topic, basis_slug=None, project_slug=None):
             f"add the new feature under Implementiert, move any collected-but-not-chosen ideas to Backlog, "
             f"record key decisions under Entscheidungen."
         )
-        exec_cwd = str(WORK_DIR)
+
+    prior_checkpoint = ""
+    s_prev = session_manager.load_session()
+    if s_prev and s_prev.get("slug") == (project_slug or "") and s_prev.get("session_id"):
+        prev_cp = session_manager.load_checkpoint(s_prev["session_id"])
+        if prev_cp:
+            prior_checkpoint = f"Prior session checkpoint (resume from here):\n{prev_cp}\n\n"
+    if prior_checkpoint:
+        prompt = prior_checkpoint + prompt
+    prompt += (
+        f"Every 15 exchanges, write a checkpoint to {exec_cwd}/checkpoint.md with:\n"
+        f"## Checkpoint\n**Erledigt:** [what was discussed/decided]\n"
+        f"**Nächster Schritt:** [exact next question or action]\n"
+        f"**Offene Punkte:** [unresolved questions]\nWrite BEFORE asking next question. "
+    )
 
     cmd = ["claude", "--allowedTools", "Bash,Read,Write,Edit,Grep,Glob", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
@@ -293,7 +331,20 @@ def _run_brainstorming(topic, basis_slug=None, project_slug=None):
                 _mark_feature_done(project_slug, safe_topic)
             send_message(TOKEN, CHAT_ID, "✅ Brainstorming abgeschlossen")
         else:
-            send_message(TOKEN, CHAT_ID, f"❌ Brainstorming fehlgeschlagen\n{(stderr or '')[-300:]}")
+            s = session_manager.load_session()
+            session_id = s["session_id"] if s else None
+            checkpoint = session_manager.load_checkpoint(session_id) if session_id else None
+            recovery_slug = project_slug or "general"
+            if checkpoint:
+                send_message(TOKEN, CHAT_ID,
+                    f"⚠️ Brainstorming-Session unterbrochen\n\n{checkpoint[:500]}",
+                    reply_markup={"inline_keyboard": [[
+                        {"text": "🔄 Fortsetzen", "callback_data": f"resume:{recovery_slug}:brainstorming"},
+                        {"text": "❌ Abbrechen", "callback_data": "session_cancel"},
+                    ]]}
+                )
+            else:
+                send_message(TOKEN, CHAT_ID, f"❌ Brainstorming fehlgeschlagen\n{(stderr or '')[-300:]}")
     except subprocess.TimeoutExpired:
         proc.kill()
         send_message(TOKEN, CHAT_ID, "❌ Brainstorming-Timeout (2h überschritten)")

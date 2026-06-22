@@ -222,3 +222,34 @@ def test_append_idea_adds_to_existing_backlog(tmp_path, monkeypatch):
     content = vision.read_text()
     assert "- [ ] New idea  <!-- prio:99 -->" in content
     assert "- [ ] Existing" in content
+
+
+def test_vision_failure_with_checkpoint_sends_resume_keyboard(tmp_path, monkeypatch):
+    import bots.brain as brain
+    import core.session_manager as sm
+    monkeypatch.setattr(sm, "_STATE_PATH", tmp_path / "session_state.json")
+    monkeypatch.setattr(sm, "_COMMENT_PATH", tmp_path / "pending_comment.json")
+    sm.save_session("vision", "my-proj", pid=1)
+    s = sm.load_session()
+    checkpoint_content = "## Checkpoint\n**Erledigt:** discussed auth\n**Nächster Schritt:** ask about DB"
+    sm.write_checkpoint(s["session_id"], checkpoint_content)
+    messages = []
+    keyboards = []
+    def fake_send(token, chat_id, text, reply_markup=None):
+        messages.append(text)
+        if reply_markup:
+            keyboards.append(reply_markup)
+        return 1
+    monkeypatch.setattr(brain, "send_message", fake_send)
+    checkpoint = sm.load_checkpoint(s["session_id"])
+    if checkpoint:
+        brain.send_message(brain.TOKEN, brain.CHAT_ID,
+            f"⚠️ Session unterbrochen\n\n{checkpoint[:500]}",
+            reply_markup={"inline_keyboard": [[
+                {"text": "🔄 Fortsetzen", "callback_data": f"resume:my-proj:vision"},
+                {"text": "❌ Abbrechen", "callback_data": "session_cancel"},
+            ]]}
+        )
+    assert any("unterbrochen" in m for m in messages)
+    assert len(keyboards) > 0
+    sm.clear_session()
