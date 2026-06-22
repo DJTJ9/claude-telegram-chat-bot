@@ -253,3 +253,52 @@ def test_vision_failure_with_checkpoint_sends_resume_keyboard(tmp_path, monkeypa
     assert any("unterbrochen" in m for m in messages)
     assert len(keyboards) > 0
     sm.clear_session()
+
+
+def test_run_chunked_sends_progress_messages(tmp_path, monkeypatch):
+    import bots.brain as brain
+    import core.session_manager as sm
+    from unittest.mock import patch, MagicMock
+    monkeypatch.setattr(sm, "_STATE_PATH", tmp_path / "session_state.json")
+    monkeypatch.setattr(sm, "_COMMENT_PATH", tmp_path / "pending_comment.json")
+    plan = tmp_path / "plan.md"
+    plan.write_text(
+        "## Task 1: Init repo\n**Dateien:** `setup.py`\nCreate setup.\n\n"
+        "## Task 2: Add tests\n**Dateien:** `tests/test.py`\nWrite tests.\n"
+    )
+    proj_dir = tmp_path / "proj"
+    proj_dir.mkdir()
+    messages = []
+    monkeypatch.setattr(brain, "send_message", lambda *a, **kw: messages.append(a[2]) or 1)
+    call_count = {"n": 0}
+    class FakeProc:
+        pid = 1
+        returncode = 0
+        def communicate(self, timeout=None):
+            return ("", "")
+    def fake_popen(cmd, *args, **kwargs):
+        return FakeProc()
+    def fake_run(cmd, *args, **kwargs):
+        m = MagicMock()
+        m.returncode = 0
+        call_count["n"] += 1
+        m.stdout = f"hash{call_count['n']}"
+        m.stderr = ""
+        return m
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr("subprocess.run", fake_run)
+    plan_entry = {
+        "slug": "my-proj",
+        "plan_path": str(plan.relative_to(tmp_path)),
+    }
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    import core.state as st
+    monkeypatch.setattr(st, "HUB_DIR", str(tmp_path))
+    (tmp_path / "projects-registry.json").write_text(json.dumps([
+        {"slug": "my-proj", "name": "My Proj", "path": str(proj_dir), "repo": "", "description": ""}
+    ]))
+    (tmp_path / "scheduled_plans.json").write_text("[]")
+    brain._run_chunked_implementation(plan_entry)
+    assert any("Task 1/2" in m for m in messages)
+    assert any("Task 2/2" in m for m in messages)
+    assert any("abgeschlossen" in m for m in messages)

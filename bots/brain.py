@@ -446,6 +446,93 @@ def _run_status(slug):
         send_message(TOKEN, CHAT_ID, "❌ Status-Timeout (2 Min überschritten)")
 
 
+def _run_chunked_implementation(plan_entry: dict):
+    plan_path = HUB_DIR / plan_entry["plan_path"]
+    slug = plan_entry.get("slug", "unknown")
+    registry = load_registry()
+    proj = next((p for p in registry if p["slug"] == slug),
+                {"slug": slug, "name": slug, "path": "", "repo": ""})
+    proj_path = proj.get("path", "")
+
+    tasks = session_manager.parse_plan_tasks(plan_path)
+    total = len(tasks)
+    if total == 0:
+        send_message(TOKEN, CHAT_ID, f"❌ Keine Tasks in Plan: {plan_path.name}")
+        return
+
+    plan_content = plan_path.read_text(encoding="utf-8")
+    env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
+
+    for i, task in enumerate(tasks, 1):
+        if task["done"]:
+            continue
+        send_message(TOKEN, CHAT_ID, f"⏳ Task {i}/{total}: {task['title']}...")
+
+        before_hash = ""
+        if proj_path and Path(proj_path).exists():
+            r = subprocess.run(["git", "-C", proj_path, "rev-parse", "HEAD"],
+                               capture_output=True, text=True)
+            before_hash = r.stdout.strip()
+
+        task_prompt = (
+            f"You are implementing Task {i}/{total} of plan: {plan_path.name}\n"
+            f"Task title: {task['title']}\n"
+            f"Files to touch: {task['files']}\n"
+            f"Task description:\n{task['description']}\n\n"
+            f"Full plan for context:\n{plan_content}\n\n"
+            f"After implementing, create a git commit: "
+            f"feat({slug}): <specific one-line description of what you implemented>\n"
+            f"Then exit. Do not implement other tasks."
+        )
+        cmd = ["claude", "--allowedTools", "Bash,Read,Write,Edit,Grep,Glob", "-p", task_prompt]
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, encoding="utf-8",
+                                    cwd=proj_path if proj_path else str(HUB_DIR), env=env)
+            session_manager.save_session("implementation", slug, proc.pid)
+            stdout, stderr = proc.communicate(timeout=1800)
+
+            after_hash = ""
+            if proj_path and Path(proj_path).exists():
+                r = subprocess.run(["git", "-C", proj_path, "rev-parse", "HEAD"],
+                                   capture_output=True, text=True)
+                after_hash = r.stdout.strip()
+
+            task_succeeded = (proc.returncode == 0) or (
+                before_hash and after_hash and before_hash != after_hash
+            )
+
+            if task_succeeded:
+                session_manager.mark_task_done(plan_path, task["title"])
+                send_message(TOKEN, CHAT_ID, f"✅ Task {i}/{total} abgeschlossen")
+            else:
+                session_manager.clear_session()
+                send_message(TOKEN, CHAT_ID,
+                    f"❌ Task {i}/{total} fehlgeschlagen\n{(stderr or '')[-200:]}",
+                    reply_markup={"inline_keyboard": [[
+                        {"text": "🔄 Retry", "callback_data": f"chunk_retry:{slug}:{i}"},
+                        {"text": "⏭ Überspringen", "callback_data": f"chunk_skip:{slug}:{plan_entry.get('slug','')}:{i}"},
+                        {"text": "❌ Abbrechen", "callback_data": "session_cancel"},
+                    ]]}
+                )
+                return
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            session_manager.clear_session()
+            send_message(TOKEN, CHAT_ID, f"❌ Task {i}/{total} Timeout (30 Min)")
+            return
+
+    session_manager.clear_session()
+    _clear_session()
+    subprocess.run(["git", "-C", str(HUB_DIR), "add", "-A"], capture_output=True)
+    subprocess.run(["git", "-C", str(HUB_DIR), "commit", "-m",
+                    f"chore({slug}): implementation complete — all {total} tasks done"], capture_output=True)
+    subprocess.run(["git", "-C", str(HUB_DIR), "push"], capture_output=True)
+    if proj_path and Path(proj_path).exists():
+        subprocess.run(["git", "-C", proj_path, "push"], capture_output=True)
+    send_message(TOKEN, CHAT_ID, f"🎉 Implementierung abgeschlossen ({total}/{total} Tasks)")
+
+
 def main():
     global _active_question_id, _pending_idea
 
