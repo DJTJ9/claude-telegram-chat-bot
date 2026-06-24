@@ -1,4 +1,4 @@
-import os, sys, json, time
+import os, sys, json, time, subprocess
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -26,6 +26,7 @@ HUB_DIR = Path(os.environ.get("HUB_DIR", str(WORK_DIR)))
 _relay_request_id: str | None = None
 _accordion_msg_id: int | None = None
 _capture_state: dict | None = None
+_impl_state: dict | None = None
 
 
 # ── Relay watchdog ────────────────────────────────────────────────────────────
@@ -226,11 +227,15 @@ def _append_idea(slug: str, summary: str) -> None:
 
 
 def _handle_message(msg: dict) -> None:
-    global _capture_state
+    global _capture_state, _impl_state
     text = msg.get("text", "")
 
-    if text == "/start":
+    if text in ("/start", "🤖"):
         _show_main_menu()
+        return
+
+    if _impl_state and _impl_state.get("step") == "await_time":
+        _handle_impl_time_input(text)
         return
 
     if _capture_state is None:
@@ -263,6 +268,11 @@ def _handle_message(msg: dict) -> None:
 def main():
     offset = None
     print(f"Brain Bot gestartet (CHAT_ID={CHAT_ID})")
+    send_message(TOKEN, CHAT_ID, "🤖", reply_markup={
+        "keyboard": [["🤖"]],
+        "resize_keyboard": True,
+        "is_persistent": True,
+    })
     _show_main_menu()
     while True:
         try:
