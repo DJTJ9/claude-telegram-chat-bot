@@ -93,6 +93,71 @@ def _get_dev_status(slug: str) -> tuple[str, str]:
     return active, phase
 
 
+def _get_planned_items(slug: str) -> list[dict]:
+    path = HUB_DIR / "topics" / slug / "STATUS.md"
+    try:
+        content = path.read_text()
+    except FileNotFoundError:
+        return []
+    items, in_roadmap = [], False
+    for line in content.splitlines():
+        if line.startswith("## Roadmap"):
+            in_roadmap = True
+            continue
+        if in_roadmap and "- [planned]" in line:
+            name = line.split("[planned]", 1)[1].strip()
+            name_kebab = name.lower().replace(" ", "-")
+            plan_path = None
+            plans_dir = HUB_DIR / "topics" / slug / "plans"
+            if plans_dir.exists():
+                for f in sorted(plans_dir.glob("*.md"), reverse=True):
+                    if any(w in f.name for w in name_kebab.split("-")[:3] if len(w) > 3):
+                        plan_path = f"topics/{slug}/plans/{f.name}"
+                        break
+            items.append({"name": name, "plan_path": plan_path})
+    return items
+
+
+def _schedule_plan(slug: str, plan_name: str, plan_path: str, time_str: str) -> None:
+    from datetime import datetime, timedelta
+    if time_str.lower() == "jetzt":
+        t = datetime.now() + timedelta(minutes=1)
+        scheduled_time = t.strftime("%H:%M")
+    else:
+        scheduled_time = time_str.strip()
+    plan_slug = Path(plan_path).stem.lstrip("0123456789-")
+    plans_file = HUB_DIR / "scheduled_plans.json"
+    try:
+        plans = json.loads(plans_file.read_text())
+    except Exception:
+        plans = []
+    plans.append({
+        "slug": plan_slug,
+        "plan_path": plan_path,
+        "scheduled_time": scheduled_time,
+        "status": "pending",
+        "project_slug": slug,
+    })
+    plans_file.write_text(json.dumps(plans, indent=2))
+    subprocess.run(["git", "-C", str(HUB_DIR), "add", "scheduled_plans.json"],
+                   capture_output=True)
+    subprocess.run(["git", "-C", str(HUB_DIR), "commit", "-m",
+                    f"chore({slug}): schedule plan {plan_slug} at {scheduled_time}"],
+                   capture_output=True)
+
+
+def _handle_impl_time_input(text: str) -> None:
+    global _impl_state
+    if not _impl_state or _impl_state.get("step") != "await_time":
+        return
+    slug = _impl_state["slug"]
+    plan_name = _impl_state["plan_name"]
+    plan_path = _impl_state["plan_path"]
+    _impl_state = None
+    _schedule_plan(slug, plan_name, plan_path, text.strip())
+    send_message(TOKEN, CHAT_ID, f"✅ Plan '{plan_name}' geplant für {text.strip()}")
+
+
 def _build_main_keyboard(projects: list[dict]) -> list[list[dict]]:
     rows: list[list[dict]] = [[
         {"text": "🔔 Notify an", "callback_data": "notify:on"},
@@ -129,7 +194,7 @@ def _toggle_notify(value: bool) -> None:
 
 
 def _handle_callback(cq: dict) -> None:
-    global _capture_state
+    global _capture_state, _impl_state
     cq_id = cq["id"]
     data = cq.get("data", "")
 
@@ -140,7 +205,7 @@ def _handle_callback(cq: dict) -> None:
 
     is_relay_answer = (
         _relay_request_id is not None
-        and not data.startswith(("proj:", "notify:", "status:", "capture:", "back"))
+        and not data.startswith(("proj:", "notify:", "status:", "capture:", "back", "impl"))
     )
     if is_relay_answer:
         _handle_relay_callback(cq_id, data)
@@ -161,6 +226,7 @@ def _handle_callback(cq: dict) -> None:
                 {"text": "📊 Dev Status", "callback_data": f"status:{slug}"},
                 {"text": "💡 Idee erfassen", "callback_data": f"capture:{slug}"},
             ],
+            [{"text": "🚀 Plan umsetzen", "callback_data": f"impl:{slug}"}],
             [{"text": "← Zurück", "callback_data": "back"}],
         ]
         if _accordion_msg_id:
@@ -190,6 +256,44 @@ def _handle_callback(cq: dict) -> None:
         _capture_state = {"slug": slug, "name": proj["name"]}
         send_message(TOKEN, CHAT_ID,
                      f"💡 Schreib oder sprich deine Idee für {proj['name']}:")
+        answer_callback_query(TOKEN, cq_id)
+
+    elif data.startswith("impl:"):
+        slug = data[5:]
+        items = _get_planned_items(slug)
+        if not items:
+            answer_callback_query(TOKEN, cq_id, text="Keine [planned]-Pläne vorhanden")
+            return
+        _impl_state = {"step": "select_plan", "slug": slug, "plans": items}
+        rows = [
+            [{"text": f"📋 {it['name']}", "callback_data": f"impl_select:{i}"}]
+            for i, it in enumerate(items)
+        ]
+        rows.append([{"text": "← Zurück", "callback_data": f"proj:{slug}"}])
+        if _accordion_msg_id:
+            edit_message(TOKEN, CHAT_ID, _accordion_msg_id, "Welchen Plan umsetzen?",
+                         reply_markup={"inline_keyboard": rows})
+        answer_callback_query(TOKEN, cq_id)
+
+    elif data.startswith("impl_select:"):
+        if not _impl_state or _impl_state.get("step") != "select_plan":
+            answer_callback_query(TOKEN, cq_id)
+            return
+        idx = int(data[12:])
+        plans_list = _impl_state["plans"]
+        if idx >= len(plans_list):
+            answer_callback_query(TOKEN, cq_id, text="Ungültiger Plan")
+            return
+        chosen = plans_list[idx]
+        _impl_state = {
+            "step": "await_time",
+            "slug": _impl_state["slug"],
+            "plan_name": chosen["name"],
+            "plan_path": chosen["plan_path"],
+        }
+        send_message(TOKEN, CHAT_ID,
+                     f"⏰ Wann soll '{chosen['name']}' umgesetzt werden?\n"
+                     "HH:MM eingeben oder 'jetzt':")
         answer_callback_query(TOKEN, cq_id)
 
     else:
