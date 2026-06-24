@@ -39,6 +39,7 @@ _pending_new_project: dict = {}
 _pending_idea: dict = {}
 _active_question_id = None
 _proj_msg_id: dict = {}  # chat_id → message_id of last project list message
+_capture_state: dict = {}  # chat_id → {step, slug, type, feature, cleaned_text, duplicate}
 
 
 def _set_session(session_type):
@@ -392,6 +393,58 @@ def _append_idea_to_backlog(slug, text):
     subprocess.run(["git", "-C", str(HUB_DIR), "commit", "-m",
                     f"chore({slug}): quick capture — {text[:50]}"], capture_output=True)
     subprocess.run(["git", "-C", str(HUB_DIR), "push"], capture_output=True)
+
+
+def _read_status_ideas(slug: str) -> list[str]:
+    status_path = HUB_DIR / "topics" / slug / "STATUS.md"
+    if not status_path.exists():
+        return []
+    lines = status_path.read_text(encoding="utf-8").splitlines()
+    result = []
+    in_roadmap = False
+    for line in lines:
+        if line.startswith("## Roadmap"):
+            in_roadmap = True
+            continue
+        if in_roadmap and line.startswith("## "):
+            break
+        if in_roadmap:
+            m = re.match(r"^- \[(idea|discussed)\]\s+(.+)$", line.strip())
+            if m:
+                result.append(m.group(2).strip())
+    return result
+
+
+def _cleanup_text(raw: str) -> str:
+    from groq import Groq
+    client = Groq(api_key=os.environ["GROQ_API_KEY"])
+    resp = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[
+            {"role": "system", "content": "Formuliere folgende Idee als einen klaren, präzisen Satz. Kern unverändert. Nur den Satz zurückgeben."},
+            {"role": "user", "content": raw},
+        ],
+        max_tokens=100,
+    )
+    return resp.choices[0].message.content.strip()
+
+
+def _find_duplicate(slug: str, text: str) -> "str | None":
+    candidates = _read_status_ideas(slug)
+    text_tokens = set(re.findall(r"\w+", text.lower()))
+    if not text_tokens:
+        return None
+    best: "str | None" = None
+    best_score = 0.0
+    for c in candidates:
+        c_tokens = set(re.findall(r"\w+", c.lower()))
+        if not c_tokens:
+            continue
+        overlap = len(text_tokens & c_tokens) / len(text_tokens | c_tokens)
+        if overlap > best_score:
+            best_score = overlap
+            best = c
+    return best if best_score > 0.5 else None
 
 
 def _run_status(slug):
