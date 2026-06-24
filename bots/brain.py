@@ -389,6 +389,19 @@ def _append_idea_to_backlog(slug, text):
                 content + f"\n## Features (Backlog — priorisiert)\n{new_line}\n",
                 encoding="utf-8",
             )
+    # Write to STATUS.md Roadmap
+    status_path = HUB_DIR / "topics" / slug / "STATUS.md"
+    idea_line = f"- [idea]      {text}"
+    if status_path.exists():
+        s_content = status_path.read_text(encoding="utf-8")
+        if "## Roadmap" in s_content:
+            s_lines = s_content.splitlines()
+            s_lines.append(idea_line)
+            status_path.write_text("\n".join(s_lines) + "\n", encoding="utf-8")
+        else:
+            status_path.write_text(s_content.rstrip() + f"\n\n## Roadmap\n{idea_line}\n", encoding="utf-8")
+    else:
+        status_path.write_text(f"# Project Status — {slug}\n\n## Roadmap\n{idea_line}\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(HUB_DIR), "add", "-A"], capture_output=True)
     subprocess.run(["git", "-C", str(HUB_DIR), "commit", "-m",
                     f"chore({slug}): quick capture — {text[:50]}"], capture_output=True)
