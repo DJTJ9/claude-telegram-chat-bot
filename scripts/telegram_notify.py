@@ -15,11 +15,17 @@ sys.path.insert(0, str(PROJECT_DIR))
 from core.settings import load_settings
 from core.routing import get_notify_token, get_chat_id
 
-if len(sys.argv) < 2:
+_args = sys.argv[1:]
+bot_override = None
+if len(_args) >= 2 and _args[0] == "--bot":
+    bot_override = _args[1]
+    _args = _args[2:]
+
+if not _args:
     sys.exit(0)
 
 settings = load_settings()
-token = get_notify_token(settings)
+token = os.environ.get(f"TOKEN_{bot_override.upper()}") if bot_override else get_notify_token(settings)
 chat_id = get_chat_id()
 
 if not token:
@@ -28,7 +34,7 @@ if not token:
 try:
     requests.post(
         f"https://api.telegram.org/bot{token}/sendMessage",
-        json={"chat_id": chat_id, "text": sys.argv[1]},
+        json={"chat_id": chat_id, "text": _args[0]},
         timeout=10,
     )
 except Exception:
