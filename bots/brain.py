@@ -335,6 +335,7 @@ def _handle_message(msg: dict) -> None:
     text = msg.get("text", "")
 
     if text in ("/start", "🤖"):
+        _accordion_msg_id = None
         _show_main_menu()
         return
 
