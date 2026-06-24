@@ -20,3 +20,9 @@ def test_notify_exits_silently_without_token(tmp_path):
 def test_notify_uses_get_notify_token():
     src = (PROJECT_DIR / "scripts" / "telegram_notify.py").read_text()
     assert "get_notify_token" in src
+
+
+def test_on_stop_uses_permissions_token():
+    src = (PROJECT_DIR / "scripts" / "on_stop.py").read_text()
+    assert "TELEGRAM_TOKEN" not in src
+    assert "TOKEN_PERMISSIONS" in src

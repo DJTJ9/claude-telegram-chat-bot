@@ -3,7 +3,6 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
 
-# Load .env manually
 env_file = PROJECT_DIR / ".env"
 if env_file.exists():
     for line in env_file.read_text(encoding="utf-8").splitlines():
@@ -12,8 +11,8 @@ if env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
-TOKEN = os.environ.get("TELEGRAM_TOKEN")
-MY_CHAT_ID = 8896609541
+TOKEN = os.environ.get("TOKEN_PERMISSIONS")
+MY_CHAT_ID = int(os.environ.get("CHAT_ID", "8896609541"))
 
 if not TOKEN:
     sys.exit(0)
