@@ -25,9 +25,9 @@ def send_message(token, chat_id, text, reply_markup=None):
     r = requests.post(f"{_base(token)}/sendMessage", json=payload)
     return r.json().get("result", {}).get("message_id")
 
-def answer_callback_query(token, callback_query_id):
+def answer_callback_query(token, callback_query_id, text=""):
     requests.post(f"{_base(token)}/answerCallbackQuery",
-                  json={"callback_query_id": callback_query_id})
+                  json={"callback_query_id": callback_query_id, "text": text})
 
 def edit_message_keyboard(token, chat_id, message_id, inline_keyboard):
     requests.post(
@@ -46,14 +46,18 @@ def edit_message(token: str, chat_id: int, message_id: int, text: str, reply_mar
     requests.post(f"{_base(token)}/editMessageText", json=payload)
 
 def build_inline_keyboard(question):
-    """Parse question text and return InlineKeyboardMarkup rows."""
-    q = question.lower()
+    """Parse question text into InlineKeyboardMarkup rows. Each option gets its own row with full text."""
     rows = []
-    opts = re.findall(r'\b([A-D])\)', question)
-    if opts:
-        rows.append([{"text": o, "callback_data": o} for o in opts])
+    matches = re.findall(r'\b([A-D])\)\s*(.+?)(?=\s*\b[A-D]\)|\s*$)', question, re.DOTALL)
+    if matches:
+        for letter, text in matches:
+            full = f"{letter}) {text.strip()}"
+            if len(full) > 60:
+                full = full[:57] + "..."
+            rows.append([{"text": full, "callback_data": letter}])
         rows.append([{"text": "Freitext", "callback_data": "__freitext__"}])
         return rows
+    q = question.lower()
     if re.search(r'\bja\b', q) and re.search(r'\bnein\b', q):
         rows.append([
             {"text": "Ja", "callback_data": "ja"},

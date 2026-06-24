@@ -7,10 +7,34 @@ from core.telegram import build_inline_keyboard
 def test_abc_options():
     kb = build_inline_keyboard("Welche Option? A) Eins B) Zwei C) Drei")
     labels = [btn["text"] for row in kb for btn in row]
-    assert "A" in labels
-    assert "B" in labels
-    assert "C" in labels
+    assert "A) Eins" in labels
+    assert "B) Zwei" in labels
+    assert "C) Drei" in labels
     assert "Freitext" in labels
+
+def test_build_inline_keyboard_shows_full_option_text():
+    kb = build_inline_keyboard("Welche Option?\nA) Alles gut machen\nB) Nichts tun\nC) Abbrechen")
+    assert kb[0][0]["text"] == "A) Alles gut machen"
+    assert kb[0][0]["callback_data"] == "A"
+    assert kb[1][0]["text"] == "B) Nichts tun"
+    assert kb[1][0]["callback_data"] == "B"
+    assert kb[2][0]["text"] == "C) Abbrechen"
+    assert kb[2][0]["callback_data"] == "C"
+
+def test_build_inline_keyboard_truncates_long_text():
+    long_opt = "A) " + "x" * 100
+    kb = build_inline_keyboard(f"Frage?\n{long_opt}\nB) Kurz")
+    assert len(kb[0][0]["text"]) <= 60
+    assert kb[0][0]["callback_data"] == "A"
+
+def test_answer_callback_query_accepts_text_param():
+    from core.telegram import answer_callback_query
+    with patch("core.telegram.requests.post") as mock_post:
+        mock_post.return_value = MagicMock()
+        answer_callback_query("tok", "cqid123", text="✅ OK")
+    payload = mock_post.call_args[1]["json"]
+    assert payload["text"] == "✅ OK"
+    assert payload["callback_query_id"] == "cqid123"
 
 def test_ja_nein():
     kb = build_inline_keyboard("Ist das richtig? ja oder nein")
