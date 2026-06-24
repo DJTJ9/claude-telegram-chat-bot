@@ -729,6 +729,72 @@ def main():
                             send_message(TOKEN, CHAT_ID, f"✅ Idee gespeichert in {proj['name']}")
                         else:
                             send_message(TOKEN, CHAT_ID, "❌ Idee nicht mehr verfügbar.")
+                    elif data.startswith("cap_proj:"):
+                        target = data[9:]
+                        if target == "new":
+                            _pending_new_project[CHAT_ID] = {"state": "await_name"}
+                            send_message(TOKEN, CHAT_ID, "Name des neuen Projekts?")
+                        else:
+                            slug = target
+                            registry = load_registry()
+                            proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
+                            _capture_state[CHAT_ID] = {"step": "await_type", "slug": slug}
+                            buttons = [
+                                [{"text": "💡 Neue Idee", "callback_data": "cap_type:idea"}],
+                                [{"text": "🔧 Feature-Verbesserung", "callback_data": "cap_type:feat"}],
+                            ]
+                            send_message(TOKEN, CHAT_ID, f"📁 {proj['name']} — Was erfassen?",
+                                         reply_markup={"inline_keyboard": buttons})
+                    elif data.startswith("cap_type:"):
+                        cap_type = data[9:]
+                        state = _capture_state.get(CHAT_ID, {})
+                        slug = state.get("slug", "")
+                        if not slug:
+                            send_message(TOKEN, CHAT_ID, "❌ Session abgelaufen. Nochmal starten.")
+                        elif cap_type == "idea":
+                            _capture_state[CHAT_ID] = {"step": "await_msg", "slug": slug, "type": "idea", "feature": None}
+                            send_message(TOKEN, CHAT_ID, "💬 Sende jetzt Text oder Sprachnachricht:")
+                        elif cap_type == "feat":
+                            ideas = _read_status_ideas(slug)
+                            if not ideas:
+                                send_message(TOKEN, CHAT_ID, "Keine Ideen in STATUS.md. Erst Idee erfassen.")
+                            else:
+                                _capture_state[CHAT_ID] = {**state, "step": "await_feat", "type": "feat"}
+                                buttons = [[{"text": (f[:40] + "…") if len(f) > 40 else f,
+                                             "callback_data": f"cap_feat:{slug}:{i}"}]
+                                           for i, f in enumerate(ideas[:10])]
+                                send_message(TOKEN, CHAT_ID, "Zu welchem Feature?",
+                                             reply_markup={"inline_keyboard": buttons})
+                    elif data.startswith("cap_feat:"):
+                        _, slug, idx_str = data.split(":", 2)
+                        ideas = _read_status_ideas(slug)
+                        idx = int(idx_str)
+                        if idx >= len(ideas):
+                            send_message(TOKEN, CHAT_ID, "⚠️ Feature nicht mehr verfügbar.")
+                        else:
+                            _capture_state[CHAT_ID] = {"step": "await_msg", "slug": slug, "type": "feat", "feature": ideas[idx]}
+                            send_message(TOKEN, CHAT_ID, "💬 Sende jetzt Text oder Sprachnachricht:")
+                    elif data.startswith("cap_dup:"):
+                        action = data[8:]
+                        state = _capture_state.pop(CHAT_ID, {})
+                        slug = state.get("slug", "")
+                        cleaned = state.get("cleaned_text", "")
+                        if not slug or not cleaned:
+                            send_message(TOKEN, CHAT_ID, "❌ Daten nicht mehr verfügbar.")
+                        elif action == "new":
+                            _append_idea_to_backlog(slug, cleaned)
+                            registry = load_registry()
+                            proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
+                            send_message(TOKEN, CHAT_ID, f"✅ Erfasst in {proj['name']}:\n{cleaned}")
+                        elif action == "ignore":
+                            send_message(TOKEN, CHAT_ID, "🚫 Idee verworfen.")
+                        elif action == "extend":
+                            dup = state.get("duplicate", "")
+                            extended = f"{dup} | Ergänzung: {cleaned}"
+                            _append_idea_to_backlog(slug, extended)
+                            registry = load_registry()
+                            proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
+                            send_message(TOKEN, CHAT_ID, f"✅ Erweitert in {proj['name']}:\n{extended}")
                     elif data == "kill_session":
                         if session_manager.kill_session():
                             session_manager.clear_session()
