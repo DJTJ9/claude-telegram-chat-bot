@@ -30,7 +30,8 @@ brainstorming: <idee>, basis: <slug> — Mit vorheriger Spec als Kontext
 vision: <slug> — Vision-Session für Projekt starten
 vision:end — Laufende Vision-Session beenden
 projekte — Alle Projekte anzeigen / anlegen
-idee: <text> — Idee schnell in Projekt-Backlog speichern
+idee — Idee erfassen (Inline-Flow mit Projekt- & Typauswahl)
+idee: <text> — Idee direkt speichern (Kurzform)
 status — Aktive Session anzeigen / beenden
 /specs — Alle vorhandenen Specs anzeigen
 hilfe — Diese Hilfe"""
@@ -640,7 +641,10 @@ def main():
                                 {"text": "🔭 Vision", "callback_data": f"proj_vis:{slug}"},
                                 {"text": "🧠 Brainstorming", "callback_data": f"proj_bs:{slug}"},
                             ],
-                            [{"text": "📊 Status", "callback_data": f"proj_status:{slug}"}],
+                            [
+                                {"text": "💡 Idee erfassen", "callback_data": f"cap_proj:{slug}"},
+                                {"text": "📊 Status", "callback_data": f"proj_status:{slug}"},
+                            ],
                             [{"text": "← Zurück", "callback_data": "proj_back"}],
                         ]
                         stored_msg_id = _proj_msg_id.get(CHAT_ID)
@@ -844,6 +848,16 @@ def main():
                     mid = send_message(TOKEN, CHAT_ID, "📁 Projekte:", reply_markup={"inline_keyboard": buttons})
                     if mid:
                         _proj_msg_id[CHAT_ID] = mid
+                elif t == "idee":
+                    registry = load_registry()
+                    if not registry:
+                        send_message(TOKEN, CHAT_ID, "Keine Projekte. Erst anlegen: projekte")
+                    else:
+                        buttons = [[{"text": p["name"], "callback_data": f"cap_proj:{p['slug']}"}]
+                                   for p in registry]
+                        buttons.append([{"text": "➕ Neues Projekt", "callback_data": "new_proj"}])
+                        send_message(TOKEN, CHAT_ID, "💡 Für welches Projekt?",
+                                     reply_markup={"inline_keyboard": buttons})
                 elif t == "/specs":
                     send_message(TOKEN, CHAT_ID, _format_specs())
                 elif t.startswith("idee:"):
