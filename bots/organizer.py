@@ -851,9 +851,17 @@ def _run_plan(plan_path, slug=None):
         "Read the plan file and implement every task step by step. Commit all changes when done."
     )
     cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=3600, cwd=base_dir)
-    if result.returncode != 0:
+    s = load_settings()
+    s["active_session"] = "organizer"
+    save_settings(s)
+    try:
         result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=3600, cwd=base_dir)
+        if result.returncode != 0:
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=3600, cwd=base_dir)
+    finally:
+        s = load_settings()
+        s["active_session"] = None
+        save_settings(s)
     success = result.returncode == 0
     if slug:
         plans = load_plans()

@@ -301,3 +301,33 @@ def test_dispatch_edit_empty_shows_usage():
         _dispatch_command("edit:", 123)
         text = mock_send.call_args[0][2]
         assert "Nutzung" in text
+
+
+def test_run_plan_sets_active_session(tmp_path, monkeypatch):
+    import bots.organizer as org
+    import subprocess as sp
+    monkeypatch.setattr(org, "WORK_DIR", tmp_path)
+
+    captured_sessions = []
+
+    def tracking_save(s):
+        captured_sessions.append(s.get("active_session"))
+
+    class FakeResult:
+        returncode = 0
+        stderr = ""
+
+    monkeypatch.setattr(org, "save_settings", tracking_save)
+    monkeypatch.setattr(sp, "run", lambda *a, **k: FakeResult())
+    monkeypatch.setattr(org, "send_message", lambda *a, **k: None)
+    monkeypatch.setattr(org, "load_plans", lambda: [])
+    monkeypatch.setattr(org, "save_plans", lambda x: None)
+
+    plan_dir = tmp_path / "docs" / "superpowers" / "plans"
+    plan_dir.mkdir(parents=True)
+    (plan_dir / "test.md").write_text("# Plan")
+
+    org._run_plan("docs/superpowers/plans/test.md")
+
+    assert "organizer" in captured_sessions
+    assert None in captured_sessions
