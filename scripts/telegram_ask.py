@@ -1,4 +1,5 @@
-import os, sys, json, time, uuid, requests
+#!/usr/bin/env python3
+import json, os, sys, time, uuid
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -13,86 +14,42 @@ if env_file.exists():
 
 sys.path.insert(0, str(PROJECT_DIR))
 from core.settings import load_settings
-from core.telegram import build_inline_keyboard
-from core.routing import _get_target_bot_name, get_chat_id
+
+TIMEOUT = 900
 
 settings = load_settings()
-
 if not settings.get("notifications_enabled", True):
-    print("telegram_ask: notifications_enabled is false", file=sys.stderr)
-    sys.exit(1)
-
-_HUB_DIR = os.environ.get("HUB_DIR", "")
-_signal_path = Path(_HUB_DIR) / ".vision_end" if _HUB_DIR else None
-
-def _check_signal():
-    if _signal_path and _signal_path.exists():
-        _signal_path.unlink()
-        print("vision:end")
-        sys.exit(0)
-
-_check_signal()
+    print("A")
+    sys.exit(0)
 
 if len(sys.argv) < 2:
     print("Usage: telegram_ask.py <question>", file=sys.stderr)
     sys.exit(1)
 
 question = sys.argv[1]
-
-from core import session_manager as _sm
-_comment = _sm.read_and_clear_comment()
-if _comment:
-    question = f"{question}\n\n💬 Nutzerkommentar: {_comment}"
-
 request_id = str(uuid.uuid4())[:8]
-chat_id = get_chat_id()
-
-active_session = settings.get("active_session")
-bot_name = _get_target_bot_name(active_session)
-token_key = f"TOKEN_{bot_name.upper()}"
-token = os.environ.get(token_key)
-
 pending_path = PROJECT_DIR / "pending_question.json"
+response_path = PROJECT_DIR / f"question_response_{request_id}.json"
+
 pending_path.write_text(json.dumps({
     "question": question,
     "request_id": request_id,
-    "target_bot": bot_name,
+    "target_bot": "brain",
 }))
 
-if token:
-    keyboard = build_inline_keyboard(question)
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": f"❓ {question}",
-                  "reply_markup": {"inline_keyboard": keyboard}},
-            timeout=10,
-        )
-    except Exception as e:
-        print(f"telegram_ask: send failed: {e}", file=sys.stderr)
-else:
-    print(f"telegram_ask: {token_key} not set — file IPC only", file=sys.stderr)
-
-response_path = PROJECT_DIR / f"question_response_{request_id}.json"
-timeout = 300
-start = time.time()
-_last_signal_check = time.time()
-
-while time.time() - start < timeout:
+deadline = time.time() + TIMEOUT
+while time.time() < deadline:
     if response_path.exists():
         try:
             resp = json.loads(response_path.read_text())
-            response_path.unlink()
+            response_path.unlink(missing_ok=True)
         except Exception:
             time.sleep(0.1)
             continue
+        pending_path.unlink(missing_ok=True)
         print(resp.get("answer", "A"))
         sys.exit(0)
-    if time.time() - _last_signal_check >= 5:
-        _check_signal()
-        _last_signal_check = time.time()
-    time.sleep(0.5)
+    time.sleep(1)
 
 pending_path.unlink(missing_ok=True)
-print("A")
-sys.exit(0)
+sys.exit(1)

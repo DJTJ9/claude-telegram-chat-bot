@@ -1,79 +1,52 @@
-import sys, os, json, subprocess, threading, time
+import os, sys, json, time, threading
 from pathlib import Path
 
+os.environ.setdefault("TOKEN_BRAIN", "test_token")
+os.environ.setdefault("CHAT_ID", "12345")
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 PROJECT_DIR = Path(__file__).parent.parent
-SCRIPT = PROJECT_DIR / "scripts" / "telegram_ask.py"
 
 
-def test_notifications_off_exits_1():
-    settings_path = PROJECT_DIR / "settings.json"
-    original = settings_path.read_text()
-    settings_path.write_text(json.dumps({"notifications_enabled": False}))
-    try:
-        result = subprocess.run(
-            [sys.executable, str(SCRIPT), "Test question?"],
-            capture_output=True, text=True, timeout=5
-        )
-        assert result.returncode == 1
-    finally:
-        settings_path.write_text(original)
-
-
-def test_returns_answer_from_response_file():
-    settings_path = PROJECT_DIR / "settings.json"
-    original = settings_path.read_text()
-    # Clean up any stale files from previous runs
-    stale_pq = PROJECT_DIR / "pending_question.json"
-    if stale_pq.exists():
-        stale_pq.unlink()
-    settings_path.write_text(json.dumps({"notifications_enabled": True}))
-
-    def write_response():
-        for _ in range(200):  # 20s window — handles slow Python startup under full suite load
-            pq = PROJECT_DIR / "pending_question.json"
+def _run_and_answer(question, answer="B", answer_delay=0.5):
+    import subprocess
+    def write_answer():
+        pq = PROJECT_DIR / "pending_question.json"
+        deadline = time.time() + 5
+        while time.time() < deadline:
             if pq.exists():
-                try:
-                    req_id = json.loads(pq.read_text())["request_id"]
-                    (PROJECT_DIR / f"question_response_{req_id}.json").write_text(
-                        json.dumps({"answer": "B"})
-                    )
-                    return
-                except Exception:
-                    pass
-            time.sleep(0.1)
-
-    t = threading.Thread(target=write_response)
-    t.start()
-
-    try:
-        result = subprocess.run(
-            [sys.executable, str(SCRIPT), "A) opt1 B) opt2?"],
-            capture_output=True, text=True, timeout=25
-        )
-        assert result.stdout.strip() == "B"
-        assert result.returncode == 0
-    finally:
-        settings_path.write_text(original)
-        t.join(timeout=3)
+                data = json.loads(pq.read_text())
+                req_id = data["request_id"]
+                time.sleep(answer_delay)
+                (PROJECT_DIR / f"question_response_{req_id}.json").write_text(
+                    json.dumps({"answer": answer})
+                )
+                return
+            time.sleep(0.05)
+    threading.Thread(target=write_answer, daemon=True).start()
+    return subprocess.run(
+        [sys.executable, str(PROJECT_DIR / "scripts" / "telegram_ask.py"), question],
+        capture_output=True, text=True, timeout=15,
+    )
 
 
-def test_signal_file_triggers_vision_end(tmp_path):
-    """Signal file causes telegram_ask to print 'vision:end' and exit 0."""
-    signal_file = tmp_path / ".vision_end"
-    signal_file.write_text("end")
+def test_telegram_ask_returns_answer():
+    result = _run_and_answer("Frage?\nA) Eins\nB) Zwei", answer="A")
+    assert result.returncode == 0
+    assert result.stdout.strip() == "A"
 
-    settings_path = PROJECT_DIR / "settings.json"
-    original = settings_path.read_text()
-    settings_path.write_text(json.dumps({"notifications_enabled": True}))
+def test_telegram_ask_cleans_up_files():
+    _run_and_answer("Test?\nA) Ja\nB) Nein", answer="B")
+    assert not (PROJECT_DIR / "pending_question.json").exists()
 
-    try:
-        result = subprocess.run(
-            [sys.executable, str(SCRIPT), "Irgendeine Frage?"],
-            capture_output=True, text=True, timeout=5,
-            env={**os.environ, "HUB_DIR": str(tmp_path)},
-        )
-        assert result.returncode == 0
-        assert result.stdout.strip() == "vision:end"
-        assert not signal_file.exists()
-    finally:
-        settings_path.write_text(original)
+def test_telegram_ask_no_session_manager_import():
+    src = (PROJECT_DIR / "scripts" / "telegram_ask.py").read_text()
+    assert "session_manager" not in src
+
+def test_telegram_ask_no_direct_sendmessage():
+    src = (PROJECT_DIR / "scripts" / "telegram_ask.py").read_text()
+    assert "sendMessage" not in src
+
+def test_telegram_ask_timeout_is_900():
+    src = (PROJECT_DIR / "scripts" / "telegram_ask.py").read_text()
+    assert "900" in src
