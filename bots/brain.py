@@ -168,6 +168,14 @@ def _build_main_keyboard(projects: list[dict]) -> list[list[dict]]:
     return rows
 
 
+def _setup_reply_keyboard() -> None:
+    send_message(TOKEN, CHAT_ID, "🤖", reply_markup={
+        "keyboard": [["🤖"]],
+        "resize_keyboard": True,
+        "is_persistent": True,
+    })
+
+
 def _show_main_menu() -> None:
     global _accordion_msg_id
     projects = _load_projects()
@@ -331,11 +339,12 @@ def _append_idea(slug: str, summary: str) -> None:
 
 
 def _handle_message(msg: dict) -> None:
-    global _capture_state, _impl_state
+    global _capture_state, _impl_state, _accordion_msg_id
     text = msg.get("text", "")
 
     if text in ("/start", "🤖"):
         _accordion_msg_id = None
+        _setup_reply_keyboard()
         _show_main_menu()
         return
 
@@ -373,11 +382,7 @@ def _handle_message(msg: dict) -> None:
 def main():
     offset = None
     print(f"Brain Bot gestartet (CHAT_ID={CHAT_ID})")
-    send_message(TOKEN, CHAT_ID, "🤖", reply_markup={
-        "keyboard": [["🤖"]],
-        "resize_keyboard": True,
-        "is_persistent": True,
-    })
+    _setup_reply_keyboard()
     _show_main_menu()
     while True:
         try:
