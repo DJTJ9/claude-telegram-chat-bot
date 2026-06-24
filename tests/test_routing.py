@@ -1,4 +1,4 @@
-from core.routing import _get_target_bot_name
+from core.routing import _get_target_bot_name, get_notify_token
 
 def test_brainstorming_routes_to_brain():
     assert _get_target_bot_name("brainstorming") == "brain"
@@ -14,3 +14,29 @@ def test_none_routes_to_permissions():
 
 def test_unknown_routes_to_permissions():
     assert _get_target_bot_name("unknown") == "permissions"
+
+
+def test_organizer_routes_to_organizer():
+    assert _get_target_bot_name("organizer") == "organizer"
+
+
+def test_dev_routes_to_brain():
+    assert _get_target_bot_name("dev") == "brain"
+
+
+def test_get_notify_token_uses_active_session():
+    env = {"TOKEN_BRAIN": "tok-brain", "TOKEN_PERMISSIONS": "tok-perm"}
+    settings = {"active_session": "brainstorming"}
+    assert get_notify_token(settings, env) == "tok-brain"
+
+
+def test_get_notify_token_falls_back_to_permissions():
+    env = {"TOKEN_PERMISSIONS": "tok-perm"}
+    settings = {"active_session": None}
+    assert get_notify_token(settings, env) == "tok-perm"
+
+
+def test_get_notify_token_returns_none_if_no_token():
+    env = {}
+    settings = {"active_session": None}
+    assert get_notify_token(settings, env) is None
