@@ -513,6 +513,53 @@ def _run_status(slug):
         send_message(TOKEN, CHAT_ID, "❌ Status-Timeout (2 Min überschritten)")
 
 
+def _format_dev_status(slug):
+    status_path = HUB_DIR / "topics" / slug / "STATUS.md"
+    if not status_path.exists():
+        return f"❌ {slug}: STATUS.md nicht gefunden"
+
+    lines = status_path.read_text(encoding="utf-8").splitlines()
+    fields = {}
+    roadmap = []
+    in_roadmap = False
+    for line in lines:
+        if line.startswith("## Roadmap"):
+            in_roadmap = True
+            continue
+        if in_roadmap:
+            if line.startswith("- ["):
+                roadmap.append(line.strip())
+        elif ":" in line and not line.startswith("#"):
+            k, _, v = line.partition(":")
+            fields[k.strip()] = v.strip()
+
+    active = fields.get("Active", "(keine)")
+    phase = fields.get("Phase", "(none)")
+    updated = fields.get("Updated", "")
+
+    done = [r for r in roadmap if r.startswith("- [done]")][-3:]
+    in_progress = [r for r in roadmap if not r.startswith("- [done]") and not r.startswith("- [idea]")]
+    ideas = [r for r in roadmap if r.startswith("- [idea]")]
+
+    def _label(item):
+        return item[item.index("]") + 1:].strip()
+
+    parts = [f"📋 Dev Status — {slug}", f"▶ Aktiv: {active}  |  Phase: {phase}"]
+    if updated:
+        parts.append(f"🗓 Updated: {updated}")
+    parts.append("")
+    if in_progress:
+        parts.append("🔄 In Arbeit:")
+        parts.extend(f"  • {_label(r)}" for r in in_progress)
+    if done:
+        parts.append("✅ Zuletzt erledigt:")
+        parts.extend(f"  • {_label(r)}" for r in done)
+    if ideas:
+        parts.append("💡 Ideen:")
+        parts.extend(f"  • {_label(r)}" for r in ideas)
+    return "\n".join(parts)
+
+
 def _run_chunked_implementation(plan_entry: dict):
     plan_path = HUB_DIR / plan_entry["plan_path"]
     slug = plan_entry.get("slug", "unknown")
@@ -644,6 +691,7 @@ def main():
                             [
                                 {"text": "💡 Idee erfassen", "callback_data": f"cap_proj:{slug}"},
                                 {"text": "📊 Status", "callback_data": f"proj_status:{slug}"},
+                                {"text": "📋 Dev Status", "callback_data": f"dev_status:{slug}"},
                             ],
                             [{"text": "← Zurück", "callback_data": "proj_back"}],
                         ]
@@ -693,6 +741,9 @@ def main():
                         else:
                             send_message(TOKEN, CHAT_ID, f"📊 Status-Report für {slug} wird erstellt...")
                             threading.Thread(target=_run_status, args=(slug,), daemon=True).start()
+                    elif data.startswith("dev_status:"):
+                        slug = data[11:]
+                        send_message(TOKEN, CHAT_ID, _format_dev_status(slug))
                     elif data.startswith("backlog_feat:"):
                         _, slug, idx_str = data.split(":", 2)
                         features = _parse_backlog(slug)

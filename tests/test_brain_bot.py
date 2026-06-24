@@ -302,3 +302,33 @@ def test_run_chunked_sends_progress_messages(tmp_path, monkeypatch):
     assert any("Task 1/2" in m for m in messages)
     assert any("Task 2/2" in m for m in messages)
     assert any("abgeschlossen" in m for m in messages)
+
+
+def test_format_dev_status_active_feature(tmp_path, monkeypatch):
+    import bots.brain as brain
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    status_dir = tmp_path / "topics" / "my-proj"
+    status_dir.mkdir(parents=True)
+    (status_dir / "STATUS.md").write_text(
+        "# Project Status — my-proj\n"
+        "Active: My Feature\n"
+        "Phase: implement\n"
+        "Spec: topics/my-proj/specs/spec.md\n"
+        "Plan: topics/my-proj/plans/plan.md\n"
+        "Updated: 2026-06-24\n\n"
+        "## Roadmap\n"
+        "- [done]      Feature A\n"
+        "- [discussed] My Feature\n"
+        "- [idea]      Future Idea\n"
+    )
+    result = brain._format_dev_status("my-proj")
+    assert "My Feature" in result
+    assert "implement" in result
+    assert "Future Idea" in result
+
+
+def test_format_dev_status_missing_file(tmp_path, monkeypatch):
+    import bots.brain as brain
+    monkeypatch.setattr(brain, "HUB_DIR", tmp_path)
+    result = brain._format_dev_status("nonexistent-proj")
+    assert "nicht gefunden" in result.lower()
