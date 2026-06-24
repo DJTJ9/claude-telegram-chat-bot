@@ -845,6 +845,31 @@ def main():
                     send_message(TOKEN, CHAT_ID, f"💬 Antwort: {text}")
                     continue
 
+                if chat_id in _capture_state and _capture_state[chat_id].get("step") == "await_msg":
+                    state = _capture_state.pop(chat_id)
+                    slug = state["slug"]
+                    try:
+                        cleaned = _cleanup_text(text)
+                    except Exception:
+                        cleaned = text
+                    dup = _find_duplicate(slug, cleaned)
+                    if dup:
+                        _capture_state[chat_id] = {**state, "step": "await_dup", "cleaned_text": cleaned, "duplicate": dup}
+                        buttons = [
+                            [{"text": "💡 Erweitern", "callback_data": "cap_dup:extend"}],
+                            [{"text": "➕ Neu speichern", "callback_data": "cap_dup:new"}],
+                            [{"text": "🚫 Ignorieren", "callback_data": "cap_dup:ignore"}],
+                        ]
+                        send_message(TOKEN, CHAT_ID,
+                                     f"⚠️ Ähnliche Idee gefunden:\n{dup}\n\nWas tun?",
+                                     reply_markup={"inline_keyboard": buttons})
+                    else:
+                        _append_idea_to_backlog(slug, cleaned)
+                        registry = load_registry()
+                        proj = next((p for p in registry if p["slug"] == slug), {"name": slug})
+                        send_message(TOKEN, CHAT_ID, f"✅ Erfasst in {proj['name']}:\n{cleaned}")
+                    continue
+
                 if chat_id in _pending_new_project:
                     state_data = _pending_new_project[chat_id]
                     state = state_data.get("state")
