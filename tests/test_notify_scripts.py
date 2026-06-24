@@ -1,0 +1,22 @@
+import sys, json, subprocess, os
+from pathlib import Path
+
+PROJECT_DIR = Path(__file__).parent.parent
+NOTIFY_SCRIPT = PROJECT_DIR / "scripts" / "telegram_notify.py"
+
+
+def test_notify_exits_silently_without_token(tmp_path):
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps({"notifications_enabled": True, "active_session": None}))
+    result = subprocess.run(
+        [sys.executable, str(NOTIFY_SCRIPT), "Test message"],
+        capture_output=True, text=True, timeout=5,
+        env={**os.environ, "WORK_DIR": str(tmp_path),
+             "TOKEN_PERMISSIONS": "", "TOKEN_BRAIN": "", "TOKEN_TEACH": "", "TOKEN_ORGANIZER": ""}
+    )
+    assert result.returncode == 0
+
+
+def test_notify_uses_get_notify_token():
+    src = (PROJECT_DIR / "scripts" / "telegram_notify.py").read_text()
+    assert "get_notify_token" in src
