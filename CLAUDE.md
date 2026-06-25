@@ -27,7 +27,7 @@
 - Properties: Name (title), Status (kopiert), Priorität (select), Datum (date), Bereich (select), Notiz (rich_text), Archiviert am (date)
 
 ## Arbeitsprojekte
-- data_source_id: `1a2272ec-2901-4f54-9dcb-53420ce1d039`
+- data_source_id: `032bbb7d-6eb3-43da-a3af-cf0be05f3ece`
 - Properties: Name (title), Typ (select: `Projekt`|`Epic`|`Feature`), Status (select), Priorität (select), Phase (select: `Idee`|`Discussed`|`Planned`|`Done`), Spec (rich_text), Plan (rich_text), Notiz (rich_text)
 
 ## Morgen/Abend-Workflow
