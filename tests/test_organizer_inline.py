@@ -409,3 +409,27 @@ def test_handle_callback_has_proj_handlers():
     assert "proj_done:" in src
     assert 'startswith("pfeat_sel:")' in src
     assert "pfeat_confirm:" in src
+
+
+# ── Task 4: Morgen proj_tasks ─────────────────────────────────────────────────
+
+SAMPLE_MOIN_JSON_WITH_PROJ = json.dumps({
+    "date": "2026-06-26",
+    "appointments": [],
+    "tasks": [],
+    "habits": [],
+    "proj_tasks": [
+        {"name": "Login Flow", "projekt": "dart-app", "status": "In Arbeit",
+         "id": "abc123def456abc123def456abc12345"}
+    ],
+})
+
+def test_moin_json_with_proj_tasks_parses():
+    data = json.loads(SAMPLE_MOIN_JSON_WITH_PROJ)
+    assert isinstance(data["proj_tasks"], list)
+    assert data["proj_tasks"][0]["name"] == "Login Flow"
+    assert data["proj_tasks"][0]["projekt"] == "dart-app"
+
+def test_moin_json_prompt_includes_proj_tasks():
+    from bots.organizer import MOIN_JSON_SYSTEM_PROMPT
+    assert "proj_tasks" in MOIN_JSON_SYSTEM_PROMPT

@@ -366,14 +366,19 @@ Gruppen:
 Lies dann Habits-Datenbank (data_source_id: {HABITS_DATA_SOURCE_ID}).
 - habits: Habits mit Nächste Fälligkeit <= heute UND Status = Aktiv — sortiert alphabetisch
 
+Lies dann Arbeitsprojekte-Datenbank (data_source_id: {ARBEIT_DB_ID}).
+- proj_tasks: Features mit Typ = Feature, Datum = heute, Status = Offen oder In Arbeit
+
 Antworte AUSSCHLIESSLICH mit diesem JSON (kein Markdown, keine Erklärung):
 {{
   "date": "YYYY-MM-DD",
-  "appointments": [{{"name": "...", "time": "HH:MM", "id": "<page_id_ohne_bindestriche_32_zeichen>"}}],
-  "tasks": [{{"name": "...", "prio": "Hoch|Mittel|Niedrig", "projekt": "...|null", "id": "<page_id_ohne_bindestriche_32_zeichen>"}}],
-  "habits": [{{"name": "...", "interval": <int_tage>, "id": "<page_id_ohne_bindestriche_32_zeichen>"}}]
+  "appointments": [{{"name": "...", "time": "HH:MM", "id": "<page_id_32_zeichen>"}}],
+  "tasks": [{{"name": "...", "prio": "Hoch|Mittel|Niedrig", "projekt": "...|null", "id": "<page_id_32_zeichen>"}}],
+  "habits": [{{"name": "...", "interval": <int_tage>, "id": "<page_id_32_zeichen>"}}],
+  "proj_tasks": [{{"name": "...", "projekt": "...", "status": "Offen|In Arbeit", "id": "<page_id_32_zeichen>"}}]
 }}
-page_id: Notion page ID als Hex-String ohne Bindestriche, exakt 32 Zeichen."""
+page_id: Notion page ID als Hex-String ohne Bindestriche, exakt 32 Zeichen.
+Falls ARBEIT_DB_ID leer: proj_tasks = []"""
 
 ABEND_JSON_SYSTEM_PROMPT = f"""Du bist ein Notion-Abend-Assistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
@@ -586,7 +591,15 @@ def _send_moin_messages(data: dict) -> None:
     for habit in data.get("habits", []):
         _send_habit_message(habit)
 
-    if not tasks and not data.get("habits"):
+    proj_tasks = data.get("proj_tasks", [])
+    if proj_tasks:
+        lines = [f"🏗️ Projekt-Tasks heute ({len(proj_tasks)}):"]
+        for pt in proj_tasks:
+            icon = "🔨" if pt.get("status") == "In Arbeit" else "⬜"
+            lines.append(f"· {icon} {pt['name']} ({pt.get('projekt', '?')})")
+        send_message(TOKEN, CHAT_ID, "\n".join(lines))
+
+    if not tasks and not data.get("habits") and not proj_tasks:
         send_message(TOKEN, CHAT_ID, "Nichts zu tun heute 🎉")
 
 
