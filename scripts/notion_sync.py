@@ -49,12 +49,12 @@ def build_sync_prompt(slug: str, feature: str, status: str,
                       spec: str | None = None, plan: str | None = None,
                       db_id: str = "") -> str:
     phase, notion_status = _STATUS_MAP[status]
-    extras = ""
+    extras = f"\n   - Projekt: {slug}"
     if spec:
         extras += f"\n   - Spec: {spec}"
     if plan:
         extras += f"\n   - Plan: {plan}"
-    update_extras = ""
+    update_extras = f", Projekt={slug}"
     if spec:
         update_extras += f", Spec={spec}"
     if plan:
@@ -71,6 +71,35 @@ def build_sync_prompt(slug: str, feature: str, status: str,
    - Elterneintrag: Suche Projekt mit Name={slug}, verknüpfe falls vorhanden.
 
 Antworte nur mit "OK" wenn erfolgreich."""
+
+
+def build_bulk_sync_prompt(slug: str, items: list, active: str, phase: str,
+                            db_id: str) -> str:
+    lines = [f"Arbeitsprojekte-Datenbank (data_source_id: {db_id}).", ""]
+    step = 1
+    if active:
+        lines += [
+            f'{step}. Suche Eintrag mit Typ=Projekt und Name="{slug}".',
+            f'   Falls gefunden: Setze Notiz="Aktiv: {active} | Phase: {phase}".',
+            f'   Falls nicht gefunden: Lege neuen Eintrag an: Name={slug}, Typ=Projekt,'
+            f' Notiz="Aktiv: {active} | Phase: {phase}".',
+            "",
+        ]
+        step += 1
+    for status, name in items:
+        if status not in _STATUS_MAP:
+            continue
+        notion_phase, notion_status = _STATUS_MAP[status]
+        lines += [
+            f'{step}. Suche Eintrag mit Typ=Feature und Name="{name}".',
+            f'   Falls gefunden: Aktualisiere Phase={notion_phase}, Status={notion_status}, Projekt={slug}.',
+            f'   Falls nicht gefunden: Lege neuen Eintrag an: Name={name}, Typ=Feature,'
+            f' Phase={notion_phase}, Status={notion_status}, Projekt={slug}.',
+            "",
+        ]
+        step += 1
+    lines.append('Antworte nur mit "OK" wenn erfolgreich.')
+    return "\n".join(lines)
 
 
 def main() -> None:
