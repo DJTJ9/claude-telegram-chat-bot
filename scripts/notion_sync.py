@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sync Dev Skill feature status to Notion Arbeitsprojekte DB."""
-import argparse, os, sys
+import argparse, os, re, sys
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -24,6 +24,25 @@ _STATUS_MAP = {
     "planned":   ("Planned",   "In Arbeit"),
     "done":      ("Done",      "Fertig"),
 }
+
+
+def parse_status_md(path: Path) -> dict:
+    slug = path.parent.name
+    text = path.read_text(encoding="utf-8")
+    active = phase = ""
+    items = []
+    for line in text.splitlines():
+        if line.startswith("Active: "):
+            val = line[len("Active: "):].strip()
+            active = "" if val in ("(none)", "(keine aktive Entwicklung)") else val
+        elif line.startswith("Phase: "):
+            val = line[len("Phase: "):].strip()
+            phase = "" if val == "(none)" else val
+        else:
+            m = re.match(r"^- \[(\w+)\]\s+(.+)$", line)
+            if m:
+                items.append((m.group(1), m.group(2).strip()))
+    return {"slug": slug, "active": active, "phase": phase, "items": items}
 
 
 def build_sync_prompt(slug: str, feature: str, status: str,
