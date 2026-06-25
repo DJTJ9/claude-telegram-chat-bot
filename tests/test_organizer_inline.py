@@ -331,3 +331,40 @@ def test_run_plan_sets_active_session(tmp_path, monkeypatch):
 
     assert "organizer" in captured_sessions
     assert None in captured_sessions
+
+
+# ── Task 1: Arbeitsprojekte constants ────────────────────────────────────────
+
+SAMPLE_ARBEIT_PROJEKTE_JSON = json.dumps({
+    "projekte": [{"name": "dart-app", "id": "abc123def456abc123def456abc12345"}]
+})
+
+SAMPLE_ARBEIT_FEATURES_JSON = json.dumps({
+    "features": [
+        {"name": "Login Flow", "projekt": "dart-app", "id": "111222333444111222333444111222ab"},
+        {"name": "Settings Screen", "projekt": "dart-app", "id": "555666777888555666777888555666cd"},
+    ]
+})
+
+def test_arbeit_projekte_json_parses():
+    data = json.loads(SAMPLE_ARBEIT_PROJEKTE_JSON)
+    assert isinstance(data["projekte"], list)
+    assert data["projekte"][0]["name"] == "dart-app"
+    assert len(data["projekte"][0]["id"]) == 32
+
+def test_arbeit_features_json_parses():
+    data = json.loads(SAMPLE_ARBEIT_FEATURES_JSON)
+    assert isinstance(data["features"], list)
+    assert data["features"][0]["projekt"] == "dart-app"
+
+def test_arbeit_constants_exist():
+    from bots.organizer import ARBEIT_DB_ID, ARBEIT_PROJEKTE_JSON_SYSTEM_PROMPT
+    assert isinstance(ARBEIT_DB_ID, str)
+    assert "data_source_id" in ARBEIT_PROJEKTE_JSON_SYSTEM_PROMPT
+
+def test_get_arbeit_features_prompt():
+    from bots.organizer import _get_arbeit_features_prompt
+    prompt = _get_arbeit_features_prompt(["dart-app", "web-project"])
+    assert "dart-app" in prompt
+    assert "web-project" in prompt
+    assert "Feature" in prompt

@@ -26,6 +26,7 @@ HUB_DIR = Path(os.environ.get("HUB_DIR", str(WORK_DIR)))
 HABITS_DATA_SOURCE_ID = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
 BACKLOG_DATA_SOURCE_ID = "0cb18d17-cf70-413d-b29d-adb4675db614"
 ARCHIV_DATA_SOURCE_ID  = "abb5abd8-e320-4796-bbf6-941feb9007b9"
+ARBEIT_DB_ID = ""  # Fill in after creating Arbeitsprojekte DB in Notion
 BEREICHE = {"arbeit", "privat", "lernen", "gesundheit"}
 
 REPLY_KEYBOARD = {
@@ -415,6 +416,66 @@ Nutzer-Eingabe: "<taskname> <feld> <wert>"
 4. Aktualisiere die Property
 Antworte NUR mit: ✏️ <Task-Name> · <Feld> → <Wert>
 Falls nicht gefunden: ❌ Task nicht gefunden: "<Eingabe>" """
+
+ARBEIT_PROJEKTE_JSON_SYSTEM_PROMPT = f"""Du bist ein Notion-Projektassistent.
+Lies die Arbeitsprojekte-Datenbank (data_source_id: {ARBEIT_DB_ID}).
+Filtere: Typ = Projekt, Status = In Arbeit.
+Antworte AUSSCHLIESSLICH mit JSON (kein Markdown, keine Erklärung):
+{{"projekte": [{{"name": "...", "id": "<page_id_32_zeichen_kein_bindestrich>"}}]}}
+Falls keine aktiven Projekte: {{"projekte": []}}"""
+
+ARBEIT_PROJEKT_CREATE_SYSTEM_PROMPT = f"""Du bist ein Notion-Projektassistent.
+Lege einen neuen Eintrag in der Arbeitsprojekte-Datenbank an (data_source_id: {ARBEIT_DB_ID}).
+Typ = Projekt, Status = In Arbeit. Name = der angegebene Projektname.
+Antworte NUR mit: ✅ Projekt angelegt: [Name]"""
+
+ARBEIT_EPIC_CREATE_SYSTEM_PROMPT = f"""Du bist ein Notion-Projektassistent.
+Lege einen neuen Eintrag in der Arbeitsprojekte-Datenbank an (data_source_id: {ARBEIT_DB_ID}).
+Typ = Epic. Suche das Projekt mit dem angegebenen Namen, setze Elterneintrag auf dessen page_id.
+Status = In Arbeit. Name = der angegebene Epic-Name.
+Antworte NUR mit: ✅ Epic angelegt: [Epic-Name] in [Projekt-Name]"""
+
+ARBEIT_FEATURE_CREATE_SYSTEM_PROMPT = f"""Du bist ein Notion-Projektassistent.
+Lege einen neuen Eintrag in der Arbeitsprojekte-Datenbank an (data_source_id: {ARBEIT_DB_ID}).
+Typ = Feature. Suche das Epic mit dem angegebenen Namen, setze Elterneintrag auf dessen page_id.
+Status = Offen. Name = der angegebene Feature-Name.
+Antworte NUR mit: ✅ Feature angelegt: [Feature-Name] in [Epic-Name]"""
+
+ARBEIT_PROJEKTE_LIST_SYSTEM_PROMPT = f"""Du bist ein Notion-Projektassistent.
+Lies die Arbeitsprojekte-Datenbank (data_source_id: {ARBEIT_DB_ID}).
+Zeige alle aktiven Projekte (Typ = Projekt, Status = In Arbeit).
+Je Projekt: hole die 3 neuesten Features (Typ = Feature, Status = Offen oder In Arbeit) via Elterneintrag-Kette.
+Format:
+Zeile 1: "📁 Aktive Projekte ([N]):"
+Je Projekt:
+  "· [Projektname]"
+  Je Feature: "  → [Feature-Name] ([Status])"
+Falls keine Projekte: "Keine aktiven Projekte."
+Kein Markdown."""
+
+ARBEIT_STANDUP_SYSTEM_PROMPT = f"""Du bist ein Notion-Projektassistent.
+Lies die Arbeitsprojekte-Datenbank (data_source_id: {ARBEIT_DB_ID}).
+Suche das Projekt mit dem angegebenen Namen. Zeige alle offenen Features (Status = Offen oder In Arbeit).
+Format:
+Zeile 1: "🏗️ Standup: [Projektname]"
+Je Feature: "· [Icon] [Feature-Name]"  — Icon: Offen=⬜ In Arbeit=🔨
+Falls keine offenen Features: "Alle Features fertig! 🎉"
+Kein Markdown."""
+
+
+def _get_arbeit_features_prompt(proj_names: list) -> str:
+    names_str = ", ".join(proj_names)
+    return (
+        "Du bist ein Notion-Projektassistent.\n"
+        f"Lies die Arbeitsprojekte-Datenbank (data_source_id: {ARBEIT_DB_ID}).\n"
+        "Finde alle Einträge mit Typ = Feature, Status = Offen oder In Arbeit.\n"
+        f"Das übergeordnete Projekt (via Elterneintrag-Kette) muss eines dieser Projekte sein: {names_str}.\n"
+        "Je Projekt maximal 3 Features (neueste zuerst nach Änderungsdatum).\n"
+        'Antworte AUSSCHLIESSLICH mit JSON:\n'
+        '{"features": [{"name": "...", "projekt": "...", "id": "<page_id_32_zeichen>"}]}\n'
+        'Falls keine: {"features": []}'
+    )
+
 
 PRIO_ICONS = {"Hoch": "🔴", "Mittel": "🟡", "Niedrig": "🟢"}
 
