@@ -488,6 +488,7 @@ PRIO_ICONS = {"Hoch": "🔴", "Mittel": "🟡", "Niedrig": "🟢"}
 
 callback_state: dict = {}   # {chat_id: {action, page_id, task_name, field?, msg_id?}}
 vs_state: dict = {}         # {chat_id: {pending, selected, tasks}}
+proj_state: dict = {}       # {chat_id: {phase, selected_proj, features, selected_feat}}
 
 
 def _extract_name_from_message(text: str) -> str:
@@ -673,6 +674,69 @@ def _run_vs_bulk(chat_id: int, target_date: str, today: str) -> None:
                  reply_markup=REPLY_KEYBOARD)
 
 
+def _start_proj_selection(chat_id: int, today: str) -> None:
+    raw = run_claude_parse(
+        f"Heute ist {today}.",
+        system_prompt=ARBEIT_PROJEKTE_JSON_SYSTEM_PROMPT,
+    )
+    try:
+        projekte = json.loads(raw).get("projekte", [])
+    except (json.JSONDecodeError, KeyError):
+        projekte = []
+    if not projekte:
+        send_message(TOKEN, chat_id, "Keine aktiven Projekte für morgen.")
+        return
+    proj_state[chat_id] = {
+        "phase": "select_proj",
+        "selected_proj": [],
+        "features": [],
+        "selected_feat": [],
+    }
+    buttons = [
+        [{"text": p["name"], "callback_data": f"proj_sel:{p['id']}:{p['name'][:20]}"}]
+        for p in projekte
+    ]
+    buttons.append([{"text": "✅ Weiter", "callback_data": "proj_done:"}])
+    send_message(TOKEN, chat_id,
+                 "🏗️ An welchem Projekt arbeitest du morgen? (1–2 auswählen)",
+                 reply_markup={"inline_keyboard": buttons})
+
+
+def _show_proj_features(chat_id: int, today: str) -> None:
+    state = proj_state.get(chat_id)
+    if not state:
+        return
+    proj_names = [p["name"] for p in state["selected_proj"]]
+    if not proj_names:
+        send_message(TOKEN, chat_id, "Kein Projekt ausgewählt.")
+        proj_state.pop(chat_id, None)
+        return
+    raw = run_claude_parse(
+        f"Heute ist {today}. Projekte: {', '.join(proj_names)}.",
+        system_prompt=_get_arbeit_features_prompt(proj_names),
+    )
+    try:
+        features = json.loads(raw).get("features", [])
+    except (json.JSONDecodeError, KeyError):
+        features = []
+    if not features:
+        send_message(TOKEN, chat_id, "Keine offenen Features für diese Projekte.",
+                     reply_markup=REPLY_KEYBOARD)
+        proj_state.pop(chat_id, None)
+        return
+    state["features"] = features
+    state["phase"] = "select_feat"
+    tomorrow_str = (date.fromisoformat(today) + timedelta(days=1)).strftime("%d.%m.")
+    buttons = [
+        [{"text": f"{f['name']} ({f['projekt']})", "callback_data": f"pfeat_sel:{f['id']}"}]
+        for f in features
+    ]
+    buttons.append([{"text": f"✅ Für morgen ({tomorrow_str}) einplanen", "callback_data": "pfeat_confirm:"}])
+    send_message(TOKEN, chat_id,
+                 f"Features für morgen ({tomorrow_str}) auswählen:",
+                 reply_markup={"inline_keyboard": buttons})
+
+
 def _handle_callback(cq: dict) -> None:
     chat_id: int = cq["from"]["id"]
     data: str = cq.get("data", "")
@@ -825,6 +889,57 @@ def _handle_callback(cq: dict) -> None:
         else:
             _run_vs_bulk(chat_id, _resolve_date_key(date_key, today), today)
 
+    elif data.startswith("proj_sel:"):
+        parts = data.split(":", 2)
+        pid = parts[1] if len(parts) > 1 else ""
+        name = parts[2] if len(parts) > 2 else pid
+        state = proj_state.get(chat_id, {})
+        if state.get("phase") != "select_proj":
+            return
+        sel = state.setdefault("selected_proj", [])
+        if pid in [p["id"] for p in sel]:
+            state["selected_proj"] = [p for p in sel if p["id"] != pid]
+            answer_callback_query(TOKEN, cq["id"], f"❌ {name} abgewählt")
+        else:
+            sel.append({"id": pid, "name": name})
+            answer_callback_query(TOKEN, cq["id"], f"✅ {name} gewählt")
+
+    elif data == "proj_done:":
+        answer_callback_query(TOKEN, cq["id"], "Features werden geladen…")
+        _show_proj_features(chat_id, today)
+
+    elif data.startswith("pfeat_sel:"):
+        pid = data[10:]
+        state = proj_state.get(chat_id, {})
+        if state.get("phase") != "select_feat":
+            return
+        sel = state.setdefault("selected_feat", [])
+        if pid in sel:
+            sel.remove(pid)
+            answer_callback_query(TOKEN, cq["id"], "❌ Abgewählt")
+        else:
+            sel.append(pid)
+            answer_callback_query(TOKEN, cq["id"], "✅ Gewählt")
+
+    elif data == "pfeat_confirm:":
+        state = proj_state.pop(chat_id, {})
+        selected = state.get("selected_feat", [])
+        answer_callback_query(TOKEN, cq["id"], "Datum wird gesetzt…")
+        if not selected:
+            send_message(TOKEN, chat_id, "Keine Features ausgewählt.", reply_markup=REPLY_KEYBOARD)
+            return
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        for pid in selected:
+            run_claude(
+                f"Heute ist {today}. page_id: {pid}. Feld: datum. Wert: {tomorrow}.",
+                system_prompt=TASK_UPDATE_SYSTEM_PROMPT,
+                automated=True,
+            )
+        d = date.fromisoformat(tomorrow)
+        send_message(TOKEN, chat_id,
+                     f"📅 {len(selected)} Feature(s) für {d.strftime('%d.%m.')} eingeplant.",
+                     reply_markup=REPLY_KEYBOARD)
+
 
 def _dispatch_command(text: str, chat_id: int) -> None:
     today = date.today().isoformat()
@@ -847,6 +962,7 @@ def _dispatch_command(text: str, chat_id: int) -> None:
         except (json.JSONDecodeError, KeyError, ValueError):
             response = run_claude(f"Heute ist {today}.", system_prompt=ABEND_SYSTEM_PROMPT)
             send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+        _start_proj_selection(chat_id, today)
 
     elif t.startswith("projekt:"):
         name = text[8:].strip()

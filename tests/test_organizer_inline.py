@@ -387,3 +387,25 @@ def test_hilfe_has_arbeit_section():
     assert "projekt:" in HILFE_TEXT
     assert "projekte:" in HILFE_TEXT
     assert "standup:" in HILFE_TEXT
+
+
+# ── Task 3: Abend project selection ──────────────────────────────────────────
+
+def test_proj_state_exists():
+    from bots.organizer import proj_state
+    assert isinstance(proj_state, dict)
+
+def test_abend_dispatch_calls_proj_selection():
+    import inspect
+    from bots.organizer import _dispatch_command
+    src = inspect.getsource(_dispatch_command)
+    assert "_start_proj_selection" in src
+
+def test_handle_callback_has_proj_handlers():
+    import inspect
+    from bots.organizer import _handle_callback
+    src = inspect.getsource(_handle_callback)
+    assert 'startswith("proj_sel:")' in src
+    assert "proj_done:" in src
+    assert 'startswith("pfeat_sel:")' in src
+    assert "pfeat_confirm:" in src
