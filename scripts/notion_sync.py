@@ -104,16 +104,38 @@ def build_bulk_sync_prompt(slug: str, items: list, active: str, phase: str,
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sync feature to Notion Arbeitsprojekte DB")
-    parser.add_argument("--slug", required=True)
-    parser.add_argument("--feature", required=True)
-    parser.add_argument("--status", required=True, choices=list(_STATUS_MAP))
+    parser.add_argument("--slug")
+    parser.add_argument("--feature")
+    parser.add_argument("--status", choices=list(_STATUS_MAP))
     parser.add_argument("--spec", default=None)
     parser.add_argument("--plan", default=None)
+    parser.add_argument("--all", dest="all_projects", action="store_true",
+                        help="Sync all projects from HUB_DIR/topics/*/STATUS.md")
     args = parser.parse_args()
 
     if not ARBEIT_DB_ID:
         print("⚠️  ARBEIT_DB_ID not set — skipping Notion sync", file=sys.stderr)
         sys.exit(0)
+
+    if args.all_projects:
+        hub_dir = Path(os.environ.get("HUB_DIR", ""))
+        if not hub_dir or not hub_dir.exists():
+            print("⚠️  HUB_DIR not set or not found", file=sys.stderr)
+            sys.exit(1)
+        for status_path in sorted(hub_dir.glob("topics/*/STATUS.md")):
+            data = parse_status_md(status_path)
+            if not data["items"] and not data["active"]:
+                continue
+            print(f"Syncing {data['slug']}...", flush=True)
+            prompt = build_bulk_sync_prompt(
+                data["slug"], data["items"], data["active"], data["phase"], ARBEIT_DB_ID
+            )
+            result = run_claude(prompt, automated=True)
+            print(result)
+        return
+
+    if not (args.slug and args.feature and args.status):
+        parser.error("Either --all or all of --slug/--feature/--status required")
 
     prompt = build_sync_prompt(args.slug, args.feature, args.status,
                                args.spec, args.plan, ARBEIT_DB_ID)
