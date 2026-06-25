@@ -368,3 +368,22 @@ def test_get_arbeit_features_prompt():
     assert "dart-app" in prompt
     assert "web-project" in prompt
     assert "Feature" in prompt
+
+
+# ── Task 2: Bot commands ──────────────────────────────────────────────────────
+
+def test_dispatch_has_arbeit_commands():
+    import inspect
+    from bots.organizer import _dispatch_command
+    src = inspect.getsource(_dispatch_command)
+    assert 'startswith("projekt:")' in src
+    assert 'startswith("epic:")' in src
+    assert 'startswith("feature:")' in src
+    assert 'startswith("standup:")' in src
+    assert "projekte:" in src
+
+def test_hilfe_has_arbeit_section():
+    from bots.organizer import HILFE_TEXT
+    assert "projekt:" in HILFE_TEXT
+    assert "projekte:" in HILFE_TEXT
+    assert "standup:" in HILFE_TEXT

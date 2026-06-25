@@ -78,6 +78,13 @@ HILFE_TEXT = """📋 Organizer Bot
   implement-plan: <slug> jetzt
   abort-plan: <slug>
 
+🏗️ Arbeitsprojekte
+  projekt: <name> — Neues Projekt anlegen
+  epic: <name> in <projekt> — Neues Epic unter Projekt
+  feature: <name> in <epic> — Neues Feature unter Epic
+  projekte: — Alle aktiven Projekte + je 3 neueste Features
+  standup: <projekt> — Offene Features eines Projekts
+
 ⚙️ Einstellungen
   impl-mode: an|aus — Implementierungs-Mode"""
 
@@ -839,6 +846,54 @@ def _dispatch_command(text: str, chat_id: int) -> None:
             _send_abend_messages(data)
         except (json.JSONDecodeError, KeyError, ValueError):
             response = run_claude(f"Heute ist {today}.", system_prompt=ABEND_SYSTEM_PROMPT)
+            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+
+    elif t.startswith("projekt:"):
+        name = text[8:].strip()
+        if not name:
+            send_message(TOKEN, chat_id, "Nutzung: projekt: <name>", reply_markup=REPLY_KEYBOARD)
+        else:
+            response = run_claude(f"Projektname: {name}", system_prompt=ARBEIT_PROJEKT_CREATE_SYSTEM_PROMPT)
+            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+
+    elif t.startswith("epic:"):
+        rest = text[5:].strip()
+        if " in " not in rest.lower():
+            send_message(TOKEN, chat_id, "Nutzung: epic: <name> in <projekt>", reply_markup=REPLY_KEYBOARD)
+        else:
+            idx = rest.lower().index(" in ")
+            epic_name = rest[:idx].strip()
+            proj_name = rest[idx + 4:].strip()
+            response = run_claude(
+                f"Epic-Name: {epic_name}. Projekt: {proj_name}.",
+                system_prompt=ARBEIT_EPIC_CREATE_SYSTEM_PROMPT,
+            )
+            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+
+    elif t.startswith("feature:"):
+        rest = text[8:].strip()
+        if " in " not in rest.lower():
+            send_message(TOKEN, chat_id, "Nutzung: feature: <name> in <epic>", reply_markup=REPLY_KEYBOARD)
+        else:
+            idx = rest.lower().index(" in ")
+            feat_name = rest[:idx].strip()
+            epic_name = rest[idx + 4:].strip()
+            response = run_claude(
+                f"Feature-Name: {feat_name}. Epic: {epic_name}.",
+                system_prompt=ARBEIT_FEATURE_CREATE_SYSTEM_PROMPT,
+            )
+            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+
+    elif t in ("projekte:", "projekte"):
+        response = run_claude("Zeige aktive Projekte.", system_prompt=ARBEIT_PROJEKTE_LIST_SYSTEM_PROMPT)
+        send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+
+    elif t.startswith("standup:"):
+        proj_name = text[8:].strip()
+        if not proj_name:
+            send_message(TOKEN, chat_id, "Nutzung: standup: <projektname>", reply_markup=REPLY_KEYBOARD)
+        else:
+            response = run_claude(f"Projektname: {proj_name}.", system_prompt=ARBEIT_STANDUP_SYSTEM_PROMPT)
             send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
 
     elif t.startswith("edit:"):
