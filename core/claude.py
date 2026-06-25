@@ -3,8 +3,9 @@ from pathlib import Path
 
 WORK_DIR = os.environ.get("WORK_DIR", "/root/projekte/telegram-bot-army")
 
-def run_claude(prompt, system_prompt=None, cwd=None, automated=False):
-    cmd = ["claude", "--dangerously-skip-permissions"]
+def run_claude(prompt, system_prompt=None, cwd=None, automated=False, allowed_tools=None):
+    tools = allowed_tools or "Bash,Read,Write,Edit,Glob,Grep,mcp__notion__"
+    cmd = ["claude", "--allowedTools", tools]
     if system_prompt:
         cmd += ["--system-prompt", system_prompt]
     cmd += ["-p", prompt]
