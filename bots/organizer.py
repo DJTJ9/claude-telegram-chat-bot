@@ -15,7 +15,7 @@ if env_file.exists():
 
 from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, transcribe_voice, normalize_voice, edit_message
 from core.settings import load_settings, save_settings
-from core.claude import run_claude, run_claude_with_history, run_claude_parse
+from core.claude import run_claude, run_claude_parse
 from core.state import load_reminders, save_reminders, load_plans, save_plans, load_registry
 
 TOKEN = os.environ["TOKEN_ORGANIZER"]
@@ -31,81 +31,16 @@ BEREICHE = {"arbeit", "privat", "lernen", "gesundheit"}
 
 REPLY_KEYBOARD = {
     "keyboard": [
-        ["moin", "abend"],
-        ["task:", "status:"],
-        ["woche", "fokus:"],
-        ["verschieben:", "edit:"],
-        ["hilfe"],
-        ["backlog"],
+        ["📋 Task", "📅 Termin", "💡 Ideen"],
+        ["📚 Lern", "🌅 Morgen", "🌙 Abend"],
+        ["📆 Woche", "📥 Backlog", "🗂️ Projekte"],
     ],
     "resize_keyboard": True,
     "one_time_keyboard": False,
     "persistent": True,
 }
 
-HILFE_TEXT = """📋 Organizer Bot
 
-🌅 Tagesplanung
-  moin — Tasks + fällige Habits für heute
-  abend — Tagesabschluss
-  woche — Wochenrückblick
-  fokus: <Bereich> — Arbeit / Privat / Lernen / Gesundheit
-
-✅ Tasks & Habits
-  task: — Neuen Task anlegen (interaktiv)
-  task: <text> — Neuen Task direkt anlegen
-  habit: <text> — Neuen Habit anlegen
-  termin: <text> — Termin anlegen
-  backlog: <text> — Undatierte Aufgabe speichern
-  backlog — Alle offenen Backlog-Tasks anzeigen
-  status: <name> <status> — Status ändern
-  edit: <task> <feld> <wert> — Task bearbeiten (prio/datum/bereich/notiz)
-  verschieben: <datum> — Offene Tasks verschieben
-
-📚 Listen
-  lern: <thema> — Lernthema speichern
-  idee: <text> — Spielidee speichern
-  suche: <text> — Alle DBs durchsuchen
-
-⏰ Erinnerungen
-  erinnere mich um 14:00 an Zahnarzt
-  erinnerung: <text>
-  erinnerungen — alle offenen Erinnerungen anzeigen
-
-🤖 Pläne
-  /plans — geplante Implementierungen anzeigen
-  implement-plan: <slug> um HH:MM
-  implement-plan: <slug> jetzt
-  abort-plan: <slug>
-
-🏗️ Arbeitsprojekte
-  projekt: <name> — Neues Projekt anlegen
-  epic: <name> in <projekt> — Neues Epic unter Projekt
-  feature: <name> in <epic> — Neues Feature unter Epic
-  projekte: — Alle aktiven Projekte + je 3 neueste Features
-  standup: <projekt> — Offene Features eines Projekts
-
-⚙️ Einstellungen
-  impl-mode: an|aus — Implementierungs-Mode"""
-
-TASK_SYSTEM_PROMPT = """Du bist ein Notion-Task-Assistent. Der Nutzer schickt eine Aufgabe als Freitext.
-Lege die Aufgabe im Tagesorganizer an (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
-Leite aus dem Text ab: Name, Datum (ISO 8601, heute falls nicht angegeben), Priorität (Hoch/Mittel/Niedrig, Mittel falls nicht angegeben), Bereich (Arbeit/Privat/Lernen/Gesundheit, Privat falls unklar).
-Antworte NUR mit einer Zeile: ✅ Task angelegt: [Name] · [Datum] · [Priorität] · [Bereich]"""
-
-PROJEKT_TASKS_SYSTEM_PROMPT = """Du bist ein Notion-Projektassistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
-Zeige alle Tasks wo Property "Projekt" = dem angegebenen Projektnamen, Status Not started oder In progress.
-Sortiere nach Priorität (Hoch zuerst), dann Datum.
-Erste Zeile: "📁 [Projektname] – [N] offene Tasks"
-Je Task: · [Epic falls gesetzt] [Priorität] [Name] — [Datum]
-Kein Markdown."""
-
-PROJEKT_TASK_SYSTEM_PROMPT = """Du bist ein Notion-Task-Assistent.
-Lege einen Task im Tagesorganizer an (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
-Der Projektname wird vorgegeben — setze ihn als Property "Projekt".
-Leite aus dem Text ab: Name, Datum (ISO 8601, heute falls nicht angegeben), Priorität (Hoch/Mittel/Niedrig, Mittel falls nicht angegeben), Bereich (Arbeit/Privat/Lernen/Gesundheit, Arbeit falls Projekt gesetzt).
-Antworte NUR mit einer Zeile: ✓ Task angelegt: [Name] · [Projekt] · [Priorität] · [Datum]"""
 
 WOCHE_SYSTEM_PROMPT = """Du bist ein Notion-Wochenassistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
@@ -118,23 +53,6 @@ Format:
    je Zeile: · Bereich · Priorität · Name
 Sortiere Offen nach Priorität (Hoch zuerst). Kein Markdown."""
 
-FOKUS_SYSTEM_PROMPT = """Du bist ein Notion-Fokusassistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
-Zeige alle Tasks mit dem genannten Bereich, Datum heute,
-Status Not started oder In progress. Sortiere nach Priorität (Hoch zuerst).
-Format pro Task: · [Priorität] [Name] — [Notiz falls vorhanden]
-Erste Zeile: "🎯 Fokus: [Bereich] – [N] Tasks heute"
-Falls keine Tasks: "🎯 Fokus: [Bereich] – nichts geplant für heute."
-Kein Markdown."""
-
-VERSCHIEBEN_SYSTEM_PROMPT = """Du bist ein Notion-Planungsassistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
-Finde alle Tasks mit Status Not started oder In progress.
-Setze ihr Datum-Feld auf das vom Nutzer angegebene Datum.
-"morgen" = heute + 1 Tag. Wochentage relativ zu heute berechnen.
-Antworte NUR mit: "📆 N Tasks verschoben auf [Datum]."
-Falls keine offenen Tasks: "Keine offenen Tasks zum Verschieben."
-Kein Markdown."""
 
 ABEND_SYSTEM_PROMPT = """Du bist ein Notion-Abend-Assistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
@@ -230,30 +148,6 @@ Leite aus dem Text ab:
 - Status: Aktiv
 Antworte NUR mit einer Zeile: 🔄 Habit angelegt: [Name] · alle [Intervall] Tage · ab heute"""
 
-STATUS_SYSTEM_PROMPT = f"""Du bist ein Notion-Status-Assistent.
-
-Schritt 1 — Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0):
-Finde den Task per fuzzy-Suche (Name muss nicht exakt übereinstimmen).
-Mappe den Status:
-  erledigt / fertig / done → Done
-  in arbeit / läuft / gestartet / in progress → In progress
-  offen / zurück / nicht gestartet → Not started
-Setze den Status. Merke ob ein Task gefunden wurde.
-
-Schritt 2 — Habits-DB (data_source_id: {HABITS_DATA_SOURCE_ID}):
-Nur ausführen falls "erledigt", "fertig" oder "done" im Text.
-Finde den Habit per fuzzy-Suche.
-Falls gefunden:
-  - Berechne Nächste Fälligkeit = heutiges Datum + Intervall (Tage, aus Property "Intervall")
-  - Setze Nächste Fälligkeit auf dieses Datum und lasse Status = Aktiv
-Merke ob ein Habit gefunden wurde.
-
-Antworte:
-- Nur Task gefunden: "✅ [Task Name] → [Status]"
-- Nur Habit gefunden: "🔄 Habit '[Name]' erledigt — nächste Fälligkeit: [Datum DD.MM.YYYY]"
-- Beides gefunden: beide Zeilen
-- Nichts gefunden: "❌ Kein passender Task/Habit gefunden: \\"[Eingabe]\\""
-Kein Markdown."""
 
 TERMIN_SYSTEM_PROMPT = """Du bist ein Notion-Termin-Assistent.
 Lege den Termin im Tagesorganizer an (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
@@ -308,31 +202,6 @@ Archiviere dann den Original-Backlog-Task.
 Antworte NUR mit: "✅ Archiviert: N Tasks" oder "Nichts zu archivieren."
 Kein Markdown."""
 
-SUCHE_SYSTEM_PROMPT = """Du bist ein Notion-Suchassistent.
-Der Nutzer gibt einen Suchbegriff. Suche in allen 5 Datenbanken:
-
-1. Tagesorganizer  (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0) — Felder: Name, Notiz
-2. Backlog         (data_source_id: 0cb18d17-cf70-413d-b29d-adb4675db614) — Felder: Name, Notiz
-3. Task-Archiv     (data_source_id: abb5abd8-e320-4796-bbf6-941feb9007b9) — Felder: Name, Notiz
-4. Lernthemen      (data_source_id: 5a76447f-2b0a-4f6b-81bb-853f39aa04bb) — Felder: Name, Notiz
-5. Spieleideen     (data_source_id: ce6783d1-54fe-421f-8d7d-aa8c34880853) — Felder: Name, Beschreibung
-
-Für jede DB: nutze contains-Filter auf Name ODER das Textfeld (OR-Verknüpfung).
-Zeige nur DBs mit Treffern. Sortiere Treffer pro DB nach Priorität falls vorhanden.
-
-Format:
-Zeile 1: "🔍 Suche: \\"[Begriff]\\""
-Leerzeile
-Je DB mit Treffern:
-  "[Icon] [DB-Name] ([N])"
-  Je Treffer: "  · [Status-Icon] [Name][— Datum falls gesetzt]"
-  Leerzeile
-Letzte Zeile: "🔍 [Gesamt] Treffer in [M] Datenbank(en)."
-Falls keine Treffer: "🔍 Keine Ergebnisse für \\"[Begriff]\\"."
-
-Status-Icons: Not started/Offen=⬜ In progress/In Bearbeitung=🔄 Done/Erledigt/Abgeschlossen=✅
-DB-Icons: 📋 Tagesorganizer, 📦 Backlog, 🗂 Archiv, 📚 Lernthemen, 🎮 Spieleideen
-Kein Markdown."""
 
 REMINDER_PARSE_SYSTEM_PROMPT = """Du bist ein Erinnerungs-Parser. Deine einzige Aufgabe: Text analysieren und JSON zurückgeben.
 
@@ -352,8 +221,6 @@ Regeln:
 Antworte AUSSCHLIESSLICH mit diesem JSON (kein Markdown, keine Erklärung, nichts anderes):
 {"text": "<was erinnert werden soll>", "due": "<YYYY-MM-DDTHH:MM:SS>"}"""
 
-CHAT_SYSTEM_PROMPT = """Du bist ein hilfreicher persönlicher Assistent-Bot. Antworte kurz und direkt auf Fragen und Konversation.
-Führe KEINE Aktionen aus. Nutze KEINE Tools. Erstelle KEINE Schedules oder Routines. Antworte NUR mit Text."""
 
 MOIN_JSON_SYSTEM_PROMPT = f"""Du bist ein Notion-Morgen-Assistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
@@ -491,9 +358,20 @@ def _get_arbeit_features_prompt(proj_names: list) -> str:
 
 PRIO_ICONS = {"Hoch": "🔴", "Mittel": "🟡", "Niedrig": "🟢"}
 
+BUTTON_MAP = {
+    "📋 Task":     "task",
+    "📅 Termin":   "termin",
+    "💡 Ideen":    "ideen",
+    "📚 Lern":     "lern",
+    "🌅 Morgen":   "morgen",
+    "🌙 Abend":    "abend",
+    "📆 Woche":    "woche",
+    "📥 Backlog":  "backlog_list",
+    "🗂️ Projekte": "projekte",
+}
+
+_workflow: dict = {}
 callback_state: dict = {}   # {chat_id: {action, page_id, task_name, field?, msg_id?}}
-vs_state: dict = {}         # {chat_id: {pending, selected, tasks}}
-proj_state: dict = {}       # {chat_id: {phase, selected_proj, features, selected_feat}}
 
 
 def _extract_name_from_message(text: str) -> str:
@@ -531,9 +409,6 @@ def _task_buttons(page_id: str) -> list:
         {"text": "✏️ Bearbeiten",  "callback_data": f"edit:{page_id}"},
     ]]
 
-
-conversation_history: dict = {}
-pending_task_input: dict = {}
 
 
 def _apply_task_update(page_id: str, field: str, value: str, today: str = None) -> str:
@@ -586,7 +461,13 @@ def _send_moin_messages(data: dict) -> None:
         send_message(TOKEN, CHAT_ID, "\n".join(lines))
 
     for task in tasks:
-        _send_task_message(task)
+        pid = task["id"].replace("-", "")
+        prio_icon = PRIO_ICONS.get(task.get("prio", ""), "")
+        label = f"{prio_icon} {task['name']}" if prio_icon else task["name"]
+        if task.get("projekt"):
+            label += f"  →{task['projekt']}"
+        buttons = [[{"text": f"✅ {task['name']}", "callback_data": f"done:{pid}"}]]
+        send_message(TOKEN, CHAT_ID, label, reply_markup={"inline_keyboard": buttons})
 
     for habit in data.get("habits", []):
         _send_habit_message(habit)
@@ -649,105 +530,193 @@ def _send_abend_messages(data: dict) -> None:
                      reply_markup={"inline_keyboard": buttons})
 
 
-def _check_vs_done(chat_id: int, today: str) -> None:
-    state = vs_state.get(chat_id)
-    if not state or state.get("pending"):
-        return
-    if not state.get("selected"):
-        send_message(TOKEN, chat_id, "Keine Tasks ausgewählt.")
-        vs_state.pop(chat_id, None)
-        return
-    n = len(state["selected"])
-    buttons = [[
-        {"text": "Morgen",        "callback_data": "vs_confirm:morgen"},
-        {"text": "Übermorgen",     "callback_data": "vs_confirm:uebermorgen"},
-    ], [
-        {"text": "Nächste Woche",  "callback_data": "vs_confirm:naechste_woche"},
-        {"text": "Datum eingeben", "callback_data": "vs_confirm:freitext"},
-    ]]
-    send_message(TOKEN, chat_id,
-                 f"{n} Task(s) ausgewählt. Auf welches Datum verschieben?",
-                 reply_markup={"inline_keyboard": buttons})
 
+def _build_projekte_message() -> tuple:
+    registry = load_registry()
+    if not registry:
+        return "🗂️ Keine Projekte registriert.", []
 
-def _run_vs_bulk(chat_id: int, target_date: str, today: str) -> None:
-    state = vs_state.pop(chat_id, {})
-    selected = state.get("selected", [])
-    if not selected:
-        send_message(TOKEN, chat_id, "Keine Tasks ausgewählt.", reply_markup=REPLY_KEYBOARD)
-        return
-    for pid in selected:
-        run_claude(
-            f"Heute ist {today}. page_id: {pid}. Feld: datum. Wert: {target_date}.",
-            system_prompt=TASK_UPDATE_SYSTEM_PROMPT, automated=True,
-        )
-    d = date.fromisoformat(target_date)
-    send_message(TOKEN, chat_id,
-                 f"📆 {len(selected)} Task(s) verschoben auf {d.strftime('%d.%m.%Y')}.",
-                 reply_markup=REPLY_KEYBOARD)
-
-
-def _start_proj_selection(chat_id: int, today: str) -> None:
-    raw = run_claude_parse(
-        f"Heute ist {today}.",
-        system_prompt=ARBEIT_PROJEKTE_JSON_SYSTEM_PROMPT,
-    )
-    try:
-        projekte = json.loads(raw).get("projekte", [])
-    except (json.JSONDecodeError, KeyError):
-        projekte = []
-    if not projekte:
-        send_message(TOKEN, chat_id, "Keine aktiven Projekte für morgen.")
-        return
-    proj_state[chat_id] = {
-        "phase": "select_proj",
-        "selected_proj": [],
-        "features": [],
-        "selected_feat": [],
-    }
-    buttons = [
-        [{"text": p["name"], "callback_data": f"proj_sel:{p['id']}:{p['name'][:20]}"}]
-        for p in projekte
-    ]
-    buttons.append([{"text": "✅ Weiter", "callback_data": "proj_done:"}])
-    send_message(TOKEN, chat_id,
-                 "🏗️ An welchem Projekt arbeitest du morgen? (1–2 auswählen)",
-                 reply_markup={"inline_keyboard": buttons})
-
-
-def _show_proj_features(chat_id: int, today: str) -> None:
-    state = proj_state.get(chat_id)
-    if not state:
-        return
-    proj_names = [p["name"] for p in state["selected_proj"]]
-    if not proj_names:
-        send_message(TOKEN, chat_id, "Kein Projekt ausgewählt.")
-        proj_state.pop(chat_id, None)
-        return
-    raw = run_claude_parse(
-        f"Heute ist {today}. Projekte: {', '.join(proj_names)}.",
-        system_prompt=_get_arbeit_features_prompt(proj_names),
-    )
-    try:
-        features = json.loads(raw).get("features", [])
-    except (json.JSONDecodeError, KeyError):
+    lines = ["🗂️ Aktive Projekte", ""]
+    buttons = []
+    for proj in registry:
+        slug = proj.get("slug", "")
+        name = proj.get("name", slug)
+        status_path = HUB_DIR / "topics" / slug / "STATUS.md"
         features = []
-    if not features:
-        send_message(TOKEN, chat_id, "Keine offenen Features für diese Projekte.",
-                     reply_markup=REPLY_KEYBOARD)
-        proj_state.pop(chat_id, None)
-        return
-    state["features"] = features
-    state["phase"] = "select_feat"
-    tomorrow_str = (date.fromisoformat(today) + timedelta(days=1)).strftime("%d.%m.")
-    buttons = [
-        [{"text": f"{f['name']} ({f['projekt']})", "callback_data": f"pfeat_sel:{f['id']}"}]
-        for f in features
-    ]
-    buttons.append([{"text": f"✅ Für morgen ({tomorrow_str}) einplanen", "callback_data": "pfeat_confirm:"}])
-    send_message(TOKEN, chat_id,
-                 f"Features für morgen ({tomorrow_str}) auswählen:",
-                 reply_markup={"inline_keyboard": buttons})
+        if status_path.exists():
+            for line in status_path.read_text(encoding="utf-8").splitlines():
+                s = line.strip()
+                if s.startswith("- [") and "]" in s:
+                    tag = s[3:s.index("]")]
+                    if tag in ("planned", "discussed"):
+                        feat = s[s.index("]") + 1:].strip()
+                        if " (" in feat:
+                            feat = feat[:feat.index(" (")]
+                        features.append(feat)
+        lines.append(f"━━ {name} ━━")
+        for feat in features[:3]:
+            lines.append(f"· {feat}")
+        if not features:
+            lines.append("· (keine offenen Features)")
+        buttons.append([{"text": f"📣 {name}", "callback_data": f"standup:{slug}"}])
+        lines.append("")
+
+    return "\n".join(lines).rstrip(), buttons
+
+
+def start_workflow(kind: str, chat_id: int) -> None:
+    today = date.today().isoformat()
+    _workflow[chat_id] = {"step": f"{kind}:init", "data": {}}
+    _abort = [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]
+
+    if kind == "task":
+        _workflow[chat_id]["step"] = "task:name"
+        send_message(TOKEN, chat_id,
+            "📋 Neuer Task\n\n1 / 2 · Name?",
+            reply_markup={"inline_keyboard": _abort})
+
+    elif kind == "lern":
+        _workflow[chat_id]["step"] = "lern:name"
+        send_message(TOKEN, chat_id,
+            "📚 Neues Lernthema\n\n1 / 3 · Name?",
+            reply_markup={"inline_keyboard": _abort})
+
+    elif kind == "termin":
+        _workflow[chat_id]["step"] = "termin:name"
+        send_message(TOKEN, chat_id,
+            "📅 Neuer Termin\n\n1 / 3 · Name?",
+            reply_markup={"inline_keyboard": _abort})
+
+    elif kind == "ideen":
+        _workflow[chat_id]["step"] = "ideen:typ"
+        buttons = [
+            [
+                {"text": "🎮 Spieleidee",  "callback_data": "ideen:typ:spieleidee"},
+                {"text": "💡 Andere Idee", "callback_data": "ideen:typ:andere"},
+            ],
+            [{"text": "✗ Abbrechen", "callback_data": "wf:abort"}],
+        ]
+        send_message(TOKEN, chat_id,
+            "💡 Neue Idee\n\n1 / 3 · Typ?",
+            reply_markup={"inline_keyboard": buttons})
+
+    elif kind == "morgen":
+        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=MOIN_JSON_SYSTEM_PROMPT)
+        try:
+            data = json.loads(raw)
+            _send_moin_messages(data)
+        except (json.JSONDecodeError, ValueError):
+            response = run_claude(f"Heute ist {today}.", system_prompt=MOIN_SYSTEM_PROMPT)
+            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+        _workflow.pop(chat_id, None)
+
+    elif kind == "abend":
+        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=ABEND_JSON_SYSTEM_PROMPT)
+        try:
+            data = json.loads(raw)
+            _send_abend_messages(data)
+        except (json.JSONDecodeError, ValueError):
+            response = run_claude(f"Heute ist {today}.", system_prompt=ABEND_SYSTEM_PROMPT)
+            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+        _workflow.pop(chat_id, None)
+
+    elif kind == "woche":
+        response = run_claude(f"Heute ist {today}.", system_prompt=WOCHE_SYSTEM_PROMPT)
+        send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+        _workflow.pop(chat_id, None)
+
+    elif kind == "backlog_list":
+        response = run_claude(f"Heute ist {today}.", system_prompt=BACKLOG_LIST_SYSTEM_PROMPT)
+        send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+        _workflow.pop(chat_id, None)
+
+    elif kind == "projekte":
+        msg, buttons = _build_projekte_message()
+        send_message(TOKEN, chat_id, msg,
+                     reply_markup={"inline_keyboard": buttons} if buttons else REPLY_KEYBOARD)
+        _workflow.pop(chat_id, None)
+
+
+def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
+    """Returns True if text was consumed by active workflow."""
+    if chat_id not in _workflow:
+        return False
+    state = _workflow[chat_id]
+    step = state["step"]
+    _abort = [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]
+
+    if step == "task:name":
+        state["data"]["name"] = text
+        state["step"] = "task:priority"
+        buttons = [[
+            {"text": "🔴 Hoch",    "callback_data": "task:priority:hoch"},
+            {"text": "🟡 Mittel",  "callback_data": "task:priority:mittel"},
+            {"text": "🟢 Niedrig", "callback_data": "task:priority:niedrig"},
+        ]]
+        send_message(TOKEN, chat_id,
+            f'📋 "{text}"\n\n2 / 2 · Priorität?',
+            reply_markup={"inline_keyboard": buttons})
+        return True
+
+    if step == "lern:name":
+        state["data"]["name"] = text
+        state["step"] = "lern:kategorie"
+        buttons = [
+            [
+                {"text": "💻 Programmierung", "callback_data": "lern:kategorie:programmierung"},
+                {"text": "🗣 Sprachen",        "callback_data": "lern:kategorie:sprachen"},
+            ],
+            [
+                {"text": "📐 Mathematik",      "callback_data": "lern:kategorie:mathematik"},
+                {"text": "🎨 Design",           "callback_data": "lern:kategorie:design"},
+            ],
+            [{"text": "📦 Sonstiges", "callback_data": "lern:kategorie:sonstiges"}],
+        ]
+        send_message(TOKEN, chat_id,
+            f'📚 "{text}"\n\n2 / 3 · Kategorie?',
+            reply_markup={"inline_keyboard": buttons})
+        return True
+
+    if step == "termin:name":
+        state["data"]["name"] = text
+        state["step"] = "termin:datum"
+        send_message(TOKEN, chat_id,
+            f'📅 "{text}"\n\n2 / 3 · Datum? (z.B. morgen, 2026-07-01, heute um 14:00)',
+            reply_markup={"inline_keyboard": _abort})
+        return True
+
+    if step == "termin:datum":
+        state["data"]["datum"] = text
+        state["step"] = "termin:priority"
+        name = state["data"]["name"]
+        buttons = [[
+            {"text": "🔴 Hoch",    "callback_data": "termin:priority:hoch"},
+            {"text": "🟡 Mittel",  "callback_data": "termin:priority:mittel"},
+            {"text": "🟢 Niedrig", "callback_data": "termin:priority:niedrig"},
+        ]]
+        send_message(TOKEN, chat_id,
+            f'📅 "{name}" · {text}\n\n3 / 3 · Priorität?',
+            reply_markup={"inline_keyboard": buttons})
+        return True
+
+    if step == "ideen:name":
+        state["data"]["name"] = text
+        state["step"] = "ideen:details"
+        send_message(TOKEN, chat_id,
+            f'💡 "{text}"\n\nBeschreibung? (oder "–" zum Überspringen)',
+            reply_markup={"inline_keyboard": _abort})
+        return True
+
+    if step == "ideen:details":
+        name = state["data"].get("name", "?")
+        details = "" if text.strip() == "–" else text
+        _workflow.pop(chat_id, None)
+        full_text = f"{name}. {details}" if details else name
+        result = run_claude(full_text, system_prompt=IDEE_SYSTEM_PROMPT, automated=True)
+        send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
+        return True
+
+    return False
 
 
 def _handle_callback(cq: dict) -> None:
@@ -756,6 +725,120 @@ def _handle_callback(cq: dict) -> None:
     msg_id: int = cq["message"]["message_id"]
     msg_text: str = cq["message"].get("text", "")
     today: str = date.today().isoformat()
+
+    # Workflow: abort
+    if data == "wf:abort":
+        _workflow.pop(chat_id, None)
+        answer_callback_query(TOKEN, cq["id"])
+        send_message(TOKEN, chat_id, "❌ Abgebrochen.", reply_markup=REPLY_KEYBOARD)
+        return
+
+    # Task: final priority step
+    if data.startswith("task:priority:"):
+        prio_key = data.split(":")[-1]
+        prio = {"hoch": "Hoch", "mittel": "Mittel", "niedrig": "Niedrig"}.get(prio_key, "Mittel")
+        state = _workflow.pop(chat_id, {})
+        name = state.get("data", {}).get("name", "?")
+        answer_callback_query(TOKEN, cq["id"])
+        result = run_claude(
+            f"Heute ist {today}. Backlog-Aufgabe: {name}. Priorität: {prio}.",
+            system_prompt=BACKLOG_SYSTEM_PROMPT, automated=True,
+        )
+        send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
+        return
+
+    # Lern: kategorie step
+    if data.startswith("lern:kategorie:"):
+        kat_key = data.split(":")[-1]
+        kat = {"programmierung": "Programmierung", "sprachen": "Sprachen",
+               "mathematik": "Mathematik", "design": "Design",
+               "sonstiges": "Sonstiges"}.get(kat_key, "Sonstiges")
+        state = _workflow.get(chat_id, {})
+        state.setdefault("data", {})["kategorie"] = kat
+        state["step"] = "lern:prioritaet"
+        answer_callback_query(TOKEN, cq["id"])
+        name = state.get("data", {}).get("name", "?")
+        buttons = [[
+            {"text": "🔴 Hoch",    "callback_data": "lern:prioritaet:hoch"},
+            {"text": "🟡 Mittel",  "callback_data": "lern:prioritaet:mittel"},
+            {"text": "🟢 Niedrig", "callback_data": "lern:prioritaet:niedrig"},
+        ]]
+        send_message(TOKEN, chat_id,
+            f'📚 "{name}" · {kat}\n\n3 / 3 · Priorität?',
+            reply_markup={"inline_keyboard": buttons})
+        return
+
+    # Lern: final priority step
+    if data.startswith("lern:prioritaet:"):
+        prio_key = data.split(":")[-1]
+        prio = {"hoch": "Hoch", "mittel": "Mittel", "niedrig": "Niedrig"}.get(prio_key, "Mittel")
+        state = _workflow.pop(chat_id, {})
+        name = state.get("data", {}).get("name", "?")
+        kat = state.get("data", {}).get("kategorie", "Sonstiges")
+        answer_callback_query(TOKEN, cq["id"])
+        result = run_claude(
+            f"{name}. Kategorie: {kat}. Priorität: {prio}.",
+            system_prompt=LERN_SYSTEM_PROMPT, automated=True,
+        )
+        send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
+        return
+
+    # Termin: final priority step
+    if data.startswith("termin:priority:"):
+        prio_key = data.split(":")[-1]
+        prio = {"hoch": "Hoch", "mittel": "Mittel", "niedrig": "Niedrig"}.get(prio_key, "Mittel")
+        state = _workflow.pop(chat_id, {})
+        name = state.get("data", {}).get("name", "?")
+        datum = state.get("data", {}).get("datum", "heute")
+        answer_callback_query(TOKEN, cq["id"])
+        result = run_claude(
+            f"Heute ist {today}. Termin: {name}. Datum/Uhrzeit: {datum}. Priorität: {prio}.",
+            system_prompt=TERMIN_SYSTEM_PROMPT, automated=True,
+        )
+        send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
+        return
+
+    # Ideen: typ selection → move to name step
+    if data.startswith("ideen:typ:"):
+        typ_key = data.split(":")[-1]
+        typ = "Spieleidee" if typ_key == "spieleidee" else "Andere Idee"
+        state = _workflow.get(chat_id, {})
+        state.setdefault("data", {})["typ"] = typ
+        state["step"] = "ideen:name"
+        answer_callback_query(TOKEN, cq["id"])
+        send_message(TOKEN, chat_id,
+            f'💡 {typ}\n\n2 / 3 · Name?',
+            reply_markup={"inline_keyboard": [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]})
+        return
+
+    # Projekte: standup for a project
+    if data.startswith("standup:"):
+        slug = data[8:]
+        status_path = HUB_DIR / "topics" / slug / "STATUS.md"
+        answer_callback_query(TOKEN, cq["id"])
+        if not status_path.exists():
+            send_message(TOKEN, chat_id, f"❌ Kein STATUS.md für {slug}.", reply_markup=REPLY_KEYBOARD)
+            return
+        active = ""
+        features = []
+        for line in status_path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("Active:"):
+                active = line[7:].strip()
+            s = line.strip()
+            if s.startswith("- [planned]") or s.startswith("- [discussed]"):
+                feat = s.split("]", 1)[1].strip()
+                if " (" in feat:
+                    feat = feat[:feat.index(" (")]
+                features.append(feat)
+        lines = [f"📣 Standup — {slug}"]
+        if active and active not in ("(none)", ""):
+            lines.append(f"🔧 Aktiv: {active}")
+        for feat in features:
+            lines.append(f"· {feat}")
+        if not features:
+            lines.append("· (nichts in Planung)")
+        send_message(TOKEN, chat_id, "\n".join(lines), reply_markup=REPLY_KEYBOARD)
+        return
 
     if data.startswith("done:"):
         pid = data[5:]
@@ -866,174 +949,6 @@ def _handle_callback(cq: dict) -> None:
         edit_message(TOKEN, chat_id, msg_id,
                      f"✏️ {_extract_name_from_message(msg_text)} · {field.capitalize()} → {value}")
 
-    elif data.startswith("vs_select:"):
-        pid = data[10:]
-        state = vs_state.get(chat_id)
-        if not state:
-            return
-        if pid in state["selected"]:
-            state["selected"].remove(pid)
-            icon = "☐"
-        else:
-            state["selected"].append(pid)
-            if pid in state.get("pending", []):
-                state["pending"].remove(pid)
-            icon = "☑"
-        buttons = [[
-            {"text": f"{icon} Auswählen", "callback_data": f"vs_select:{pid}"},
-            {"text": "Überspringen",       "callback_data": f"vs_skip:{pid}"},
-        ]]
-        edit_message(TOKEN, chat_id, msg_id, msg_text, {"inline_keyboard": buttons})
-        _check_vs_done(chat_id, today)
-
-    elif data.startswith("vs_skip:"):
-        pid = data[8:]
-        state = vs_state.get(chat_id)
-        if state and pid in state.get("pending", []):
-            state["pending"].remove(pid)
-        edit_message(TOKEN, chat_id, msg_id, msg_text)
-        _check_vs_done(chat_id, today)
-
-    elif data.startswith("vs_confirm:"):
-        date_key = data[11:]
-        if date_key == "freitext":
-            callback_state[chat_id] = {"action": "vs_date", "msg_id": msg_id}
-            send_message(TOKEN, chat_id, "Welches Datum? (z.B. 2026-06-25)")
-        else:
-            _run_vs_bulk(chat_id, _resolve_date_key(date_key, today), today)
-
-    elif data.startswith("proj_sel:"):
-        parts = data.split(":", 2)
-        pid = parts[1] if len(parts) > 1 else ""
-        name = parts[2] if len(parts) > 2 else pid
-        state = proj_state.get(chat_id, {})
-        if state.get("phase") != "select_proj":
-            return
-        sel = state.setdefault("selected_proj", [])
-        if pid in [p["id"] for p in sel]:
-            state["selected_proj"] = [p for p in sel if p["id"] != pid]
-            answer_callback_query(TOKEN, cq["id"], f"❌ {name} abgewählt")
-        else:
-            sel.append({"id": pid, "name": name})
-            answer_callback_query(TOKEN, cq["id"], f"✅ {name} gewählt")
-
-    elif data == "proj_done:":
-        answer_callback_query(TOKEN, cq["id"], "Features werden geladen…")
-        _show_proj_features(chat_id, today)
-
-    elif data.startswith("pfeat_sel:"):
-        pid = data[10:]
-        state = proj_state.get(chat_id, {})
-        if state.get("phase") != "select_feat":
-            return
-        sel = state.setdefault("selected_feat", [])
-        if pid in sel:
-            sel.remove(pid)
-            answer_callback_query(TOKEN, cq["id"], "❌ Abgewählt")
-        else:
-            sel.append(pid)
-            answer_callback_query(TOKEN, cq["id"], "✅ Gewählt")
-
-    elif data == "pfeat_confirm:":
-        state = proj_state.pop(chat_id, {})
-        selected = state.get("selected_feat", [])
-        answer_callback_query(TOKEN, cq["id"], "Datum wird gesetzt…")
-        if not selected:
-            send_message(TOKEN, chat_id, "Keine Features ausgewählt.", reply_markup=REPLY_KEYBOARD)
-            return
-        tomorrow = (date.today() + timedelta(days=1)).isoformat()
-        for pid in selected:
-            run_claude(
-                f"Heute ist {today}. page_id: {pid}. Feld: datum. Wert: {tomorrow}.",
-                system_prompt=TASK_UPDATE_SYSTEM_PROMPT,
-                automated=True,
-            )
-        d = date.fromisoformat(tomorrow)
-        send_message(TOKEN, chat_id,
-                     f"📅 {len(selected)} Feature(s) für {d.strftime('%d.%m.')} eingeplant.",
-                     reply_markup=REPLY_KEYBOARD)
-
-
-def _dispatch_command(text: str, chat_id: int) -> None:
-    today = date.today().isoformat()
-    t = text.lower().strip()
-
-    if t in ("moin", "morgen", "guten morgen"):
-        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=MOIN_JSON_SYSTEM_PROMPT)
-        try:
-            data = json.loads(raw)
-            _send_moin_messages(data)
-        except (json.JSONDecodeError, KeyError, ValueError):
-            response = run_claude(f"Heute ist {today}.", system_prompt=MOIN_SYSTEM_PROMPT)
-            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
-
-    elif t in ("abend", "feierabend", "guten abend"):
-        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=ABEND_JSON_SYSTEM_PROMPT)
-        try:
-            data = json.loads(raw)
-            _send_abend_messages(data)
-        except (json.JSONDecodeError, KeyError, ValueError):
-            response = run_claude(f"Heute ist {today}.", system_prompt=ABEND_SYSTEM_PROMPT)
-            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
-        _start_proj_selection(chat_id, today)
-
-    elif t.startswith("projekt:"):
-        name = text[8:].strip()
-        if not name:
-            send_message(TOKEN, chat_id, "Nutzung: projekt: <name>", reply_markup=REPLY_KEYBOARD)
-        else:
-            response = run_claude(f"Projektname: {name}", system_prompt=ARBEIT_PROJEKT_CREATE_SYSTEM_PROMPT)
-            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
-
-    elif t.startswith("epic:"):
-        rest = text[5:].strip()
-        if " in " not in rest.lower():
-            send_message(TOKEN, chat_id, "Nutzung: epic: <name> in <projekt>", reply_markup=REPLY_KEYBOARD)
-        else:
-            idx = rest.lower().index(" in ")
-            epic_name = rest[:idx].strip()
-            proj_name = rest[idx + 4:].strip()
-            response = run_claude(
-                f"Epic-Name: {epic_name}. Projekt: {proj_name}.",
-                system_prompt=ARBEIT_EPIC_CREATE_SYSTEM_PROMPT,
-            )
-            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
-
-    elif t.startswith("feature:"):
-        rest = text[8:].strip()
-        if " in " not in rest.lower():
-            send_message(TOKEN, chat_id, "Nutzung: feature: <name> in <epic>", reply_markup=REPLY_KEYBOARD)
-        else:
-            idx = rest.lower().index(" in ")
-            feat_name = rest[:idx].strip()
-            epic_name = rest[idx + 4:].strip()
-            response = run_claude(
-                f"Feature-Name: {feat_name}. Epic: {epic_name}.",
-                system_prompt=ARBEIT_FEATURE_CREATE_SYSTEM_PROMPT,
-            )
-            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
-
-    elif t in ("projekte:", "projekte"):
-        response = run_claude("Zeige aktive Projekte.", system_prompt=ARBEIT_PROJEKTE_LIST_SYSTEM_PROMPT)
-        send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
-
-    elif t.startswith("standup:"):
-        proj_name = text[8:].strip()
-        if not proj_name:
-            send_message(TOKEN, chat_id, "Nutzung: standup: <projektname>", reply_markup=REPLY_KEYBOARD)
-        else:
-            response = run_claude(f"Projektname: {proj_name}.", system_prompt=ARBEIT_STANDUP_SYSTEM_PROMPT)
-            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
-
-    elif t.startswith("edit:"):
-        edit_text = text[5:].strip()
-        if not edit_text:
-            send_message(TOKEN, chat_id,
-                         "Nutzung: edit: <task> <feld> <wert>\nz.B.: edit: PR Review prio Hoch",
-                         reply_markup=REPLY_KEYBOARD)
-        else:
-            response = run_claude(f"Heute ist {today}. {edit_text}", system_prompt=EDIT_SYSTEM_PROMPT)
-            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
 
 
 def _add_reminder(text, due_iso):
@@ -1191,8 +1106,6 @@ def _get_projects():
 
 
 def main():
-    global conversation_history
-
     plans = load_plans()
     for p in plans:
         if p["status"] == "running":
@@ -1258,11 +1171,11 @@ def main():
                 if chat_id in callback_state and text:
                     cb = callback_state[chat_id]
                     _is_interrupt = (
-                        text.lower() in ("moin", "abend", "woche", "hilfe", "erinnerungen", "/plans", "backlog")
+                        text.lower() in ("erinnerungen", "/plans")
                         or any(text.lower().startswith(p) for p in (
-                            "task:", "status:", "fokus:", "verschieben:", "lern:", "idee:",
-                            "habit:", "termin:", "erinnere", "erinnerung:", "implement-plan:",
-                            "abort-plan:", "backlog:", "suche:", "impl-mode:", "edit:"))
+                            "erinnere", "erinnerung:", "implement-plan:",
+                            "abort-plan:", "impl-mode:"))
+                        or text in BUTTON_MAP
                     )
                     if _is_interrupt:
                         del callback_state[chat_id]
@@ -1285,168 +1198,20 @@ def main():
                         _run_vs_bulk(chat_id, text, today)
                         continue
 
-                if chat_id in pending_task_input:
-                    state = pending_task_input[chat_id]
-                    _is_cmd = (
-                        text.lower() in ("moin", "abend", "woche", "hilfe", "erinnerungen", "/plans", "backlog")
-                        or any(text.lower().startswith(p) for p in (
-                            "task:", "status:", "fokus:", "verschieben:", "lern:", "idee:",
-                            "habit:", "termin:", "erinnere", "erinnerung:",
-                            "implement-plan:", "abort-plan:", "backlog:", "suche:", "impl-mode:", "edit:"))
-                    )
-                    if _is_cmd:
-                        del pending_task_input[chat_id]
-                    elif state == "task_menu":
-                        del pending_task_input[chat_id]
-                        choice = text.strip().upper()
-                        if choice in ("A", "1"):
-                            pending_task_input[chat_id] = "task_input"
-                            send_message(TOKEN, CHAT_ID,
-                                "Schreib mir: Name, Priorität (Hoch/Mittel/Niedrig), Bereich (Arbeit/Privat/Lernen/Gesundheit)\nz.B.: Arzttermin, Hoch, Gesundheit",
-                                reply_markup=REPLY_KEYBOARD)
-                        elif choice in ("B", "2"):
-                            send_message(TOKEN, CHAT_ID, "⏳ Lade Backlog...")
-                            bl = run_claude(f"Heute ist {today}.", system_prompt=BACKLOG_LIST_SYSTEM_PROMPT)
-                            if "leer" in bl.lower():
-                                send_message(TOKEN, CHAT_ID, f"{bl}\n\nKeine Backlog-Tasks verfügbar.", reply_markup=REPLY_KEYBOARD)
-                            else:
-                                pending_task_input[chat_id] = {"state": "backlog_select", "list": bl}
-                                send_message(TOKEN, CHAT_ID, f"{bl}\n\nWelchen Task? (Nummer eingeben)", reply_markup=REPLY_KEYBOARD)
-                        else:
-                            send_message(TOKEN, CHAT_ID, "Bitte A oder B eingeben.", reply_markup=REPLY_KEYBOARD)
-                        continue
-                    elif isinstance(state, dict) and state.get("state") == "backlog_select":
-                        del pending_task_input[chat_id]
-                        try:
-                            num = int(text.strip())
-                            pending_task_input[chat_id] = {"state": "backlog_date", "num": num, "list": state["list"]}
-                            send_message(TOKEN, CHAT_ID, f"Ausgewählt: #{num}\nWelches Datum? (z.B. heute, morgen, 2026-06-15)", reply_markup=REPLY_KEYBOARD)
-                        except ValueError:
-                            send_message(TOKEN, CHAT_ID, "Bitte eine Nummer eingeben.", reply_markup=REPLY_KEYBOARD)
-                        continue
-                    elif isinstance(state, dict) and state.get("state") == "backlog_date":
-                        del pending_task_input[chat_id]
-                        send_message(TOKEN, CHAT_ID, "⏳ Übertrage in Tagesorganizer...")
-                        prompt = f"Heute ist {today}. Zieldatum: {text}.\nBacklog-Liste:\n{state['list']}\nNummer: {state['num']}"
-                        response = run_claude(prompt, system_prompt=BACKLOG_PROMOTE_SYSTEM_PROMPT)
-                        send_message(TOKEN, CHAT_ID, response, reply_markup=REPLY_KEYBOARD)
-                        continue
-                    elif state == "backlog_input":
-                        del pending_task_input[chat_id]
-                        send_message(TOKEN, CHAT_ID, "⏳ Denke nach...")
-                        response = run_claude(f"Heute ist {today}. Backlog-Aufgabe: {text}", system_prompt=BACKLOG_SYSTEM_PROMPT)
-                        send_message(TOKEN, CHAT_ID, response, reply_markup=REPLY_KEYBOARD)
-                        continue
-                    else:
-                        del pending_task_input[chat_id]
-                        send_message(TOKEN, CHAT_ID, "⏳ Denke nach...")
-                        response = run_claude(f"Heute ist {today}. Aufgabe: {text}", system_prompt=TASK_SYSTEM_PROMPT)
-                        send_message(TOKEN, CHAT_ID, response, reply_markup=REPLY_KEYBOARD)
-                        continue
+                # 1. Active workflow consumes message first
+                if handle_workflow_step(text, chat_id, today):
+                    continue
 
-                send_message(TOKEN, CHAT_ID, "⏳ Denke nach...")
-
-                project_cwd = None
-                project_notion_name = None
-                for slug, info in _get_projects().items():
-                    if text.lower().startswith(f"{slug}:"):
-                        project_cwd = info["path"] or None
-                        project_notion_name = info["notion_name"]
-                        text = text[len(slug) + 1:].strip()
-                        break
-
-                t = text.lower()
+                t = text.strip()
                 response = None
 
-                if project_notion_name and t == "tasks":
-                    response = run_claude(f"Heute ist {today}. Projektname: {project_notion_name}", system_prompt=PROJEKT_TASKS_SYSTEM_PROMPT)
-                elif project_notion_name and t.startswith("task:"):
-                    task_text = text[5:].strip()
-                    response = run_claude(f"Heute ist {today}. Projektname: {project_notion_name}. Aufgabe: {task_text}", system_prompt=PROJEKT_TASK_SYSTEM_PROMPT)
-                elif t in ("moin", "morgen", "guten morgen"):
-                    _dispatch_command(text, chat_id)
-                    continue
-                elif t in ("abend", "feierabend", "guten abend"):
-                    _dispatch_command(text, chat_id)
-                    continue
-                elif t.startswith("task:"):
-                    task_text = text[5:].strip()
-                    if not task_text:
-                        pending_task_input[chat_id] = "task_menu"
-                        response = "Neuer Task oder aus Backlog?\nA) Neuer Task\nB) Aus Backlog auswählen"
-                    else:
-                        response = run_claude(f"Heute ist {today}. Aufgabe: {task_text}", system_prompt=TASK_SYSTEM_PROMPT, cwd=project_cwd)
-                elif t == "woche":
-                    response = run_claude(f"Heute ist {today}.", system_prompt=WOCHE_SYSTEM_PROMPT)
-                elif t.startswith("fokus:"):
-                    bereich = text[6:].strip().capitalize()
-                    if bereich.lower() not in BEREICHE:
-                        response = f"Unbekannter Bereich: {bereich}\nGültig: Arbeit, Privat, Lernen, Gesundheit"
-                    else:
-                        response = run_claude(f"Heute ist {today}. Bereich: {bereich}", system_prompt=FOKUS_SYSTEM_PROMPT)
-                elif t.startswith("verschieben:"):
-                    ziel = text[12:].strip()
-                    if ziel:
-                        response = run_claude(f"Heute ist {today}. Zieldatum: {ziel}",
-                                             system_prompt=VERSCHIEBEN_SYSTEM_PROMPT)
-                    else:
-                        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=MOIN_JSON_SYSTEM_PROMPT)
-                        try:
-                            moin_data = json.loads(raw)
-                            open_tasks = moin_data.get("tasks", [])
-                            if not open_tasks:
-                                response = "Keine offenen Tasks zum Verschieben."
-                            else:
-                                vs_state[chat_id] = {
-                                    "pending": [tk["id"].replace("-", "") for tk in open_tasks],
-                                    "selected": [],
-                                    "tasks": {tk["id"].replace("-", ""): tk["name"] for tk in open_tasks},
-                                }
-                                send_message(TOKEN, CHAT_ID, "📋 Offene Tasks — welche verschieben?")
-                                for tk in open_tasks:
-                                    pid = tk["id"].replace("-", "")
-                                    prio_icon = PRIO_ICONS.get(tk.get("prio", ""), "")
-                                    msg = f"{prio_icon} {tk['name']}" if prio_icon else tk["name"]
-                                    buttons = [[
-                                        {"text": "☐ Auswählen",  "callback_data": f"vs_select:{pid}"},
-                                        {"text": "Überspringen", "callback_data": f"vs_skip:{pid}"},
-                                    ]]
-                                    send_message(TOKEN, CHAT_ID, msg, reply_markup={"inline_keyboard": buttons})
-                                continue
-                        except (json.JSONDecodeError, KeyError, ValueError):
-                            response = "❌ Fehler beim Laden der Tasks. Versuche: verschieben: morgen"
-                elif t.startswith("lern:"):
-                    response = run_claude(text[5:].strip(), system_prompt=LERN_SYSTEM_PROMPT)
-                elif t.startswith("idee:"):
-                    response = run_claude(text[5:].strip(), system_prompt=IDEE_SYSTEM_PROMPT)
-                elif t.startswith("habit:"):
-                    habit_text = text[6:].strip()
-                    response = (run_claude(f"Heute ist {today}. Habit: {habit_text}", system_prompt=HABIT_SYSTEM_PROMPT)
-                                if habit_text else "Nutzung: habit: <Habit>  z.B. habit: Sport täglich")
-                elif t.startswith("termin:"):
-                    termin_text = text[7:].strip()
-                    response = (run_claude(f"Heute ist {today}. Termin: {termin_text}", system_prompt=TERMIN_SYSTEM_PROMPT)
-                                if termin_text else "Nutzung: termin: <text>  z.B. termin: Arzttermin morgen um 14:00")
-                elif t == "backlog":
-                    response = run_claude(f"Heute ist {today}.", system_prompt=BACKLOG_LIST_SYSTEM_PROMPT)
-                elif t.startswith("backlog:"):
-                    backlog_text = text[8:].strip()
-                    if not backlog_text:
-                        pending_task_input[chat_id] = "backlog_input"
-                        response = "Schreib mir: Name, Priorität (Hoch/Mittel/Niedrig), Bereich (Arbeit/Privat/Lernen/Gesundheit)\nz.B.: Stromtarif wechseln, Mittel, Privat"
-                    else:
-                        response = run_claude(f"Heute ist {today}. Backlog-Aufgabe: {backlog_text}", system_prompt=BACKLOG_SYSTEM_PROMPT)
-                elif t.startswith("status:"):
-                    status_text = text[7:].strip()
-                    if not status_text:
-                        response = "Nutzung: status: <Taskname> <Status>  z.B. status: Sport erledigt"
-                    else:
-                        response = run_claude(f"Heute ist {today}. Anfrage: {status_text}", system_prompt=STATUS_SYSTEM_PROMPT)
-                        if any(w in status_text.lower() for w in ("erledigt", "fertig", "done")):
-                            threading.Thread(target=_run_archive_once, daemon=True).start()
-                elif t.startswith("erinnere") or t.startswith("erinnerung:"):
+                # 2. Infrastructure commands (text-based, kept)
+                if t.lower().startswith("erinnere") or t.lower().startswith("erinnerung:"):
                     now_time = datetime.now().strftime("%H:%M")
-                    raw = run_claude_parse(f"Heute ist {today}, aktuelle Uhrzeit: {now_time}. Nutzer schreibt: {text}", system_prompt=REMINDER_PARSE_SYSTEM_PROMPT)
+                    raw = run_claude_parse(
+                        f"Heute ist {today}, aktuelle Uhrzeit: {now_time}. Nutzer schreibt: {text}",
+                        system_prompt=REMINDER_PARSE_SYSTEM_PROMPT,
+                    )
                     try:
                         parsed = json.loads(raw)
                         _add_reminder(parsed["text"], parsed["due"])
@@ -1455,7 +1220,8 @@ def main():
                     except (json.JSONDecodeError, KeyError, ValueError) as e:
                         print(f"[reminder parse error] raw={repr(raw)} exc={e}")
                         response = "❌ Konnte Erinnerung nicht parsen. Versuche: erinnere mich um 14:00 an Zahnarzt"
-                elif t == "erinnerungen":
+
+                elif t.lower() == "erinnerungen":
                     reminders = load_reminders()
                     pending = [r for r in reminders if r["status"] == "pending"]
                     if not pending:
@@ -1466,14 +1232,8 @@ def main():
                             due_dt = datetime.fromisoformat(r["due"])
                             lines.append(f"· {due_dt.strftime('%d.%m. %H:%M')} — {r['text']}")
                         response = "\n".join(lines)
-                elif t.startswith("edit:"):
-                    _dispatch_command(text, chat_id)
-                    continue
-                elif t.startswith("suche:"):
-                    query = text[6:].strip()
-                    response = (run_claude(query, system_prompt=SUCHE_SYSTEM_PROMPT)
-                                if query else "❓ Suchbegriff fehlt. z.B.: suche: Python")
-                elif t.startswith("implement-plan:"):
+
+                elif t.lower().startswith("implement-plan:"):
                     body = text[15:].strip()
                     if not body:
                         response = "Nutzung: implement-plan: <slug> um HH:MM  oder  implement-plan: <slug> jetzt"
@@ -1492,13 +1252,15 @@ def main():
                             scheduled_time = rest[3:].strip()
                             response = (_schedule_plan(slug_part, scheduled_time)
                                         if re.fullmatch(r"\d{2}:\d{2}", scheduled_time)
-                                        else "❌ Ungültige Uhrzeit — bitte HH:MM angeben (z.B. 02:00)")
+                                        else "❌ Ungültige Uhrzeit — bitte HH:MM angeben (z.B. 14:00)")
                         else:
                             response = "Nutzung: implement-plan: <slug> um HH:MM  oder  implement-plan: <slug> jetzt"
-                elif t.startswith("abort-plan:"):
+
+                elif t.lower().startswith("abort-plan:"):
                     slug_part = text[11:].strip()
                     response = (_abort_plan(slug_part) if slug_part else "Nutzung: abort-plan: <slug>")
-                elif t.startswith("impl-mode:"):
+
+                elif t.lower().startswith("impl-mode:"):
                     arg = text[10:].strip().lower()
                     s = load_settings()
                     if arg == "an":
@@ -1518,17 +1280,19 @@ def main():
                         response = (f"⚙️ Implementation Mode: aktiv bis {until[11:16]}"
                                     if active and until else
                                     "⚙️ Implementation Mode: inaktiv\nNutzung: impl-mode: an  oder  impl-mode: aus")
-                elif t == "/plans":
+
+                elif t.lower() == "/plans":
                     response = _format_plans()
-                elif t == "hilfe":
-                    response = HILFE_TEXT
-                else:
-                    resp, conversation_history = run_claude_with_history(
-                        chat_id, text, conversation_history,
-                        system_prompt=CHAT_SYSTEM_PROMPT,
-                        cwd=project_cwd,
-                    )
-                    response = resp
+
+                # 3. Reply-Keyboard button → start workflow
+                elif t in BUTTON_MAP:
+                    start_workflow(BUTTON_MAP[t], chat_id)
+                    continue
+
+                # 4. Everything else: ignore (no NLP fallback)
+
+                if response:
+                    send_message(TOKEN, CHAT_ID, response, reply_markup=REPLY_KEYBOARD)
 
                 if response:
                     send_message(TOKEN, CHAT_ID, response, reply_markup=REPLY_KEYBOARD)
