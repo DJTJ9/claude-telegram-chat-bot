@@ -72,3 +72,32 @@ class TestZyklenInstanziierung(unittest.TestCase):
         morgen_idx = src.index('kind == "morgen"')
         snippet = src[morgen_idx:morgen_idx+400]
         self.assertIn("_instanz_zyklen(", snippet)
+
+
+class TestZyklenCRUD(unittest.TestCase):
+    def test_zyklen_list_prompt(self):
+        self.assertIn("ZYKLEN_LIST_SYSTEM_PROMPT", _src())
+
+    def test_zyklen_neu_prompt(self):
+        self.assertIn("ZYKLEN_NEU_SYSTEM_PROMPT", _src())
+
+    def test_zyklen_delete_prompt(self):
+        self.assertIn("ZYKLEN_DELETE_SYSTEM_PROMPT", _src())
+
+    def test_zyklen_workflow_kind(self):
+        self.assertIn('kind == "zyklen"', _src())
+
+    def test_zyklen_neu_steps(self):
+        src = _src()
+        self.assertIn('"zyklen:name"', src)
+        self.assertIn('"zyklen:rhythmus"', src)
+
+    def test_zyklen_callbacks(self):
+        src = _src()
+        self.assertIn('"zyklen:rhythmus:', src)
+        self.assertIn('data.startswith("zyklen_del:")', src)
+
+    def test_zyklen_wochentag_buttons(self):
+        src = _src()
+        self.assertIn("wöchentlich_mo", src)
+        self.assertIn("wöchentlich_fr", src)

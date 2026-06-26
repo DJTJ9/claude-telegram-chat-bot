@@ -71,6 +71,23 @@ Schritt 3: Falls keine Instanz: erstelle neuen Eintrag mit Name = Vorlage-Name,
   Zyklus-Property NICHT auf neuen Eintrag setzen.
 Antworte NUR mit: "{n} Zyklen instanziiert: Name1, Name2" oder "Keine faelligen Zyklen." """
 
+ZYKLEN_LIST_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
+Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Finde alle Eintraege mit Zyklus-Property != null/leer.
+Antworte NUR mit JSON:
+{"zyklen": [{"id": "<page_id_32_zeichen>", "name": "<Name>", "zyklus": "<Zyklus-Wert>"}]}
+Falls keine: {"zyklen": []}"""
+
+ZYKLEN_NEU_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
+Lege neuen Eintrag im Tagesorganizer an (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Name: {name}. Zyklus: {zyklus}. Kein Datum, Status: Not started.
+Antworte NUR mit: Zyklischer Task angelegt: {name} ({zyklus})"""
+
+ZYKLEN_DELETE_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
+Archiviere den Notion-Eintrag mit page_id {page_id} aus dem Tagesorganizer
+(data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Antworte NUR mit: Zyklischer Task geloescht."""
+
 ABEND_SYSTEM_PROMPT = """Du bist ein Notion-Abend-Assistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
 Zeige alle Tasks mit Datum = heute.
@@ -710,6 +727,34 @@ def start_workflow(kind: str, chat_id: int) -> None:
             reply_markup={"inline_keyboard": buttons})
         _workflow.pop(chat_id, None)
 
+    elif kind == "zyklen":
+        raw = run_claude_parse("Zeige alle Zyklen.", system_prompt=ZYKLEN_LIST_SYSTEM_PROMPT)
+        try:
+            zdata = json.loads(raw)
+            zyklen = zdata.get("zyklen", [])
+        except (json.JSONDecodeError, ValueError):
+            zyklen = []
+
+        if zyklen:
+            lines = ["━━ Zyklische Tasks ━━", "", "📋 Aktiv:"]
+            for z in zyklen:
+                lines.append(f"  • {z['name']} — {z['zyklus']}")
+            text = "\n".join(lines)
+        else:
+            text = "━━ Zyklische Tasks ━━\n\nKeine zyklischen Tasks."
+
+        del_buttons = [
+            [{"text": f"🗑️ {z['name']}", "callback_data": f"zyklen_del:{z['id'].replace('-', '')}"}]
+            for z in zyklen
+        ]
+        action_buttons = [[
+            {"text": "➕ Neu",       "callback_data": "zyklen:neu"},
+            {"text": "✗ Schließen", "callback_data": "wf:abort"},
+        ]]
+        send_message(TOKEN, chat_id, text,
+            reply_markup={"inline_keyboard": del_buttons + action_buttons})
+        _workflow.pop(chat_id, None)
+
 
 def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
     """Returns True if text was consumed by active workflow."""
@@ -788,6 +833,18 @@ def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
         full_text = f"{name}. {details}" if details else name
         result = run_claude(full_text, system_prompt=IDEE_SYSTEM_PROMPT, automated=True)
         send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
+        return True
+
+    if step == "zyklen:name":
+        state["data"]["name"] = text
+        state["step"] = "zyklen:rhythmus"
+        buttons = [[
+            {"text": "📅 Täglich",     "callback_data": "zyklen:rhythmus:täglich"},
+            {"text": "📆 Wöchentlich", "callback_data": "zyklen:rhythmus:wöchentlich"},
+        ]]
+        send_message(TOKEN, chat_id,
+            f'🔄 "{text}"\n\n2 / 2 · Rhythmus?',
+            reply_markup={"inline_keyboard": buttons})
         return True
 
     return False
@@ -924,6 +981,61 @@ def _handle_callback(cq: dict) -> None:
         if not features:
             lines.append("· (nichts in Planung)")
         send_message(TOKEN, chat_id, "\n".join(lines), reply_markup=REPLY_KEYBOARD)
+        return
+
+    if data == "zyklen:neu":
+        _workflow[chat_id] = {"step": "zyklen:name", "data": {}}
+        send_message(TOKEN, CHAT_ID,
+            "🔄 Neuer zyklischer Task\n\n1 / 2 · Name?",
+            reply_markup={"inline_keyboard": [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]})
+        return
+
+    if data.startswith("zyklen:rhythmus:"):
+        rhythmus = data.split(":", 2)[2]
+        if rhythmus == "wöchentlich":
+            state = _workflow.get(chat_id, {})
+            name = state.get("data", {}).get("name", "?")
+            buttons = [[
+                {"text": "Mo", "callback_data": "zyklen:tag:wöchentlich_mo"},
+                {"text": "Di", "callback_data": "zyklen:tag:wöchentlich_di"},
+                {"text": "Mi", "callback_data": "zyklen:tag:wöchentlich_mi"},
+                {"text": "Do", "callback_data": "zyklen:tag:wöchentlich_do"},
+            ], [
+                {"text": "Fr", "callback_data": "zyklen:tag:wöchentlich_fr"},
+                {"text": "Sa", "callback_data": "zyklen:tag:wöchentlich_sa"},
+                {"text": "So", "callback_data": "zyklen:tag:wöchentlich_so"},
+            ]]
+            send_message(TOKEN, CHAT_ID,
+                f'🔄 "{name}" — Wöchentlich\n\nWelcher Tag?',
+                reply_markup={"inline_keyboard": buttons})
+            return
+        state = _workflow.pop(chat_id, {})
+        name = state.get("data", {}).get("name", "?")
+        result = run_claude(
+            ZYKLEN_NEU_SYSTEM_PROMPT.replace("{name}", name).replace("{zyklus}", rhythmus),
+            automated=True,
+        )
+        send_message(TOKEN, CHAT_ID, result, reply_markup=REPLY_KEYBOARD)
+        return
+
+    if data.startswith("zyklen:tag:"):
+        zyklus = data.split(":", 2)[2]
+        state = _workflow.pop(chat_id, {})
+        name = state.get("data", {}).get("name", "?")
+        result = run_claude(
+            ZYKLEN_NEU_SYSTEM_PROMPT.replace("{name}", name).replace("{zyklus}", zyklus),
+            automated=True,
+        )
+        send_message(TOKEN, CHAT_ID, result, reply_markup=REPLY_KEYBOARD)
+        return
+
+    if data.startswith("zyklen_del:"):
+        page_id = data.split(":", 1)[1]
+        result = run_claude(
+            ZYKLEN_DELETE_SYSTEM_PROMPT.replace("{page_id}", page_id),
+            automated=True,
+        )
+        send_message(TOKEN, CHAT_ID, result, reply_markup=REPLY_KEYBOARD)
         return
 
     if data.startswith("done:"):
