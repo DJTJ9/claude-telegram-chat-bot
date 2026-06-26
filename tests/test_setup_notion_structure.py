@@ -88,5 +88,43 @@ class TestCreateDatabases(unittest.TestCase):
         self.assertIn("Zyklus", tasks_call[0][0])
 
 
+from scripts.setup_notion_structure import migrate_data
+
+
+class TestMigrateData(unittest.TestCase):
+    def _new_db_ids(self):
+        return {
+            "tasks": "newtasksdb000000000000000000001",
+            "sport-challenges": "newsportdb000000000000000000001",
+            "archiv": "newarchivdb000000000000000000001",
+        }
+
+    def test_runs_three_migrations(self):
+        with patch("scripts.setup_notion_structure.run_claude", return_value="3 Einträge migriert.") as mock:
+            migrate_data(self._new_db_ids())
+        self.assertEqual(mock.call_count, 3)
+
+    def test_tasks_prompt_references_old_tagesorganizer_id(self):
+        with patch("scripts.setup_notion_structure.run_claude", return_value="OK") as mock:
+            migrate_data(self._new_db_ids())
+        prompts = [c[0][0] for c in mock.call_args_list]
+        tasks_prompt = next(p for p in prompts if "c9d2abbe" in p)
+        self.assertIn("newtasksdb000000000000000000001", tasks_prompt)
+
+    def test_sport_prompt_references_old_sport_id(self):
+        with patch("scripts.setup_notion_structure.run_claude", return_value="OK") as mock:
+            migrate_data(self._new_db_ids())
+        prompts = [c[0][0] for c in mock.call_args_list]
+        sport_prompt = next(p for p in prompts if "fd7c0b6b" in p)
+        self.assertIn("newsportdb000000000000000000001", sport_prompt)
+
+    def test_archiv_prompt_references_old_archiv_id(self):
+        with patch("scripts.setup_notion_structure.run_claude", return_value="OK") as mock:
+            migrate_data(self._new_db_ids())
+        prompts = [c[0][0] for c in mock.call_args_list]
+        archiv_prompt = next(p for p in prompts if "abb5abd8" in p)
+        self.assertIn("newarchivdb000000000000000000001", archiv_prompt)
+
+
 if __name__ == "__main__":
     unittest.main()
