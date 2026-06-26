@@ -51,5 +51,42 @@ class TestCreateSubPages(unittest.TestCase):
         self.assertIn(SUB_PAGES[0][0], first_prompt)
 
 
+from scripts.setup_notion_structure import create_databases, DB_DEFINITIONS
+
+
+class TestCreateDatabases(unittest.TestCase):
+    def _sub_page_ids(self):
+        slugs = [slug for _, slug in SUB_PAGES]
+        return {slug: f"page{i:028d}" for i, slug in enumerate(slugs)}
+
+    def _mock_db_responses(self):
+        return [json.dumps({"database_id": f"db{i:029d}"}) for i in range(len(DB_DEFINITIONS))]
+
+    def test_creates_one_db_per_definition(self):
+        with patch("scripts.setup_notion_structure.run_claude", side_effect=self._mock_db_responses()) as mock:
+            create_databases(self._sub_page_ids())
+        self.assertEqual(mock.call_count, len(DB_DEFINITIONS))
+
+    def test_prompt_contains_parent_sub_page_id(self):
+        sub_ids = self._sub_page_ids()
+        with patch("scripts.setup_notion_structure.run_claude", side_effect=self._mock_db_responses()) as mock:
+            create_databases(sub_ids)
+        first_db_slug = DB_DEFINITIONS[0]["sub_page"]
+        first_prompt = mock.call_args_list[0][0][0]
+        self.assertIn(sub_ids[first_db_slug], first_prompt)
+
+    def test_returns_all_db_names(self):
+        with patch("scripts.setup_notion_structure.run_claude", side_effect=self._mock_db_responses()):
+            result = create_databases(self._sub_page_ids())
+        expected = {d["name"] for d in DB_DEFINITIONS}
+        self.assertEqual(set(result.keys()), expected)
+
+    def test_tasks_db_prompt_contains_zyklus_property(self):
+        with patch("scripts.setup_notion_structure.run_claude", side_effect=self._mock_db_responses()) as mock:
+            create_databases(self._sub_page_ids())
+        tasks_call = next(c for c in mock.call_args_list if "Zyklus" in c[0][0])
+        self.assertIn("Zyklus", tasks_call[0][0])
+
+
 if __name__ == "__main__":
     unittest.main()

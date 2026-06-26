@@ -33,6 +33,88 @@ Antworte NUR mit JSON: {"page_id": "<32-stellige-hex-id-ohne-bindestriche>"}"""
     return json.loads(response.strip())["page_id"]
 
 
+DB_DEFINITIONS = [
+    {
+        "name": "tasks",
+        "sub_page": "tagesplanung",
+        "title": "Tasks",
+        "properties": (
+            '- Name (title)\n'
+            '- Status (select: "Not started", "In progress", "Done")\n'
+            '- Priorität (select: "Hoch", "Mittel", "Niedrig")\n'
+            '- Datum (date)\n'
+            '- Bereich (select: "Arbeit", "Privat", "Lernen", "Gesundheit")\n'
+            '- Notiz (rich_text)\n'
+            '- Zyklus (rich_text)'
+        ),
+    },
+    {
+        "name": "projekte",
+        "sub_page": "projekte",
+        "title": "Projekte",
+        "properties": (
+            '- Name (title)\n'
+            '- Status (select: "Offen", "In Arbeit", "Abgeschlossen")\n'
+            '- Priorität (select: "Hoch", "Mittel", "Niedrig")\n'
+            '- Notiz (rich_text)'
+        ),
+    },
+    {
+        "name": "sport-challenges",
+        "sub_page": "sport-challenges",
+        "title": "Sport Challenges",
+        "properties": (
+            '- Name (title)\n'
+            '- Kategorie (select)\n'
+            '- Status (select: "Not Started", "Done")'
+        ),
+    },
+    {
+        "name": "ideensammlung",
+        "sub_page": "ideensammlung",
+        "title": "Ideensammlung",
+        "properties": (
+            '- Name (title)\n'
+            '- Kategorie (select)\n'
+            '- Notiz (rich_text)'
+        ),
+    },
+    {
+        "name": "archiv",
+        "sub_page": "archiv",
+        "title": "Archiv",
+        "properties": (
+            '- Name (title)\n'
+            '- Status (select)\n'
+            '- Priorität (select)\n'
+            '- Datum (date)\n'
+            '- Bereich (select)\n'
+            '- Notiz (rich_text)\n'
+            '- Archiviert am (date)'
+        ),
+    },
+]
+
+
+def create_databases(sub_page_ids: dict[str, str]) -> dict[str, str]:
+    """Creates DBs on sub-pages. Returns db_name→db_id."""
+    result = {}
+    for db in DB_DEFINITIONS:
+        parent_id = sub_page_ids[db["sub_page"]]
+        prompt = (
+            f'Erstelle eine neue Datenbank in Notion auf der Seite {parent_id}:\n'
+            f'- Titel: "{db["title"]}"\n'
+            f'- Properties:\n{db["properties"]}\n\n'
+            f'Falls eine Datenbank mit diesem Titel auf dieser Seite bereits existiert, gib deren ID zurück.\n'
+            f'Antworte NUR mit JSON: {{"database_id": "<32-stellige-hex-id-ohne-bindestriche>"}}'
+        )
+        response = run_claude(prompt, automated=True)
+        data = json.loads(response.strip())
+        result[db["name"]] = data["database_id"]
+        print(f"✅ DB '{db['title']}': {data['database_id']}")
+    return result
+
+
 def create_sub_pages(organizer_page_id: str) -> dict[str, str]:
     """Creates 7 sub-pages under organizer_page_id. Returns slug→page_id."""
     result = {}
