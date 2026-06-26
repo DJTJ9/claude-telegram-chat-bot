@@ -101,3 +101,30 @@ class TestZyklenCRUD(unittest.TestCase):
         src = _src()
         self.assertIn("wöchentlich_mo", src)
         self.assertIn("wöchentlich_fr", src)
+
+
+class TestEnergieFilter(unittest.TestCase):
+    def test_moin_reads_energie_level(self):
+        src = _src()
+        moin_idx = src.index("def _send_moin_messages(")
+        snippet = src[moin_idx:moin_idx+2000]
+        self.assertIn("energie_level", snippet)
+
+    def test_moin_energie_sorting(self):
+        src = _src()
+        moin_idx = src.index("def _send_moin_messages(")
+        snippet = src[moin_idx:moin_idx+2000]
+        self.assertIn('"niedrig"', snippet)
+        self.assertIn('"hoch"', snippet.lower())
+
+    def test_moin_energie_in_header(self):
+        src = _src()
+        moin_idx = src.index("def _send_moin_messages(")
+        snippet = src[moin_idx:moin_idx+2000]
+        self.assertIn("ENERGIE_ICONS", snippet)
+
+    def test_verschieben_marker(self):
+        src = _src()
+        moin_idx = src.index("def _send_moin_messages(")
+        snippet = src[moin_idx:moin_idx+2000]
+        self.assertIn("Verschieben", snippet)

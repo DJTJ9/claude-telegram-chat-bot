@@ -493,6 +493,10 @@ def _send_moin_messages(data: dict) -> None:
     except ValueError:
         today_str = data.get("date", "")
 
+    settings = load_settings()
+    energie_level = settings.get("energie_level")  # "hoch" / "mittel" / "niedrig" / None
+    energie_icon = ENERGIE_ICONS.get(energie_level, "") if energie_level else ""
+
     tasks = data.get("tasks", [])
     projects: dict = {}
     for t in tasks:
@@ -500,9 +504,12 @@ def _send_moin_messages(data: dict) -> None:
             projects[t["projekt"]] = projects.get(t["projekt"], 0) + 1
 
     header = f"🌅 Guten Morgen! {today_str}"
+    if energie_icon:
+        header += f"\n{energie_icon} Energie: {energie_level.capitalize()}"
     if projects:
         proj_str = " · ".join(f"{p} ({n})" for p, n in sorted(projects.items()))
         header += f"\n📁 {proj_str}"
+
     send_message(TOKEN, CHAT_ID, header, reply_markup=REPLY_KEYBOARD)
 
     appts = data.get("appointments", [])
@@ -512,12 +519,21 @@ def _send_moin_messages(data: dict) -> None:
             lines.append(f"· {a['time']} · {a['name']}")
         send_message(TOKEN, CHAT_ID, "\n".join(lines))
 
-    for task in tasks:
+    # Energie-basierte Sortierung
+    if energie_level == "niedrig":
+        prio_order = {"Niedrig": 0, "Mittel": 1, "Hoch": 2}
+    else:
+        prio_order = {"Hoch": 0, "Mittel": 1, "Niedrig": 2}
+    sorted_tasks = sorted(tasks, key=lambda t: prio_order.get(t.get("prio", "Mittel"), 1))
+
+    for task in sorted_tasks:
         pid = task["id"].replace("-", "")
         prio_icon = PRIO_ICONS.get(task.get("prio", ""), "")
         label = f"{prio_icon} {task['name']}" if prio_icon else task["name"]
         if task.get("projekt"):
             label += f"  →{task['projekt']}"
+        if energie_level == "niedrig" and task.get("prio") == "Hoch":
+            label += "  ↔ Verschieben?"
         buttons = [[{"text": f"✅ {task['name']}", "callback_data": f"done:{pid}"}]]
         send_message(TOKEN, CHAT_ID, label, reply_markup={"inline_keyboard": buttons})
 
