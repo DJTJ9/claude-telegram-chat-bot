@@ -61,6 +61,16 @@ Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
 Kein Markdown."""
 
 
+ZYKLEN_INSTANZ_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
+Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Schritt 1: Finde alle Eintraege mit Zyklus-Property != null/leer. Das sind Vorlagen.
+Schritt 2: Fuer jede Vorlage: existiert heute ({today}) schon eine Instanz?
+  (Eintrag gleicher Name, Datum = {today}, Status != Done, ohne Zyklus-Property)
+Schritt 3: Falls keine Instanz: erstelle neuen Eintrag mit Name = Vorlage-Name,
+  Datum = {today}, Status = Not started, Prioritaet = Vorlage-Prioritaet.
+  Zyklus-Property NICHT auf neuen Eintrag setzen.
+Antworte NUR mit: "{n} Zyklen instanziiert: Name1, Name2" oder "Keine faelligen Zyklen." """
+
 ABEND_SYSTEM_PROMPT = """Du bist ein Notion-Abend-Assistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
 Zeige alle Tasks mit Datum = heute.
@@ -526,6 +536,11 @@ def _send_sport_challenges(chat_id: int) -> None:
                      reply_markup={"inline_keyboard": buttons})
 
 
+def _instanz_zyklen(today: str) -> None:
+    prompt = ZYKLEN_INSTANZ_SYSTEM_PROMPT.replace("{today}", today)
+    run_claude(prompt, automated=True)
+
+
 def _send_abend_messages(data: dict) -> None:
     try:
         d = date.fromisoformat(data.get("date", date.today().isoformat()))
@@ -643,6 +658,7 @@ def start_workflow(kind: str, chat_id: int) -> None:
             reply_markup={"inline_keyboard": buttons})
 
     elif kind == "morgen":
+        _instanz_zyklen(today)
         raw = run_claude_parse(f"Heute ist {today}.", system_prompt=MOIN_JSON_SYSTEM_PROMPT)
         try:
             data = json.loads(raw)
