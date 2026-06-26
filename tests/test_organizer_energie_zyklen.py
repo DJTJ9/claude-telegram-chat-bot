@@ -41,3 +41,20 @@ class TestEnergieLevel(unittest.TestCase):
     def test_energie_command_registered(self):
         src = _src()
         self.assertIn('"command": "energie"', src)
+
+
+class TestWochensicht(unittest.TestCase):
+    def test_wochensicht_prompt_defined(self):
+        self.assertIn("WOCHENSICHT_SYSTEM_PROMPT", _src())
+
+    def test_wochensicht_prompt_forward(self):
+        src = _src()
+        idx = src.index("WOCHENSICHT_SYSTEM_PROMPT")
+        snippet = src[idx:idx+400]
+        self.assertIn("heute+7", snippet)
+
+    def test_woche_handler_uses_new_prompt(self):
+        src = _src()
+        woche_idx = src.index('kind == "woche"')
+        snippet = src[woche_idx:woche_idx+200]
+        self.assertIn("WOCHENSICHT_SYSTEM_PROMPT", snippet)

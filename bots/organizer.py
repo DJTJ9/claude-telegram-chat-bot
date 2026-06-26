@@ -45,16 +45,20 @@ REPLY_KEYBOARD = {
 
 
 
-WOCHE_SYSTEM_PROMPT = """Du bist ein Notion-Wochenassistent.
+WOCHENSICHT_SYSTEM_PROMPT = """Du bist ein Notion-Wochenvorschau-Assistent.
 Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
-Zeige alle Tasks der letzten 7 Tage (inkl. heute).
+Finde alle Tasks mit Datum >= heute UND Datum <= heute+7, Status != Done.
+Gruppiere nach Datum, sortiere Tage chronologisch.
 Format:
-1) Erste Zeile: "📅 Wochenrückblick (DD.MM – DD.MM)"
-2) Abschnitt "✅ Erledigt (N):" — Tasks mit Status Done
-   je Zeile: · Bereich · Priorität · Name
-3) Abschnitt "⏳ Offen (N):" — Tasks Not started / In progress
-   je Zeile: · Bereich · Priorität · Name
-Sortiere Offen nach Priorität (Hoch zuerst). Kein Markdown."""
+Zeile 1: "━━ Woche DD.MM – DD.MM ━━"
+Leerzeile
+Pro Tag (Mo bis So):
+  "Wochentag DD.MM"
+  Je Task: "  • [Name]  [Prio-Icon]"
+  Falls kein Task: "  —  frei"
+  Leerzeile
+Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
+Kein Markdown."""
 
 
 ABEND_SYSTEM_PROMPT = """Du bist ein Notion-Abend-Assistent.
@@ -660,7 +664,7 @@ def start_workflow(kind: str, chat_id: int) -> None:
         _workflow.pop(chat_id, None)
 
     elif kind == "woche":
-        response = run_claude(f"Heute ist {today}.", system_prompt=WOCHE_SYSTEM_PROMPT)
+        response = run_claude(f"Heute ist {today}.", system_prompt=WOCHENSICHT_SYSTEM_PROMPT)
         send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
         _workflow.pop(chat_id, None)
 
