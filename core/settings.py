@@ -9,6 +9,8 @@ _DEFAULTS = {
     "implementation_mode_until": None,
     "active_session": None,
     "active_session_bot": None,
+    "energie_level": None,
+    "energie_updated": None,
 }
 
 def load_settings(work_dir=None):

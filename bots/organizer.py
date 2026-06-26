@@ -36,6 +36,7 @@ REPLY_KEYBOARD = {
         ["📋 Task", "📅 Termin", "💡 Ideen"],
         ["📚 Lern", "🌅 Morgen", "🌙 Abend"],
         ["📆 Woche", "📥 Backlog", "🗂️ Projekte"],
+        ["🔋 Energie", "🔄 Zyklen"],
     ],
     "resize_keyboard": True,
     "one_time_keyboard": False,
@@ -372,6 +373,8 @@ def _get_arbeit_features_prompt(proj_names: list) -> str:
     )
 
 
+ENERGIE_ICONS = {"hoch": "🔋", "mittel": "⚡", "niedrig": "🪫"}
+
 PRIO_ICONS = {"Hoch": "🔴", "Mittel": "🟡", "Niedrig": "🟢"}
 
 BUTTON_MAP = {
@@ -384,6 +387,8 @@ BUTTON_MAP = {
     "📆 Woche":    "woche",
     "📥 Backlog":  "backlog_list",
     "🗂️ Projekte": "projekte",
+    "🔋 Energie":  "energie",
+    "🔄 Zyklen":   "zyklen",
 }
 
 _workflow: dict = {}
@@ -670,6 +675,21 @@ def start_workflow(kind: str, chat_id: int) -> None:
                      reply_markup={"inline_keyboard": buttons} if buttons else REPLY_KEYBOARD)
         _workflow.pop(chat_id, None)
 
+    elif kind == "energie":
+        settings = load_settings()
+        current = settings.get("energie_level")
+        icon = ENERGIE_ICONS.get(current, "")
+        prefix = f"Aktuell: {icon} {current.capitalize()}\n\n" if current else ""
+        buttons = [[
+            {"text": "🔋 Hoch",    "callback_data": "energie:hoch"},
+            {"text": "⚡ Mittel",  "callback_data": "energie:mittel"},
+            {"text": "🪫 Niedrig", "callback_data": "energie:niedrig"},
+        ]]
+        send_message(TOKEN, chat_id,
+            f"━━ Energie-Level ━━\n\n{prefix}Wie ist dein Energie heute?",
+            reply_markup={"inline_keyboard": buttons})
+        _workflow.pop(chat_id, None)
+
 
 def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
     """Returns True if text was consumed by active workflow."""
@@ -765,6 +785,18 @@ def _handle_callback(cq: dict) -> None:
         _workflow.pop(chat_id, None)
         answer_callback_query(TOKEN, cq["id"])
         send_message(TOKEN, chat_id, "❌ Abgebrochen.", reply_markup=REPLY_KEYBOARD)
+        return
+
+    if data.startswith("energie:"):
+        level = data.split(":")[1]
+        settings = load_settings()
+        settings["energie_level"] = level
+        settings["energie_updated"] = datetime.now().isoformat(timespec="seconds")
+        save_settings(settings)
+        icon = ENERGIE_ICONS.get(level, "")
+        send_message(TOKEN, CHAT_ID,
+            f"✓ Energie: {icon} {level.capitalize()} gespeichert.",
+            reply_markup=REPLY_KEYBOARD)
         return
 
     # Task: final priority step
@@ -1170,7 +1202,9 @@ def main():
     threading.Thread(target=_archive_loop, daemon=True).start()
 
     set_my_commands(TOKEN, [
-        {"command": "plans", "description": "Geplante Implementierungen anzeigen"},
+        {"command": "plans",   "description": "Geplante Implementierungen anzeigen"},
+        {"command": "energie", "description": "Energie-Level für heute setzen"},
+        {"command": "zyklen",  "description": "Zyklische Tasks verwalten"},
     ])
 
     offset = None
@@ -1329,6 +1363,14 @@ def main():
 
                 elif t.lower() == "/plans":
                     response = _format_plans()
+
+                elif t in ("/energie",):
+                    start_workflow("energie", chat_id)
+                    continue
+
+                elif t in ("/zyklen",):
+                    start_workflow("zyklen", chat_id)
+                    continue
 
                 # 3. Reply-Keyboard button → start workflow
                 elif t in BUTTON_MAP:
