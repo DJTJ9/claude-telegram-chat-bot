@@ -30,6 +30,11 @@
 - data_source_id: `032bbb7d-6eb3-43da-a3af-cf0be05f3ece`
 - Properties: Name (title), Typ (select: `Projekt`|`Epic`|`Feature`), Status (select), Priorität (select), Phase (select: `Idee`|`Discussed`|`Planned`|`Done`), Spec (rich_text), Plan (rich_text), Notiz (rich_text), Projekt (select)
 
+## Sport Challenges
+- data_source_id: `fd7c0b6b4a774a6788ead7d0a093ed42`
+- Properties: Name (title), Kategorie (select), Status (select: `Not Started` | `Done`)
+- Regel: Status-Reset auf "Not Started" manuell in Notion — Bot setzt nur auf "Done"
+
 ## Morgen/Abend-Workflow
-- Morgen: Termine (Datum+Uhrzeit heute) sortiert nach Zeit oben. Tasks (nur Datum oder kein Datum, nicht Done) sortiert nach Priorität darunter.
+- Morgen: Termine (Datum+Uhrzeit heute) sortiert nach Zeit oben. Tasks (nur Datum oder kein Datum, nicht Done) sortiert nach Priorität darunter. Danach: Sport Challenges (1 zufällige pro Kategorie).
 - Abend: Erfolgsliste (Done) + offene Punkte (nicht Done). Frage: offene Tasks auf morgen verschieben?

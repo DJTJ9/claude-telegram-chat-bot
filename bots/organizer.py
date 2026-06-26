@@ -1,4 +1,5 @@
 import os, sys, json, re, uuid, subprocess, threading, time
+import random
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -13,7 +14,7 @@ if env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
-from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, transcribe_voice, normalize_voice, edit_message
+from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, transcribe_voice, normalize_voice, edit_message, set_my_commands
 from core.settings import load_settings, save_settings
 from core.claude import run_claude, run_claude_parse
 from core.state import load_reminders, save_reminders, load_plans, save_plans, load_registry
@@ -26,6 +27,7 @@ HUB_DIR = Path(os.environ.get("HUB_DIR", str(WORK_DIR)))
 HABITS_DATA_SOURCE_ID = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
 BACKLOG_DATA_SOURCE_ID = "0cb18d17-cf70-413d-b29d-adb4675db614"
 ARCHIV_DATA_SOURCE_ID  = "abb5abd8-e320-4796-bbf6-941feb9007b9"
+SPORT_CHALLENGES_DB_ID = "fd7c0b6b4a774a6788ead7d0a093ed42"
 ARBEIT_DB_ID = ""  # Fill in after creating Arbeitsprojekte DB in Notion
 BEREICHE = {"arbeit", "privat", "lernen", "gesundheit"}
 
@@ -284,6 +286,20 @@ Du erhältst eine Notion page_id aus der Habits-Datenbank (data_source_id: {HABI
 Antworte NUR mit: ✅ <Name> — nächste Fälligkeit: DD.MM.YYYY
 Falls nicht gefunden: ❌ Habit nicht gefunden: <page_id>"""
 
+SPORT_CHALLENGES_SYSTEM_PROMPT = f"""Du bist ein Sport-Assistent.
+Lies die Notion-Datenbank (data_source_id: {SPORT_CHALLENGES_DB_ID}).
+Filtere: Status = "Not Started".
+Gruppiere die Ergebnisse nach der "Kategorie"-Property.
+Gib NUR dieses JSON zurück (kein Kommentar, kein Markdown):
+{{"kategorien": {{"<Kategoriename>": [{{"id": "<page_id>", "name": "<Name>"}}], ...}}}}
+Wenn keine offenen Challenges: {{"kategorien": {{}}}}"""
+
+SPORT_DONE_SYSTEM_PROMPT = f"""Du bist ein Sport-Assistent.
+Du erhältst eine Notion page_id aus der Sport-Challenges-Datenbank (data_source_id: {SPORT_CHALLENGES_DB_ID}).
+Setze die Property "Status" auf "Done".
+Antworte NUR mit: ✅ <Name> — erledigt!
+Falls nicht gefunden: ❌ Challenge nicht gefunden: <page_id>"""
+
 EDIT_SYSTEM_PROMPT = """Du bist ein Notion-Edit-Assistent.
 Nutzer-Eingabe: "<taskname> <feld> <wert>"
 1. Suche Task im Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0) per fuzzy-Suche
@@ -484,6 +500,23 @@ def _send_moin_messages(data: dict) -> None:
         send_message(TOKEN, CHAT_ID, "Nichts zu tun heute 🎉")
 
 
+def _send_sport_challenges(chat_id: int) -> None:
+    raw = run_claude_parse("Lade Sport Challenges.", system_prompt=SPORT_CHALLENGES_SYSTEM_PROMPT)
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return
+    kategorien = data.get("kategorien", {})
+    for kat, challenges in kategorien.items():
+        if not challenges:
+            continue
+        challenge = random.choice(challenges)
+        pid = challenge["id"].replace("-", "")
+        buttons = [[{"text": "✅ Erledigt", "callback_data": f"sport_done:{pid}"}]]
+        send_message(TOKEN, chat_id, f"🏋️ {kat}: {challenge['name']}",
+                     reply_markup={"inline_keyboard": buttons})
+
+
 def _send_abend_messages(data: dict) -> None:
     try:
         d = date.fromisoformat(data.get("date", date.today().isoformat()))
@@ -608,6 +641,7 @@ def start_workflow(kind: str, chat_id: int) -> None:
         except (json.JSONDecodeError, ValueError):
             response = run_claude(f"Heute ist {today}.", system_prompt=MOIN_SYSTEM_PROMPT)
             send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+        _send_sport_challenges(chat_id)
         _workflow.pop(chat_id, None)
 
     elif kind == "abend":
@@ -854,6 +888,14 @@ def _handle_callback(cq: dict) -> None:
         result = run_claude(
             f"Heute ist {today}. page_id: {pid}.",
             system_prompt=HABIT_DONE_SYSTEM_PROMPT, automated=True,
+        )
+        edit_message(TOKEN, chat_id, msg_id, result)
+
+    elif data.startswith("sport_done:"):
+        pid = data[11:]
+        result = run_claude(
+            f"page_id: {pid}.",
+            system_prompt=SPORT_DONE_SYSTEM_PROMPT, automated=True,
         )
         edit_message(TOKEN, chat_id, msg_id, result)
 
@@ -1126,6 +1168,10 @@ def main():
 
     threading.Thread(target=_reminder_loop, daemon=True).start()
     threading.Thread(target=_archive_loop, daemon=True).start()
+
+    set_my_commands(TOKEN, [
+        {"command": "plans", "description": "Geplante Implementierungen anzeigen"},
+    ])
 
     offset = None
     print(f"Organizer Bot gestartet (chat_id={CHAT_ID})")
