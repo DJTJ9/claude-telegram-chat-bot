@@ -104,6 +104,7 @@ def _handle_relay_callback(callback_query_id: str, answer: str) -> None:
     global _relay_request_id
     if _relay_request_id is None:
         answer_callback_query(TOKEN, callback_query_id)
+        send_message(TOKEN, CHAT_ID, "✅ Wurde bereits in CC beantwortet")
         return
     _write_relay_response(_relay_request_id, answer)
     _relay_request_id = None
