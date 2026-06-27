@@ -21,6 +21,23 @@ Sub-Seiten unter Organizer-Hauptseite (`37a4bba29c55807493bdf21e2ef34a9e`):
 - Properties: Name (title), Status (`Not started`|`In progress`|`Done`), Priorität (select: `Hoch`|`Mittel`|`Niedrig`), Datum (date), Bereich (select: `Arbeit`|`Privat`|`Lernen`|`Gesundheit`), Notiz (rich_text), Zyklus (rich_text)
 - Regel: Immer Datum setzen. Priorität Hoch = heute erledigen.
 
+### Termin-Konvention
+- Datum mit Uhrzeit (datetime) = Termin → Morgen-View unter "📅 Termine" sortiert nach Zeit
+- Datum ohne Uhrzeit / kein Datum = Task → sortiert nach Priorität
+- Default-Uhrzeit falls nicht angegeben: `09:00`
+
+### Zyklus-Format (rich_text)
+| Wert | Bedeutung |
+|------|-----------|
+| `täglich` | Jeden Tag |
+| `montags` / `dienstags` / … | Jeden Wochentag |
+| `wochentags` | Mo–Fr |
+| `wochenends` | Sa+So |
+| `alle <N> Tage` | z.B. `alle 3 Tage` |
+| `1., 15.` | Am 1. und 15. jedes Monats |
+
+Bot-Parsing: LLM interpretiert Freitext, erstellt nächste Instanz. Kein Enum.
+
 ## Lernthemen
 - data_source_id: `5a76447f-2b0a-4f6b-81bb-853f39aa04bb`
 - Properties: Name (title), Status (`Offen`|`In Bearbeitung`|`Abgeschlossen`), Kategorie (select), Priorität (select), Workspace (rich_text), Notiz (rich_text)
@@ -46,6 +63,19 @@ Sub-Seiten unter Organizer-Hauptseite (`37a4bba29c55807493bdf21e2ef34a9e`):
 - Properties: Name (title), Kategorie (select), Status (select: `Not Started` | `Done`)
 - Regel: Status-Reset auf "Not Started" manuell in Notion — Bot setzt nur auf "Done"
 
+## Backlog-Flow
+- Item direkt abhaken: `backlog_done:{page_id}` Callback → `notion_direct.archive_backlog_item(page_id)` (REST, kein Claude)
+- Item einplanen: `BACKLOG_PROMOTE_SYSTEM_PROMPT` → erstellt Task in Tasks-DB, setzt Backlog-Status Erledigt
+- Archiv-Loop: `_run_archive_once()` periodisch → archiviert Done-Tasks (Tagesorganizer + Backlog) via LLM
+
 ## Morgen/Abend-Workflow
 - Morgen: Termine (Datum+Uhrzeit heute) sortiert nach Zeit oben. Tasks (nur Datum oder kein Datum, nicht Done) sortiert nach Priorität darunter. Danach: Sport Challenges (1 zufällige pro Kategorie).
 - Abend: Erfolgsliste (Done) + offene Punkte (nicht Done). Frage: offene Tasks auf morgen verschieben?
+
+## Tagesplanung-Seite Linked Views
+Auf 📅 Tagesplanung-Sub-Seite 3 Linked-DB-Views:
+- Tasks (Filter: Datum = heute, Status ≠ Done)
+- Sport Challenges (Filter: Status = Not Started)
+- Backlog (Filter: Status = Offen)
+
+Erstellt via `scripts/setup_notion_structure.py → add_linked_views()`.
