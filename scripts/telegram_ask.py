@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os, sys, time, uuid
+import json, os, sys, time, uuid, re
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -31,8 +31,15 @@ request_id = str(uuid.uuid4())[:8]
 pending_path = PROJECT_DIR / "pending_question.json"
 response_path = PROJECT_DIR / f"question_response_{request_id}.json"
 
+_options = []
+_opt_matches = re.findall(r'\b([A-D])\)\s*(.+?)(?=\s*\b[A-D]\)|\s*$)', question, re.DOTALL)
+if _opt_matches:
+    _options = [f"{letter}) {text.strip()}" for letter, text in _opt_matches]
+
 pending_path.write_text(json.dumps({
     "question": question,
+    "text": question,
+    "options": _options,
     "request_id": request_id,
     "target_bot": "brain",
 }))
