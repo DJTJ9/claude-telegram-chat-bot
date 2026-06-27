@@ -34,6 +34,9 @@ OLD_TAGESORGANIZER_ID = "c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0"
 OLD_SPORT_CHALLENGES_ID = "fd7c0b6b-4a77-4a67-88ea-d7d0a093ed42"
 OLD_ARCHIV_ID = "abb5abd8-e320-4796-bbf6-941feb9007b9"
 
+BACKLOG_DB_ID = "0cb18d17-cf70-413d-b29d-adb4675db614"
+HABITS_DB_ID = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
+
 
 def find_organizer_page() -> str:
     prompt = """Suche in Notion nach der Hauptseite mit dem Titel "Organizer" (oder ähnlich: "Tagesorganizer", "Organizer-Hub").
@@ -175,15 +178,19 @@ Antworte mit: "<N> Archiv-Einträge migriert." """,
         print(f"✅ {label}: {result.strip()}")
 
 
-def add_linked_views(tagesplanung_page_id: str, sport_db_id: str, backlog_db_id: str) -> None:
-    """Creates linked database views on Tagesplanung sub-page via Claude+MCP."""
+def add_linked_views(sub_page_ids: dict[str, str], tasks_db_id: str, sport_db_id: str) -> None:
+    """Creates linked database views on Tagesplanung, Wochenplanung, Monatsübersicht."""
     views = [
-        ("Sport Challenges", sport_db_id,  'Filter: Status = "Not Started"'),
-        ("Backlog",          backlog_db_id, 'Filter: Status = "Offen"'),
+        (sub_page_ids["tagesplanung"],    tasks_db_id,   "Tasks",            'Filter: Datum = heute, Status != Done'),
+        (sub_page_ids["tagesplanung"],    sport_db_id,   "Sport Challenges", 'Filter: Status = "Not Started"'),
+        (sub_page_ids["tagesplanung"],    BACKLOG_DB_ID, "Backlog",          'Filter: Status = "Offen"'),
+        (sub_page_ids["wochenplanung"],   tasks_db_id,   "Tasks Woche",      'Filter: Datum = diese Woche'),
+        (sub_page_ids["wochenplanung"],   HABITS_DB_ID,  "Habits",           ''),
+        (sub_page_ids["monatsübersicht"], tasks_db_id,   "Tasks Monat",      'Filter: Datum = dieser Monat'),
     ]
-    for title, db_id, filter_desc in views:
+    for page_id, db_id, title, filter_desc in views:
         prompt = (
-            f'Erstelle einen Linked-Database-View auf Notion-Seite {tagesplanung_page_id}.\n'
+            f'Erstelle einen Linked-Database-View auf Notion-Seite {page_id}.\n'
             f'Verknüpfte Datenbank: {db_id}\n'
             f'View-Titel: "{title}"\n'
             f'{filter_desc}\n'
@@ -209,11 +216,11 @@ def main() -> None:
     print("\n🗄️ Schritt 3: Datenbanken erstellen...")
     new_db_ids = create_databases(sub_page_ids)
 
-    print("\n🔗 Schritt 3a: Linked Views auf Tagesplanung...")
+    print("\n🔗 Schritt 3a: Linked Views auf Tagesplanung / Wochenplanung / Monatsübersicht...")
     add_linked_views(
-        tagesplanung_page_id=sub_page_ids["tagesplanung"],
+        sub_page_ids=sub_page_ids,
+        tasks_db_id=new_db_ids["tasks"],
         sport_db_id=new_db_ids["sport-challenges"],
-        backlog_db_id="0cb18d17cf70413db29dadb4675db614",
     )
 
     print("\n📦 Schritt 4: Daten migrieren...")
@@ -224,6 +231,9 @@ def main() -> None:
     print("=" * 60)
     for name, db_id in new_db_ids.items():
         print(f"  {name}: {db_id}")
+    print("\nSub-Seiten-IDs (für CLAUDE.md):")
+    for slug, page_id in sub_page_ids.items():
+        print(f"  {slug}: {page_id}")
 
 
 if __name__ == "__main__":
