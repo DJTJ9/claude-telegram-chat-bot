@@ -75,6 +75,10 @@ def build_inline_keyboard(question):
     rows.append([{"text": "Freitext", "callback_data": "__freitext__"}])
     return rows
 
+def set_my_commands(token, commands):
+    """commands: list of {"command": str, "description": str}"""
+    requests.post(f"{_base(token)}/setMyCommands", json={"commands": commands})
+
 def transcribe_voice(token, file_id):
     r = requests.get(f"{_base(token)}/getFile", params={"file_id": file_id})
     file_path = r.json()["result"]["file_path"]
