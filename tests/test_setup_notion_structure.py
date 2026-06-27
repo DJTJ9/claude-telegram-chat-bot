@@ -126,5 +126,21 @@ class TestMigrateData(unittest.TestCase):
         self.assertIn("newarchivdb000000000000000000001", archiv_prompt)
 
 
+def test_add_linked_views_function_exists():
+    from scripts.setup_notion_structure import add_linked_views
+    assert callable(add_linked_views)
+
+def test_add_linked_views_calls_run_claude(monkeypatch):
+    import scripts.setup_notion_structure as sns
+    calls = []
+    monkeypatch.setattr(sns, "run_claude", lambda p, automated=False: calls.append(p) or "ok")
+    sns.add_linked_views("page_tages", "sport_db_id", "backlog_db_id")
+    assert len(calls) >= 1
+    combined = " ".join(calls)
+    assert "page_tages" in combined
+    assert "sport_db_id" in combined
+    assert "backlog_db_id" in combined
+
+
 if __name__ == "__main__":
     unittest.main()

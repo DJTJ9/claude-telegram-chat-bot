@@ -175,6 +175,25 @@ Antworte mit: "<N> Archiv-Einträge migriert." """,
         print(f"✅ {label}: {result.strip()}")
 
 
+def add_linked_views(tagesplanung_page_id: str, sport_db_id: str, backlog_db_id: str) -> None:
+    """Creates linked database views on Tagesplanung sub-page via Claude+MCP."""
+    views = [
+        ("Sport Challenges", sport_db_id,  'Filter: Status = "Not Started"'),
+        ("Backlog",          backlog_db_id, 'Filter: Status = "Offen"'),
+    ]
+    for title, db_id, filter_desc in views:
+        prompt = (
+            f'Erstelle einen Linked-Database-View auf Notion-Seite {tagesplanung_page_id}.\n'
+            f'Verknüpfte Datenbank: {db_id}\n'
+            f'View-Titel: "{title}"\n'
+            f'{filter_desc}\n'
+            f'Falls der View bereits existiert, überspringe.\n'
+            f'Antworte nur mit: "✅ View erstellt" oder "⏭ View existiert bereits"'
+        )
+        result = run_claude(prompt, automated=True)
+        print(f"  {title}: {result.strip()}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Setup Notion Organizer structure")
     parser.add_argument("--page-id", help="Organizer main page ID (auto-discovered if not set)")
@@ -189,6 +208,13 @@ def main() -> None:
 
     print("\n🗄️ Schritt 3: Datenbanken erstellen...")
     new_db_ids = create_databases(sub_page_ids)
+
+    print("\n🔗 Schritt 3a: Linked Views auf Tagesplanung...")
+    add_linked_views(
+        tagesplanung_page_id=sub_page_ids["tagesplanung"],
+        sport_db_id=new_db_ids["sport-challenges"],
+        backlog_db_id="0cb18d17cf70413db29dadb4675db614",
+    )
 
     print("\n📦 Schritt 4: Daten migrieren...")
     migrate_data(new_db_ids)
