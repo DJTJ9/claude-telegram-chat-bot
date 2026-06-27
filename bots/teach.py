@@ -1,4 +1,5 @@
 import os, sys, json, re, subprocess, threading, time
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -18,6 +19,7 @@ from core.settings import load_settings, save_settings
 TOKEN = os.environ["TOKEN_TEACH"]
 CHAT_ID = int(os.environ.get("CHAT_ID", "8896609541"))
 WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
+PORT = int(os.environ.get("PORT", "8003"))
 TEACH_DIR = Path(os.environ.get("TEACH_DIR", str(PROJECT_DIR.parent / "teach")))
 
 PAGES_BASE = "https://djtj9.github.io/teach-lessons"
@@ -313,93 +315,108 @@ def _run_teach(topic):
         _clear_session()
 
 
-def main():
+def _handle_callback(cq: dict) -> None:
     global _active_question_id
+    answer_callback_query(TOKEN, cq["id"])
+    data = cq.get("data", "")
+    if data.startswith("lessons__"):
+        _send_lesson_list(data[9:])
+    elif data == "teach_abort":
+        (WORK_DIR / ".teach_abort").write_text("")
+        send_message(TOKEN, CHAT_ID, "⏳ Abbruch wird nach aktueller Lektion wirksam...")
+    elif data == "__freitext__":
+        send_message(TOKEN, CHAT_ID, "Bitte Antwort eintippen:")
+    elif _active_question_id:
+        _write_question_response(_active_question_id, data)
+        _active_question_id = None
+        send_message(TOKEN, CHAT_ID, f"💬 Antwort: {data}")
 
-    offset = None
-    print(f"Teach Bot gestartet (chat_id={CHAT_ID})")
 
+def _handle_message(msg: dict) -> None:
+    global _active_question_id
+    text = msg.get("text", "").strip()
+    if not text and "voice" in msg:
+        try:
+            raw = transcribe_voice(TOKEN, msg["voice"]["file_id"])
+            text = normalize_voice(raw)
+            send_message(TOKEN, CHAT_ID, f"🎤 {text}")
+        except Exception as e:
+            send_message(TOKEN, CHAT_ID, f"❌ Spracherkennung fehlgeschlagen: {e}")
+            return
+    if not text:
+        return
+
+    if _active_question_id:
+        _write_question_response(_active_question_id, text)
+        _active_question_id = None
+        send_message(TOKEN, CHAT_ID, f"💬 Antwort: {text}")
+        return
+
+    t = text.lower()
+    if t.startswith("/lessons") or t.startswith("lessons:") or t == "lessons":
+        topics = _get_topics()
+        if not topics:
+            send_message(TOKEN, CHAT_ID, "Noch keine Lektionen vorhanden.")
+        else:
+            kb = _build_lessons_keyboard(topics)
+            send_message(TOKEN, CHAT_ID, "📚 Welches Thema?",
+                         reply_markup={"inline_keyboard": kb})
+    elif t == "hilfe":
+        send_message(TOKEN, CHAT_ID, HILFE_TEXT)
+    else:
+        threading.Thread(target=_run_teach, args=(text,), daemon=True).start()
+
+
+class _WebhookHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(n)
+        self.send_response(200)
+        self.end_headers()
+        try:
+            upd = json.loads(body)
+        except Exception:
+            return
+        threading.Thread(target=_dispatch_update, args=(upd,), daemon=True).start()
+
+    def log_message(self, *args):
+        pass
+
+
+def _dispatch_update(upd: dict) -> None:
+    if "callback_query" in upd:
+        cq = upd["callback_query"]
+        if cq.get("from", {}).get("id") == CHAT_ID:
+            _handle_callback(cq)
+    elif "message" in upd:
+        msg = upd["message"]
+        if msg.get("chat", {}).get("id") == CHAT_ID:
+            _handle_message(msg)
+
+
+def _question_poll() -> None:
+    global _active_question_id
     while True:
         try:
-            updates = get_updates(TOKEN, offset=offset)
-            for upd in updates:
-                offset = upd["update_id"] + 1
-
-                if "callback_query" in upd:
-                    cq = upd["callback_query"]
-                    if cq["from"]["id"] != CHAT_ID:
-                        continue
-                    answer_callback_query(TOKEN, cq["id"])
-                    data = cq.get("data", "")
-                    if data.startswith("lessons__"):
-                        _send_lesson_list(data[9:])
-                    elif data == "teach_abort":
-                        (WORK_DIR / ".teach_abort").write_text("")
-                        send_message(TOKEN, CHAT_ID, "⏳ Abbruch wird nach aktueller Lektion wirksam...")
-                    elif data == "__freitext__":
-                        send_message(TOKEN, CHAT_ID, "Bitte Antwort eintippen:")
-                    elif _active_question_id:
-                        _write_question_response(_active_question_id, data)
-                        _active_question_id = None
-                        send_message(TOKEN, CHAT_ID, f"💬 Antwort: {data}")
-                    continue
-
-                msg = upd.get("message", {})
-                if not msg:
-                    continue
-                chat_id = msg.get("chat", {}).get("id")
-                if chat_id != CHAT_ID:
-                    continue
-                text = msg.get("text", "").strip()
-                if not text and "voice" in msg:
-                    try:
-                        raw = transcribe_voice(TOKEN, msg["voice"]["file_id"])
-                        text = normalize_voice(raw)
-                        send_message(TOKEN, CHAT_ID, f"🎤 {text}")
-                    except Exception as e:
-                        send_message(TOKEN, CHAT_ID, f"❌ Spracherkennung fehlgeschlagen: {e}")
-                        continue
-                if not text:
-                    continue
-
-                if _active_question_id:
-                    _write_question_response(_active_question_id, text)
-                    _active_question_id = None
-                    send_message(TOKEN, CHAT_ID, f"💬 Antwort: {text}")
-                    continue
-
-                t = text.lower()
-
-                if t.startswith("/lessons") or t.startswith("lessons:") or t == "lessons":
-                    topics = _get_topics()
-                    if not topics:
-                        send_message(TOKEN, CHAT_ID, "Noch keine Lektionen vorhanden.")
-                    else:
-                        kb = _build_lessons_keyboard(topics)
-                        send_message(TOKEN, CHAT_ID, "📚 Welches Thema?",
-                                     reply_markup={"inline_keyboard": kb})
-                elif t == "hilfe":
-                    send_message(TOKEN, CHAT_ID, HILFE_TEXT)
-                else:
-                    threading.Thread(target=_run_teach, args=(text,), daemon=True).start()
-
             q_path = WORK_DIR / "pending_question.json"
             if not _active_question_id and q_path.exists():
-                try:
-                    data = json.loads(q_path.read_text())
-                    if data.get("target_bot", "permissions") == "teach":
-                        q_path.unlink()
-                        _active_question_id = data["request_id"]
-                        kb = build_inline_keyboard(data["question"])
-                        send_message(TOKEN, CHAT_ID, f"❓ {data['question']}",
-                                     reply_markup={"inline_keyboard": kb})
-                except Exception as e:
-                    print(f"question file error: {e}")
-
-            time.sleep(0.3)
+                data = json.loads(q_path.read_text())
+                if data.get("target_bot", "permissions") == "teach":
+                    q_path.unlink()
+                    _active_question_id = data["request_id"]
+                    kb = build_inline_keyboard(data["question"])
+                    send_message(TOKEN, CHAT_ID, f"❓ {data['question']}",
+                                 reply_markup={"inline_keyboard": kb})
         except Exception as e:
-            print(f"teach bot error: {e}")
-            time.sleep(5)
+            print(f"question poll error: {e}")
+        time.sleep(0.5)
+
+
+def main():
+    threading.Thread(target=_question_poll, daemon=True).start()
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), _WebhookHandler)
+    print(f"Teach Bot gestartet (webhook, port {PORT})")
+    server.serve_forever()
 
 
 if __name__ == "__main__":
