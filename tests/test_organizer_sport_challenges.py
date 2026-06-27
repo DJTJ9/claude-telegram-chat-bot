@@ -10,7 +10,7 @@ def _src():
 
 class TestSportChallengesPrompts(unittest.TestCase):
     def test_db_id_constant(self):
-        self.assertIn('SPORT_CHALLENGES_DB_ID = "fd7c0b6b4a774a6788ead7d0a093ed42"', _src())
+        self.assertIn('SPORT_CHALLENGES_DB_ID = "38b4bba29c5581c88f49c67bb85f78c0"', _src())
 
     def test_sport_challenges_system_prompt_defined(self):
         self.assertIn("SPORT_CHALLENGES_SYSTEM_PROMPT", _src())
@@ -65,4 +65,4 @@ class TestMorgenFlowWiring(unittest.TestCase):
         with open("CLAUDE.md", encoding="utf-8") as f:
             content = f.read()
         self.assertIn("Sport Challenges", content)
-        self.assertIn("fd7c0b6b4a774a6788ead7d0a093ed42", content)
+        self.assertIn("38b4bba29c5581c88f49c67bb85f78c0", content)

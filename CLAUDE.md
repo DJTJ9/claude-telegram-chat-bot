@@ -3,11 +3,22 @@
 @/root/projects-hub/topics/telegram-bot-army/DECISIONS.md
 @/root/projects-hub/topics/telegram-bot-army/LEARNINGS.md
 
+# Notion Organizer Struktur (seit 2026-06-27)
+
+Sub-Seiten unter Organizer-Hauptseite (`37a4bba29c55807493bdf21e2ef34a9e`):
+- 📅 Tagesplanung  — Tasks DB: `38b4bba29c5581a7bd94cef1b0cc6c58`
+- 📆 Wochenplanung — (Tasks gefiltert) + Habits DB: `6a4d7e7d-dcde-44e3-b7a0-c46330a6261c`
+- 🗓 Monatsübersicht — (Tasks gefiltert)
+- 🗂 Projekte — Projekte DB: `38b4bba29c5581e8868efe4e2fad255a`
+- 🏋 Sport Challenges — Sport DB: `38b4bba29c5581c88f49c67bb85f78c0`
+- 💡 Ideensammlung — Ideensammlung DB: `38b4bba29c55814f836ed9a05d3ec9a5`
+- 🗃 Archiv — Archiv DB: `38b4bba29c558102b9aecb790594aff6`
+
 # Notion Datenbanken
 
-## Tagesorganizer
-- data_source_id: `c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0`
-- Properties: Name (title), Status (`Not started`|`In progress`|`Done`), Priorität (select: `Hoch`|`Mittel`|`Niedrig`), Datum (date), Bereich (select: `Arbeit`|`Privat`|`Lernen`|`Gesundheit`), Notiz (rich_text)
+## Tasks (Tagesplanung)
+- data_source_id: `38b4bba29c5581a7bd94cef1b0cc6c58`
+- Properties: Name (title), Status (`Not started`|`In progress`|`Done`), Priorität (select: `Hoch`|`Mittel`|`Niedrig`), Datum (date), Bereich (select: `Arbeit`|`Privat`|`Lernen`|`Gesundheit`), Notiz (rich_text), Zyklus (rich_text)
 - Regel: Immer Datum setzen. Priorität Hoch = heute erledigen.
 
 ## Lernthemen
@@ -23,7 +34,7 @@
 - Properties: Name (title), Status (`Offen`|`Erledigt`), Priorität (select), Bereich (select), Notiz (rich_text)
 
 ## Task-Archiv
-- data_source_id: `abb5abd8-e320-4796-bbf6-941feb9007b9`
+- data_source_id: `38b4bba29c558102b9aecb790594aff6`
 - Properties: Name (title), Status (kopiert), Priorität (select), Datum (date), Bereich (select), Notiz (rich_text), Archiviert am (date)
 
 ## Arbeitsprojekte
@@ -31,7 +42,7 @@
 - Properties: Name (title), Typ (select: `Projekt`|`Epic`|`Feature`), Status (select), Priorität (select), Phase (select: `Idee`|`Discussed`|`Planned`|`Done`), Spec (rich_text), Plan (rich_text), Notiz (rich_text), Projekt (select)
 
 ## Sport Challenges
-- data_source_id: `fd7c0b6b4a774a6788ead7d0a093ed42`
+- data_source_id: `38b4bba29c5581c88f49c67bb85f78c0`
 - Properties: Name (title), Kategorie (select), Status (select: `Not Started` | `Done`)
 - Regel: Status-Reset auf "Not Started" manuell in Notion — Bot setzt nur auf "Done"
 

@@ -24,10 +24,13 @@ CHAT_ID = int(os.environ.get("CHAT_ID", "8896609541"))
 WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
 HUB_DIR = Path(os.environ.get("HUB_DIR", str(WORK_DIR)))
 
-HABITS_DATA_SOURCE_ID = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
+TAGESORGANIZER_ID      = "38b4bba29c5581a7bd94cef1b0cc6c58"
+HABITS_DATA_SOURCE_ID  = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
 BACKLOG_DATA_SOURCE_ID = "0cb18d17-cf70-413d-b29d-adb4675db614"
-ARCHIV_DATA_SOURCE_ID  = "abb5abd8-e320-4796-bbf6-941feb9007b9"
-SPORT_CHALLENGES_DB_ID = "fd7c0b6b4a774a6788ead7d0a093ed42"
+ARCHIV_DATA_SOURCE_ID  = "38b4bba29c558102b9aecb790594aff6"
+SPORT_CHALLENGES_DB_ID = "38b4bba29c5581c88f49c67bb85f78c0"
+IDEENSAMMLUNG_DB_ID    = "38b4bba29c55814f836ed9a05d3ec9a5"
+PROJEKTE_DB_ID         = "38b4bba29c5581e8868efe4e2fad255a"
 ARBEIT_DB_ID = ""  # Fill in after creating Arbeitsprojekte DB in Notion
 BEREICHE = {"arbeit", "privat", "lernen", "gesundheit"}
 
@@ -46,7 +49,7 @@ REPLY_KEYBOARD = {
 
 
 WOCHENSICHT_SYSTEM_PROMPT = """Du bist ein Notion-Wochenvorschau-Assistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Finde alle Tasks mit Datum >= heute UND Datum <= heute+7, Status != Done.
 Gruppiere nach Datum, sortiere Tage chronologisch.
 Format:
@@ -62,7 +65,7 @@ Kein Markdown."""
 
 
 ZYKLEN_INSTANZ_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Schritt 1: Finde alle Eintraege mit Zyklus-Property != null/leer. Das sind Vorlagen.
 Schritt 2: Fuer jede Vorlage: existiert heute ({today}) schon eine Instanz?
   (Eintrag gleicher Name, Datum = {today}, Status != Done, ohne Zyklus-Property)
@@ -72,24 +75,24 @@ Schritt 3: Falls keine Instanz: erstelle neuen Eintrag mit Name = Vorlage-Name,
 Antworte NUR mit: "{n} Zyklen instanziiert: Name1, Name2" oder "Keine faelligen Zyklen." """
 
 ZYKLEN_LIST_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Finde alle Eintraege mit Zyklus-Property != null/leer.
 Antworte NUR mit JSON:
 {"zyklen": [{"id": "<page_id_32_zeichen>", "name": "<Name>", "zyklus": "<Zyklus-Wert>"}]}
 Falls keine: {"zyklen": []}"""
 
 ZYKLEN_NEU_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
-Lege neuen Eintrag im Tagesorganizer an (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Lege neuen Eintrag im Tagesorganizer an (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Name: {name}. Zyklus: {zyklus}. Kein Datum, Status: Not started.
 Antworte NUR mit: Zyklischer Task angelegt: {name} ({zyklus})"""
 
 ZYKLEN_DELETE_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
 Archiviere den Notion-Eintrag mit page_id {page_id} aus dem Tagesorganizer
-(data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+(data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Antworte NUR mit: Zyklischer Task geloescht."""
 
 ABEND_SYSTEM_PROMPT = """Du bist ein Notion-Abend-Assistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Zeige alle Tasks mit Datum = heute.
 
 Format:
@@ -122,7 +125,7 @@ Leerzeile
 Kein Markdown."""
 
 MOIN_SYSTEM_PROMPT = f"""Du bist ein Notion-Morgen-Assistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Finde alle Tasks mit Datum = heute ODER ohne Datum, Status Not started oder In progress.
 
 Trenne in zwei Gruppen:
@@ -184,7 +187,7 @@ Antworte NUR mit einer Zeile: 🔄 Habit angelegt: [Name] · alle [Intervall] Ta
 
 
 TERMIN_SYSTEM_PROMPT = """Du bist ein Notion-Termin-Assistent.
-Lege den Termin im Tagesorganizer an (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Lege den Termin im Tagesorganizer an (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Leite aus dem Text ab:
 - Name: Bezeichnung des Termins
 - Datum: ISO 8601 datetime YYYY-MM-DDTHH:MM:SS
@@ -211,7 +214,7 @@ Kein Markdown."""
 
 BACKLOG_PROMOTE_SYSTEM_PROMPT = f"""Du bist ein Notion-Backlog-Assistent.
 Schritt 1: Finde den Task mit der genannten Nummer aus der Backlog-Liste (fuzzy-Suche auf den Namen).
-Schritt 2: Lege neuen Task im Tagesorganizer an (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Schritt 2: Lege neuen Task im Tagesorganizer an (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
   Übernehme: Name, Priorität, Bereich, Notiz.
   Setze Datum = angegebenes Zieldatum (ISO 8601). "morgen" = heute + 1 Tag.
   Status = Not started.
@@ -222,7 +225,7 @@ Kein Markdown."""
 ARCHIVE_LOOP_SYSTEM_PROMPT = f"""Du bist ein Notion-Archiv-Assistent.
 Archiviere alle erledigten Tasks aus dem Tagesorganizer und dem Backlog ins Task-Archiv.
 
-Schritt 1 — Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0):
+Schritt 1 — Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58):
 Finde alle Tasks mit Status = Done.
 Für jeden: Lege Eintrag im Task-Archiv an (data_source_id: {ARCHIV_DATA_SOURCE_ID}).
 Kopiere: Name, Status, Priorität, Datum, Bereich, Notiz. Setze "Archiviert am" = heutiges Datum (ISO 8601).
@@ -257,7 +260,7 @@ Antworte AUSSCHLIESSLICH mit diesem JSON (kein Markdown, keine Erklärung, nicht
 
 
 MOIN_JSON_SYSTEM_PROMPT = f"""Du bist ein Notion-Morgen-Assistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Finde alle Tasks mit Datum = heute ODER ohne Datum, Status Not started oder In progress.
 
 Gruppen:
@@ -282,7 +285,7 @@ page_id: Notion page ID als Hex-String ohne Bindestriche, exakt 32 Zeichen.
 Falls ARBEIT_DB_ID leer: proj_tasks = []"""
 
 ABEND_JSON_SYSTEM_PROMPT = f"""Du bist ein Notion-Abend-Assistent.
-Lies den Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0).
+Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Finde alle Tasks mit Datum = heute.
 
 Lies dann Habits-Datenbank (data_source_id: {HABITS_DATA_SOURCE_ID}).
@@ -334,7 +337,7 @@ Falls nicht gefunden: ❌ Challenge nicht gefunden: <page_id>"""
 
 EDIT_SYSTEM_PROMPT = """Du bist ein Notion-Edit-Assistent.
 Nutzer-Eingabe: "<taskname> <feld> <wert>"
-1. Suche Task im Tagesorganizer (data_source_id: c9d2abbe-5607-44c2-bbf4-9aa673e0c4a0) per fuzzy-Suche
+1. Suche Task im Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58) per fuzzy-Suche
 2. Erkenne Feld: prio/priorität → Priorität | datum → Datum | bereich → Bereich | notiz → Notiz
 3. Mappe Wert:
    Prio: hoch→Hoch, mittel→Mittel, niedrig→Niedrig
