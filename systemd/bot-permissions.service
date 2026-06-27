@@ -6,6 +6,8 @@ After=network.target
 Type=simple
 WorkingDirectory=/root/projekte/telegram-bot-army
 EnvironmentFile=/root/projekte/telegram-bot-army/.env
+Environment=PATH=/root/.nvm/versions/node/v24.16.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PORT=8004
 ExecStart=/usr/bin/python3 /root/projekte/telegram-bot-army/bots/permissions.py
 Restart=always
 RestartSec=5
