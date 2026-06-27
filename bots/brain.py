@@ -1,4 +1,5 @@
-import os, sys, json, time, subprocess
+import os, sys, json, time, subprocess, threading
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -17,16 +18,48 @@ from core.telegram import (
     edit_message, transcribe_voice, build_inline_keyboard,
 )
 from core.settings import load_settings, save_settings
+from core import notion_direct
 
 TOKEN = os.environ["TOKEN_BRAIN"]
 CHAT_ID = int(os.environ.get("CHAT_ID", "0"))
 WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
 HUB_DIR = Path(os.environ.get("HUB_DIR", str(WORK_DIR)))
+PORT = int(os.environ.get("PORT", "8001"))
 
 _relay_request_id: str | None = None
+_relay_await_input: str | None = None
 _accordion_msg_id: int | None = None
 _capture_state: dict | None = None
 _impl_state: dict | None = None
+
+
+# ── Webhook server ───────────────────────────────────────────────────────────
+
+class _WebhookHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(n)
+        self.send_response(200)
+        self.end_headers()
+        try:
+            upd = json.loads(body)
+        except Exception:
+            return
+        threading.Thread(target=_dispatch_update, args=(upd,), daemon=True).start()
+
+    def log_message(self, *args):
+        pass
+
+
+def _dispatch_update(upd: dict) -> None:
+    if "callback_query" in upd:
+        cq = upd["callback_query"]
+        if cq.get("from", {}).get("id") == CHAT_ID:
+            _handle_callback(cq)
+    elif "message" in upd:
+        msg = upd["message"]
+        if msg.get("chat", {}).get("id") == CHAT_ID:
+            _handle_message(msg)
 
 
 # ── Relay watchdog ────────────────────────────────────────────────────────────
@@ -49,10 +82,21 @@ def _check_relay_question() -> None:
     request_id = data.get("request_id")
     if not request_id or request_id == _relay_request_id:
         return
-    question = data.get("question", "")
-    keyboard = build_inline_keyboard(question)
-    send_message(TOKEN, CHAT_ID, f"🤖 CC-Session fragt:\n{question}",
-                 reply_markup={"inline_keyboard": keyboard})
+    text = data.get("text", data.get("question", ""))
+    options = data.get("options", [])
+    if options:
+        rows = []
+        for opt in options:
+            letter = opt[0] if opt and opt[0].isalpha() else opt[:1]
+            rows.append([{"text": opt[:60], "callback_data": letter}])
+        rows.append([
+            {"text": "✏️ Freitext", "callback_data": "__freitext__"},
+            {"text": "🎤 Sprache",  "callback_data": "__sprache__"},
+        ])
+    else:
+        rows = build_inline_keyboard(text)
+    send_message(TOKEN, CHAT_ID, f"🤖 CC-Session fragt:\n{text}",
+                 reply_markup={"inline_keyboard": rows})
     _relay_request_id = request_id
 
 
@@ -211,6 +255,13 @@ def _handle_callback(cq: dict) -> None:
         answer_callback_query(TOKEN, cq_id)
         return
 
+    if data == "__sprache__":
+        global _relay_await_input
+        _relay_await_input = "voice"
+        send_message(TOKEN, CHAT_ID, "🎤 Schick eine Sprachnachricht:")
+        answer_callback_query(TOKEN, cq_id)
+        return
+
     is_relay_answer = (
         _relay_request_id is not None
         and not data.startswith(("proj:", "notify:", "status:", "capture:", "back", "impl"))
@@ -339,7 +390,16 @@ def _append_idea(slug: str, summary: str) -> None:
 
 
 def _handle_message(msg: dict) -> None:
-    global _capture_state, _impl_state, _accordion_msg_id
+    global _capture_state, _impl_state, _accordion_msg_id, _relay_await_input, _relay_request_id
+    if _relay_request_id is not None and _relay_await_input == "voice" and "voice" in msg:
+        raw = transcribe_voice(TOKEN, msg["voice"]["file_id"])
+        if raw:
+            _write_relay_response(_relay_request_id, raw)
+            _relay_request_id = None
+            _relay_await_input = None
+            (WORK_DIR / "pending_question.json").unlink(missing_ok=True)
+            send_message(TOKEN, CHAT_ID, f"✅ Antwort gesendet: {raw[:80]}")
+        return
     text = msg.get("text", "")
 
     if text in ("/start", "🤖"):
@@ -375,34 +435,26 @@ def _handle_message(msg: dict) -> None:
 
     _append_idea(slug, summary)
     send_message(TOKEN, CHAT_ID, f"✅ Idee erfasst: {summary}")
+    try:
+        notion_direct.add_idea(summary)
+    except Exception:
+        pass
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 def main():
-    offset = None
-    print(f"Brain Bot gestartet (CHAT_ID={CHAT_ID})")
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), _WebhookHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f"Brain Bot gestartet (webhook, port {PORT}, CHAT_ID={CHAT_ID})")
     _setup_reply_keyboard()
     _show_main_menu()
     while True:
         try:
-            updates = get_updates(TOKEN, offset=offset)
-            for upd in updates:
-                offset = upd["update_id"] + 1
-                if "callback_query" in upd:
-                    cq = upd["callback_query"]
-                    if cq.get("from", {}).get("id") != CHAT_ID:
-                        continue
-                    _handle_callback(cq)
-                elif "message" in upd:
-                    msg = upd["message"]
-                    if msg.get("chat", {}).get("id") != CHAT_ID:
-                        continue
-                    _handle_message(msg)
             _check_relay_question()
         except Exception as e:
-            print(f"Brain Bot error: {e}", file=sys.stderr)
-        time.sleep(1)
+            print(f"relay error: {e}", file=sys.stderr)
+        time.sleep(0.1)
 
 
 if __name__ == "__main__":
