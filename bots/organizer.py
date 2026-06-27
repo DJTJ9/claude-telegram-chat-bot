@@ -1,5 +1,6 @@
 import os, sys, json, re, uuid, subprocess, threading, time
 import random
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -18,11 +19,13 @@ from core.telegram import get_updates, send_message, build_inline_keyboard, answ
 from core.settings import load_settings, save_settings
 from core.claude import run_claude, run_claude_parse
 from core.state import load_reminders, save_reminders, load_plans, save_plans, load_registry
+from core import notion_direct
 
 TOKEN = os.environ["TOKEN_ORGANIZER"]
 CHAT_ID = int(os.environ.get("CHAT_ID", "8896609541"))
 WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
 HUB_DIR = Path(os.environ.get("HUB_DIR", str(WORK_DIR)))
+PORT = int(os.environ.get("PORT", "8002"))
 
 TAGESORGANIZER_ID      = "38b4bba29c5581a7bd94cef1b0cc6c58"
 HABITS_DATA_SOURCE_ID  = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
@@ -695,6 +698,7 @@ def start_workflow(kind: str, chat_id: int) -> None:
 
     elif kind == "morgen":
         _instanz_zyklen(today)
+        send_message(TOKEN, chat_id, "⏳ Verarbeite...")
         raw = run_claude_parse(f"Heute ist {today}.", system_prompt=MOIN_JSON_SYSTEM_PROMPT)
         try:
             data = json.loads(raw)
@@ -706,6 +710,7 @@ def start_workflow(kind: str, chat_id: int) -> None:
         _workflow.pop(chat_id, None)
 
     elif kind == "abend":
+        send_message(TOKEN, chat_id, "⏳ Verarbeite...")
         raw = run_claude_parse(f"Heute ist {today}.", system_prompt=ABEND_JSON_SYSTEM_PROMPT)
         try:
             data = json.loads(raw)
@@ -716,11 +721,13 @@ def start_workflow(kind: str, chat_id: int) -> None:
         _workflow.pop(chat_id, None)
 
     elif kind == "woche":
+        send_message(TOKEN, chat_id, "⏳ Verarbeite...")
         response = run_claude(f"Heute ist {today}.", system_prompt=WOCHENSICHT_SYSTEM_PROMPT)
         send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
         _workflow.pop(chat_id, None)
 
     elif kind == "backlog_list":
+        send_message(TOKEN, chat_id, "⏳ Verarbeite...")
         response = run_claude(f"Heute ist {today}.", system_prompt=BACKLOG_LIST_SYSTEM_PROMPT)
         send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
         _workflow.pop(chat_id, None)
@@ -1059,15 +1066,13 @@ def _handle_callback(cq: dict) -> None:
 
     if data.startswith("done:"):
         pid = data[5:]
-        run_claude(
-            f"Heute ist {today}. page_id: {pid}. Feld: status. Wert: Done.",
-            system_prompt=TASK_UPDATE_SYSTEM_PROMPT, automated=True,
-        )
-        edit_message(TOKEN, chat_id, msg_id, f"✅ {_extract_name_from_message(msg_text)} — erledigt!")
-        threading.Thread(target=_run_archive_once, daemon=True).start()
+        ok = notion_direct.mark_done(pid)
+        label = _extract_name_from_message(msg_text)
+        edit_message(TOKEN, chat_id, msg_id, f"✅ {label} — erledigt!" if ok else f"❌ Fehler bei {label}")
 
     elif data.startswith("habit_done:"):
         pid = data[11:]
+        send_message(TOKEN, chat_id, "⏳ Habit wird aktualisiert...")
         result = run_claude(
             f"Heute ist {today}. page_id: {pid}.",
             system_prompt=HABIT_DONE_SYSTEM_PROMPT, automated=True,
@@ -1076,11 +1081,9 @@ def _handle_callback(cq: dict) -> None:
 
     elif data.startswith("sport_done:"):
         pid = data[11:]
-        result = run_claude(
-            f"page_id: {pid}.",
-            system_prompt=SPORT_DONE_SYSTEM_PROMPT, automated=True,
-        )
-        edit_message(TOKEN, chat_id, msg_id, result)
+        ok = notion_direct.mark_sport_done(pid)
+        label = _extract_name_from_message(msg_text)
+        edit_message(TOKEN, chat_id, msg_id, f"✅ {label} — erledigt!" if ok else "❌ Fehler")
 
     elif data.startswith("reschedule:") and data.count(":") == 1:
         pid = data[11:]
@@ -1104,7 +1107,7 @@ def _handle_callback(cq: dict) -> None:
             send_message(TOKEN, chat_id, "Welches Datum? (z.B. 2026-06-25)")
         else:
             target = _resolve_date_key(date_key, today)
-            _apply_task_update(pid, "datum", target, today)
+            notion_direct.reschedule(pid, target)
             d = date.fromisoformat(target)
             edit_message(TOKEN, chat_id, msg_id,
                          f"📅 {_extract_name_from_message(msg_text)} → {d.strftime('%d.%m.')}")
@@ -1330,6 +1333,135 @@ def _get_projects():
     return {p["slug"]: {"path": p.get("path", ""), "notion_name": p.get("name", p["slug"])} for p in load_registry()}
 
 
+class _WebhookHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(n)
+        self.send_response(200)
+        self.end_headers()
+        try:
+            upd = json.loads(body)
+        except Exception:
+            return
+        threading.Thread(target=_dispatch_update, args=(upd,), daemon=True).start()
+
+    def log_message(self, *args):
+        pass
+
+
+def _dispatch_update(upd: dict) -> None:
+    if "callback_query" in upd:
+        cq = upd["callback_query"]
+        if cq["from"]["id"] != CHAT_ID:
+            return
+        answer_callback_query(TOKEN, cq["id"])
+        if cq.get("data") == "__freitext__":
+            send_message(TOKEN, CHAT_ID, "Bitte Antwort eintippen:")
+        else:
+            _handle_callback(cq)
+    elif "message" in upd:
+        msg = upd.get("message", {})
+        if msg.get("chat", {}).get("id") == CHAT_ID:
+            _handle_message(msg)
+
+
+def _handle_message(msg: dict) -> None:
+    chat_id = msg.get("chat", {}).get("id")
+    if not chat_id:
+        return
+
+    if "voice" in msg:
+        try:
+            raw = transcribe_voice(TOKEN, msg["voice"]["file_id"])
+            text = normalize_voice(raw)
+        except Exception as e:
+            send_message(TOKEN, CHAT_ID, f"❌ Spracheingabe fehlgeschlagen: {e}")
+            return
+    else:
+        text = msg.get("text", "").strip()
+    if not text:
+        return
+
+    today = date.today().isoformat()
+
+    if chat_id in callback_state and text:
+        cb = callback_state[chat_id]
+        _is_interrupt = (
+            text.lower() in ("erinnerungen", "/plans")
+            or any(text.lower().startswith(p) for p in (
+                "erinnere", "erinnerung:", "implement-plan:",
+                "abort-plan:", "impl-mode:"))
+            or text in BUTTON_MAP
+        )
+        if _is_interrupt:
+            del callback_state[chat_id]
+        elif cb["action"] == "edit_text":
+            del callback_state[chat_id]
+            _apply_task_update(cb["page_id"], cb["field"], text, today)
+            send_message(TOKEN, CHAT_ID,
+                         f"✏️ {cb['task_name']} · {cb['field'].capitalize()} aktualisiert",
+                         reply_markup=REPLY_KEYBOARD)
+            return
+        elif cb["action"] == "reschedule_text":
+            del callback_state[chat_id]
+            _apply_task_update(cb["page_id"], "datum", text, today)
+            send_message(TOKEN, CHAT_ID,
+                         f"📅 {cb.get('task_name', '')} — Datum aktualisiert",
+                         reply_markup=REPLY_KEYBOARD)
+            return
+
+    if handle_workflow_step(text, chat_id, today):
+        return
+
+    t = text.strip()
+    response = None
+
+    if t.lower().startswith("erinnere") or t.lower().startswith("erinnerung:"):
+        now_time = datetime.now().strftime("%H:%M")
+        raw = run_claude_parse(
+            f"Heute ist {today}, aktuelle Uhrzeit: {now_time}. Nutzer schreibt: {text}",
+            system_prompt=REMINDER_PARSE_SYSTEM_PROMPT,
+        )
+        try:
+            parsed = json.loads(raw)
+            _add_reminder(parsed["text"], parsed["due"])
+            due_dt = datetime.fromisoformat(parsed["due"])
+            response = f"⏰ Erinnerung gesetzt: {parsed['text']} — {due_dt.strftime('%d.%m.%Y um %H:%M')}"
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            print(f"[reminder parse error] raw={repr(raw)} exc={e}")
+            response = "❌ Konnte Erinnerung nicht parsen. Versuche: erinnere mich um 14:00 an Zahnarzt"
+
+    elif t.lower() == "erinnerungen":
+        reminders = load_reminders()
+        pending = [r for r in reminders if r["status"] == "pending"]
+        if not pending:
+            response = "⏰ Keine offenen Erinnerungen."
+        else:
+            lines = [f"⏰ Offene Erinnerungen ({len(pending)}):"]
+            for r in sorted(pending, key=lambda x: x["due"]):
+                due_dt = datetime.fromisoformat(r["due"])
+                lines.append(f"· {due_dt.strftime('%d.%m. %H:%M')} — {r['text']}")
+            response = "\n".join(lines)
+
+    elif t.lower() == "/plans":
+        response = _format_plans()
+
+    elif t in ("/energie",):
+        start_workflow("energie", chat_id)
+        return
+
+    elif t in ("/zyklen",):
+        start_workflow("zyklen", chat_id)
+        return
+
+    elif t in BUTTON_MAP:
+        start_workflow(BUTTON_MAP[t], chat_id)
+        return
+
+    if response:
+        send_message(TOKEN, CHAT_ID, response, reply_markup=REPLY_KEYBOARD)
+
+
 def main():
     plans = load_plans()
     for p in plans:
@@ -1358,188 +1490,9 @@ def main():
         {"command": "zyklen",  "description": "Zyklische Tasks verwalten"},
     ])
 
-    offset = None
-    print(f"Organizer Bot gestartet (chat_id={CHAT_ID})")
-
-    while True:
-        try:
-            updates = get_updates(TOKEN, offset=offset)
-            for upd in updates:
-                offset = upd["update_id"] + 1
-
-                if "callback_query" in upd:
-                    cq = upd["callback_query"]
-                    if cq["from"]["id"] != CHAT_ID:
-                        continue
-                    answer_callback_query(TOKEN, cq["id"])
-                    if cq.get("data") == "__freitext__":
-                        send_message(TOKEN, CHAT_ID, "Bitte Antwort eintippen:")
-                    else:
-                        _handle_callback(cq)
-                    continue
-
-                msg = upd.get("message", {})
-                if not msg:
-                    continue
-                chat_id = msg.get("chat", {}).get("id")
-                if chat_id != CHAT_ID:
-                    continue
-
-                if "voice" in msg:
-                    try:
-                        raw = transcribe_voice(TOKEN, msg["voice"]["file_id"])
-                        text = normalize_voice(raw)
-                    except Exception as e:
-                        send_message(TOKEN, CHAT_ID, f"❌ Spracheingabe fehlgeschlagen: {e}")
-                        continue
-                else:
-                    text = msg.get("text", "").strip()
-                if not text:
-                    continue
-
-                today = date.today().isoformat()
-
-                if chat_id in callback_state and text:
-                    cb = callback_state[chat_id]
-                    _is_interrupt = (
-                        text.lower() in ("erinnerungen", "/plans")
-                        or any(text.lower().startswith(p) for p in (
-                            "erinnere", "erinnerung:", "implement-plan:",
-                            "abort-plan:", "impl-mode:"))
-                        or text in BUTTON_MAP
-                    )
-                    if _is_interrupt:
-                        del callback_state[chat_id]
-                    elif cb["action"] == "edit_text":
-                        del callback_state[chat_id]
-                        _apply_task_update(cb["page_id"], cb["field"], text, today)
-                        send_message(TOKEN, CHAT_ID,
-                                     f"✏️ {cb['task_name']} · {cb['field'].capitalize()} aktualisiert",
-                                     reply_markup=REPLY_KEYBOARD)
-                        continue
-                    elif cb["action"] == "reschedule_text":
-                        del callback_state[chat_id]
-                        _apply_task_update(cb["page_id"], "datum", text, today)
-                        send_message(TOKEN, CHAT_ID,
-                                     f"📅 {cb.get('task_name', '')} — Datum aktualisiert",
-                                     reply_markup=REPLY_KEYBOARD)
-                        continue
-                    elif cb["action"] == "vs_date":
-                        del callback_state[chat_id]
-                        _run_vs_bulk(chat_id, text, today)
-                        continue
-
-                # 1. Active workflow consumes message first
-                if handle_workflow_step(text, chat_id, today):
-                    continue
-
-                t = text.strip()
-                response = None
-
-                # 2. Infrastructure commands (text-based, kept)
-                if t.lower().startswith("erinnere") or t.lower().startswith("erinnerung:"):
-                    now_time = datetime.now().strftime("%H:%M")
-                    raw = run_claude_parse(
-                        f"Heute ist {today}, aktuelle Uhrzeit: {now_time}. Nutzer schreibt: {text}",
-                        system_prompt=REMINDER_PARSE_SYSTEM_PROMPT,
-                    )
-                    try:
-                        parsed = json.loads(raw)
-                        _add_reminder(parsed["text"], parsed["due"])
-                        due_dt = datetime.fromisoformat(parsed["due"])
-                        response = f"⏰ Erinnerung gesetzt: {parsed['text']} — {due_dt.strftime('%d.%m.%Y um %H:%M')}"
-                    except (json.JSONDecodeError, KeyError, ValueError) as e:
-                        print(f"[reminder parse error] raw={repr(raw)} exc={e}")
-                        response = "❌ Konnte Erinnerung nicht parsen. Versuche: erinnere mich um 14:00 an Zahnarzt"
-
-                elif t.lower() == "erinnerungen":
-                    reminders = load_reminders()
-                    pending = [r for r in reminders if r["status"] == "pending"]
-                    if not pending:
-                        response = "⏰ Keine offenen Erinnerungen."
-                    else:
-                        lines = [f"⏰ Offene Erinnerungen ({len(pending)}):"]
-                        for r in sorted(pending, key=lambda x: x["due"]):
-                            due_dt = datetime.fromisoformat(r["due"])
-                            lines.append(f"· {due_dt.strftime('%d.%m. %H:%M')} — {r['text']}")
-                        response = "\n".join(lines)
-
-                elif t.lower().startswith("implement-plan:"):
-                    body = text[15:].strip()
-                    if not body:
-                        response = "Nutzung: implement-plan: <slug> um HH:MM  oder  implement-plan: <slug> jetzt"
-                    else:
-                        slug_part, _, rest = body.partition(" ")
-                        rest = rest.strip()
-                        if rest.lower() == "jetzt":
-                            plan_entry = next((p for p in load_plans() if p["slug"] == slug_part), None)
-                            if not plan_entry:
-                                response = f"❌ Kein Plan mit slug '{slug_part}' gefunden"
-                            else:
-                                send_message(TOKEN, CHAT_ID, f"🚀 Implementierung gestartet: {slug_part}", reply_markup=REPLY_KEYBOARD)
-                                threading.Thread(target=_run_plan, args=(plan_entry["plan_path"], slug_part), daemon=True).start()
-                                continue
-                        elif rest.lower().startswith("um "):
-                            scheduled_time = rest[3:].strip()
-                            response = (_schedule_plan(slug_part, scheduled_time)
-                                        if re.fullmatch(r"\d{2}:\d{2}", scheduled_time)
-                                        else "❌ Ungültige Uhrzeit — bitte HH:MM angeben (z.B. 14:00)")
-                        else:
-                            response = "Nutzung: implement-plan: <slug> um HH:MM  oder  implement-plan: <slug> jetzt"
-
-                elif t.lower().startswith("abort-plan:"):
-                    slug_part = text[11:].strip()
-                    response = (_abort_plan(slug_part) if slug_part else "Nutzung: abort-plan: <slug>")
-
-                elif t.lower().startswith("impl-mode:"):
-                    arg = text[10:].strip().lower()
-                    s = load_settings()
-                    if arg == "an":
-                        until = (datetime.now() + timedelta(hours=4)).isoformat(timespec="seconds")
-                        s["implementation_mode"] = True
-                        s["implementation_mode_until"] = until
-                        save_settings(s)
-                        response = f"⚙️ Implementation Mode aktiv bis {until[11:16]}"
-                    elif arg == "aus":
-                        s["implementation_mode"] = False
-                        s["implementation_mode_until"] = None
-                        save_settings(s)
-                        response = "⚙️ Implementation Mode deaktiviert"
-                    else:
-                        active = s.get("implementation_mode", False)
-                        until = s.get("implementation_mode_until")
-                        response = (f"⚙️ Implementation Mode: aktiv bis {until[11:16]}"
-                                    if active and until else
-                                    "⚙️ Implementation Mode: inaktiv\nNutzung: impl-mode: an  oder  impl-mode: aus")
-
-                elif t.lower() == "/plans":
-                    response = _format_plans()
-
-                elif t in ("/energie",):
-                    start_workflow("energie", chat_id)
-                    continue
-
-                elif t in ("/zyklen",):
-                    start_workflow("zyklen", chat_id)
-                    continue
-
-                # 3. Reply-Keyboard button → start workflow
-                elif t in BUTTON_MAP:
-                    start_workflow(BUTTON_MAP[t], chat_id)
-                    continue
-
-                # 4. Everything else: ignore (no NLP fallback)
-
-                if response:
-                    send_message(TOKEN, CHAT_ID, response, reply_markup=REPLY_KEYBOARD)
-
-                if response:
-                    send_message(TOKEN, CHAT_ID, response, reply_markup=REPLY_KEYBOARD)
-
-            time.sleep(0.3)
-        except Exception as e:
-            print(f"organizer bot error: {e}")
-            time.sleep(5)
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), _WebhookHandler)
+    print(f"Organizer Bot gestartet (webhook, port {PORT}, chat_id={CHAT_ID})")
+    server.serve_forever()
 
 
 if __name__ == "__main__":
