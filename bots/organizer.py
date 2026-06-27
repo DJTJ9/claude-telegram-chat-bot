@@ -215,6 +215,13 @@ Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
 Falls keine offenen Tasks: "📌 Backlog leer."
 Kein Markdown."""
 
+BACKLOG_JSON_SYSTEM_PROMPT = f"""Du bist ein Notion-Backlog-Assistent.
+Lies den Backlog (data_source_id: {BACKLOG_DATA_SOURCE_ID}).
+Zeige alle Tasks mit Status = Offen, sortiert nach Priorität (Hoch zuerst).
+Antworte AUSSCHLIESSLICH mit diesem JSON (kein Markdown, keine Erklärung):
+{{"items": [{{"name": "...", "prio": "Hoch|Mittel|Niedrig", "id": "<page_id_32_zeichen_hex>"}}]}}
+Falls keine offenen Tasks: {{"items": []}}"""
+
 BACKLOG_PROMOTE_SYSTEM_PROMPT = f"""Du bist ein Notion-Backlog-Assistent.
 Schritt 1: Finde den Task mit der genannten Nummer aus der Backlog-Liste (fuzzy-Suche auf den Namen).
 Schritt 2: Lege neuen Task im Tagesorganizer an (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
@@ -728,8 +735,27 @@ def start_workflow(kind: str, chat_id: int) -> None:
 
     elif kind == "backlog_list":
         send_message(TOKEN, chat_id, "⏳ Verarbeite...")
-        response = run_claude(f"Heute ist {today}.", system_prompt=BACKLOG_LIST_SYSTEM_PROMPT)
-        send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=BACKLOG_JSON_SYSTEM_PROMPT)
+        try:
+            items = json.loads(raw).get("items", [])
+        except (json.JSONDecodeError, ValueError):
+            items = []
+
+        if not items:
+            send_message(TOKEN, chat_id, "📌 Backlog leer.", reply_markup=REPLY_KEYBOARD)
+        else:
+            PRIO_ICON = {"Hoch": "🔴", "Mittel": "🟡", "Niedrig": "🟢"}
+            lines = [f"📌 Backlog ({len(items)} offen):"]
+            buttons = []
+            for i, item in enumerate(items, 1):
+                icon = PRIO_ICON.get(item.get("prio", ""), "⚪")
+                lines.append(f"{i}. {icon} {item['name']}")
+                pid = item["id"].replace("-", "")
+                buttons.append([
+                    {"text": f"✅ {item['name']}", "callback_data": f"backlog_done:{pid}"},
+                ])
+            send_message(TOKEN, chat_id, "\n".join(lines),
+                         reply_markup={"inline_keyboard": buttons})
         _workflow.pop(chat_id, None)
 
     elif kind == "projekte":
@@ -1084,6 +1110,16 @@ def _handle_callback(cq: dict) -> None:
         ok = notion_direct.mark_sport_done(pid)
         label = _extract_name_from_message(msg_text)
         edit_message(TOKEN, chat_id, msg_id, f"✅ {label} — erledigt!" if ok else "❌ Fehler")
+
+    if data.startswith("backlog_done:"):
+        pid = data.split(":", 1)[1]
+        answer_callback_query(TOKEN, cq["id"])
+        ok = notion_direct.archive_backlog_item(pid)
+        if ok:
+            send_message(TOKEN, chat_id, "✅ Backlog-Item archiviert.", reply_markup=REPLY_KEYBOARD)
+        else:
+            send_message(TOKEN, chat_id, "❌ Archivierung fehlgeschlagen.", reply_markup=REPLY_KEYBOARD)
+        return
 
     elif data.startswith("reschedule:") and data.count(":") == 1:
         pid = data[11:]
