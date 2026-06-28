@@ -200,6 +200,77 @@ def build_bulk_sync_prompt(slug: str, items: list, active: str, phase: str,
     return "\n".join(lines)
 
 
+def _update_status_active(path: Path, active: str) -> None:
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    display = active if active else "(keine aktive Entwicklung)"
+    text = re.sub(r'^Active: .*$', f'Active: {display}', text, flags=re.MULTILINE)
+    path.write_text(text, encoding="utf-8")
+
+
+def _reorder_vision_roadmap(path: Path, ordered_names: list[str]) -> None:
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    roadmap_idx = text.find("## Roadmap")
+    if roadmap_idx == -1:
+        return
+    after_header = roadmap_idx + len("## Roadmap")
+    next_sec = text.find("\n## ", after_header)
+    roadmap_text = text[after_header:next_sec] if next_sec != -1 else text[after_header:]
+    tail = text[next_sec:] if next_sec != -1 else ""
+
+    existing: dict[str, str] = {}
+    for line in roadmap_text.splitlines():
+        m = re.match(r'^(- \[\w+\]\s+)(.+)$', line)
+        if m:
+            existing[m.group(2).strip().lower()] = line
+
+    seen: set[str] = set()
+    reordered: list[str] = []
+    for name in ordered_names:
+        key = name.lower()
+        if key in existing:
+            reordered.append(existing[key])
+            seen.add(key)
+    for key, line in existing.items():
+        if key not in seen:
+            reordered.append(line)
+
+    text = text[:after_header] + "\n" + "\n".join(reordered) + "\n" + tail
+    path.write_text(text, encoding="utf-8")
+
+
+def sync_feature_order_from_notion(slug: str) -> None:
+    """Pull feature order + active item from per-project DB. Update Vision.md + STATUS.md."""
+    db_id = load_notion_db_id(slug)
+    if not db_id:
+        print(f"⚠️  No notion_db_id for {slug} — skipping notion-to-dev", file=sys.stderr)
+        return
+
+    prompt = (
+        f"Datenbank (data_source_id: {db_id}).\n\n"
+        f"Lese alle Einträge, sortiert nach Position (aufsteigend).\n"
+        f"Antworte NUR mit einem JSON-Array. Format:\n"
+        '[{"name": "...", "status": "idea|discussed|planned|done", "aktiv": true}]\n'
+        "aktiv nur bei dem einen aktiven Eintrag, bei allen anderen false oder weglassen.\n"
+        "Falls keine Einträge: []"
+    )
+    response = run_claude(prompt, automated=True)
+    entries = _extract_json_array(response)
+    if not entries:
+        print(f"notion-to-dev: keine Einträge in {slug} DB.")
+        return
+
+    hub_dir = Path(os.environ.get("HUB_DIR", ""))
+    active = next((e["name"] for e in entries if e.get("aktiv")), "")
+    _update_status_active(hub_dir / "topics" / slug / "STATUS.md", active)
+    _reorder_vision_roadmap(hub_dir / "topics" / slug / "VISION.md",
+                            [e["name"] for e in entries])
+    print(f"notion-to-dev: {slug} — {len(entries)} Features, aktiv: {active or '(keines)'}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sync feature to Notion Arbeitsprojekte DB")
     parser.add_argument("--slug")
@@ -254,7 +325,7 @@ def main() -> None:
         print(result)
 
     if direction in ("notion-to-dev", "both"):
-        sync_notion_to_dev(args.slug)
+        sync_feature_order_from_notion(args.slug or "")
 
 
 if __name__ == "__main__":
