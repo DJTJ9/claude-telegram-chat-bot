@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sync Dev Skill feature status to Notion Arbeitsprojekte DB."""
-import argparse, os, re, sys
+import argparse, json, os, re, sys
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -43,6 +43,91 @@ def parse_status_md(path: Path) -> dict:
             if m:
                 items.append((m.group(1), m.group(2).strip()))
     return {"slug": slug, "active": active, "phase": phase, "items": items}
+
+
+def _extract_json_array(text: str) -> list:
+    """Extract first JSON array from Claude's response text."""
+    m = re.search(r'\[.*?\]', text, re.DOTALL)
+    if not m:
+        return []
+    try:
+        return json.loads(m.group())
+    except json.JSONDecodeError:
+        return []
+
+
+def _append_ideas_to_file(path: Path, ideas: list[str]) -> list[str]:
+    """Append new [idea] lines to file's Roadmap section. Returns added names."""
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8")
+    existing = {
+        m.group(1).lower().strip()
+        for m in re.finditer(r'^- \[\w+\]\s+(.+)$', text, re.MULTILINE)
+    }
+    to_add = [n for n in ideas if n.lower().strip() not in existing]
+    if not to_add:
+        return []
+    new_lines = "\n".join(f"- [idea]      {n}" for n in to_add)
+    roadmap_idx = text.find("## Roadmap")
+    if roadmap_idx == -1:
+        text = text.rstrip() + f"\n\n## Roadmap\n{new_lines}\n"
+    else:
+        next_sec = text.find("\n## ", roadmap_idx + len("## Roadmap"))
+        if next_sec == -1:
+            text = text.rstrip() + "\n" + new_lines + "\n"
+        else:
+            text = text[:next_sec] + "\n" + new_lines + text[next_sec:]
+    path.write_text(text, encoding="utf-8")
+    return to_add
+
+
+def sync_notion_to_dev(slug: str | None) -> None:
+    """Pull Idee-entries from Notion and append to STATUS.md + VISION.md."""
+    hub_dir = Path(os.environ.get("HUB_DIR", ""))
+    if not hub_dir or not hub_dir.exists():
+        print("⚠️  HUB_DIR not set or not found", file=sys.stderr)
+        sys.exit(1)
+
+    slug_filter = f" mit Projekt={slug}" if slug else ""
+    prompt = (
+        f"Arbeitsprojekte-Datenbank (data_source_id: {ARBEIT_DB_ID}).\n\n"
+        f"Suche alle Einträge mit Typ=Idee{slug_filter}.\n"
+        "Antworte NUR mit einem JSON-Array. Format:\n"
+        '[{"name": "Featurename", "projekt": "slug-oder-leer"}]\n'
+        "Falls keine Einträge gefunden: []"
+    )
+
+    response = run_claude(prompt, automated=True)
+    entries = _extract_json_array(response)
+    if not entries:
+        print("notion-to-dev: keine neuen Ideen gefunden.")
+        return
+
+    by_slug: dict[str, list[str]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name", "")).strip()
+        proj = str(entry.get("projekt", slug or "")).strip()
+        if not name:
+            continue
+        if slug and proj and proj != slug:
+            continue
+        by_slug.setdefault(proj or "general", []).append(name)
+
+    total_added = 0
+    for proj_slug, names in by_slug.items():
+        status_path = hub_dir / "topics" / proj_slug / "STATUS.md"
+        vision_path = hub_dir / "topics" / proj_slug / "VISION.md"
+        added = _append_ideas_to_file(status_path, names)
+        _append_ideas_to_file(vision_path, names)
+        if added:
+            total_added += len(added)
+            print(f"{proj_slug}: {len(added)} neue Ideen — {', '.join(added)}")
+
+    if total_added == 0:
+        print("notion-to-dev: alle Ideen bereits bekannt.")
 
 
 def build_sync_prompt(slug: str, feature: str, status: str,
@@ -111,13 +196,22 @@ def main() -> None:
     parser.add_argument("--plan", default=None)
     parser.add_argument("--all", dest="all_projects", action="store_true",
                         help="Sync all projects from HUB_DIR/topics/*/STATUS.md")
+    parser.add_argument(
+        "--direction",
+        choices=["dev-to-notion", "notion-to-dev", "both"],
+        default="dev-to-notion",
+    )
     args = parser.parse_args()
 
     if not ARBEIT_DB_ID:
         print("⚠️  ARBEIT_DB_ID not set — skipping Notion sync", file=sys.stderr)
         sys.exit(0)
 
+    direction = args.direction
+
     if args.all_projects:
+        if direction not in ("dev-to-notion", "both"):
+            parser.error("--all only supported with direction=dev-to-notion or both")
         hub_dir = Path(os.environ.get("HUB_DIR", ""))
         if not hub_dir or not hub_dir.exists():
             print("⚠️  HUB_DIR not set or not found", file=sys.stderr)
@@ -134,13 +228,16 @@ def main() -> None:
             print(result)
         return
 
-    if not (args.slug and args.feature and args.status):
-        parser.error("Either --all or all of --slug/--feature/--status required")
+    if direction in ("dev-to-notion", "both"):
+        if not (args.slug and args.feature and args.status):
+            parser.error("dev-to-notion requires --slug/--feature/--status")
+        prompt = build_sync_prompt(args.slug, args.feature, args.status,
+                                   args.spec, args.plan, ARBEIT_DB_ID)
+        result = run_claude(prompt, automated=True)
+        print(result)
 
-    prompt = build_sync_prompt(args.slug, args.feature, args.status,
-                               args.spec, args.plan, ARBEIT_DB_ID)
-    result = run_claude(prompt, automated=True)
-    print(result)
+    if direction in ("notion-to-dev", "both"):
+        sync_notion_to_dev(args.slug)
 
 
 if __name__ == "__main__":
