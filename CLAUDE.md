@@ -56,7 +56,7 @@ Bot-Parsing: LLM interpretiert Freitext, erstellt nächste Instanz. Kein Enum.
 - Properties: Name (title), Status (kopiert), Priorität (select), Datum (date), Bereich (select), Notiz (rich_text), Archiviert am (date)
 
 ## Arbeitsprojekte
-- data_source_id: `032bbb7d-6eb3-43da-a3af-cf0be05f3ece`
+- data_source_id: `38b4bba29c5581e8868efe4e2fad255a`
 - Properties: Name (title), Typ (select: `Projekt`|`Epic`|`Feature`), Status (select), Priorität (select), Phase (select: `Idee`|`Discussed`|`Planned`|`Done`), Spec (rich_text), Plan (rich_text), Notiz (rich_text), Projekt (select)
 
 ## Sport Challenges
