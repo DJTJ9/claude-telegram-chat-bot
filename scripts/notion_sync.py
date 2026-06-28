@@ -26,6 +26,19 @@ _STATUS_MAP = {
 }
 
 
+def load_notion_db_id(slug: str) -> str:
+    """Read notion_db_id for slug from projects-registry.json."""
+    hub_dir = Path(os.environ.get("HUB_DIR", ""))
+    registry_path = hub_dir / "projects-registry.json"
+    if not registry_path.exists():
+        return ""
+    data = json.loads(registry_path.read_text(encoding="utf-8"))
+    for entry in data:
+        if entry.get("slug") == slug:
+            return entry.get("notion_db_id", "")
+    return ""
+
+
 def parse_status_md(path: Path) -> dict:
     slug = path.parent.name
     text = path.read_text(encoding="utf-8")
@@ -231,8 +244,12 @@ def main() -> None:
     if direction in ("dev-to-notion", "both"):
         if not (args.slug and args.feature and args.status):
             parser.error("dev-to-notion requires --slug/--feature/--status")
+        db_id = load_notion_db_id(args.slug) or ARBEIT_DB_ID
+        if not db_id:
+            print("⚠️  No notion_db_id and ARBEIT_DB_ID not set — skipping", file=sys.stderr)
+            sys.exit(0)
         prompt = build_sync_prompt(args.slug, args.feature, args.status,
-                                   args.spec, args.plan, ARBEIT_DB_ID)
+                                   args.spec, args.plan, db_id)
         result = run_claude(prompt, automated=True)
         print(result)
 
