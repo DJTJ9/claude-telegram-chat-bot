@@ -39,8 +39,9 @@ Sub-Seiten unter Organizer-Hauptseite (`37a4bba29c55807493bdf21e2ef34a9e`):
 Bot-Parsing: LLM interpretiert Freitext, erstellt nächste Instanz. Kein Enum.
 
 ## Lernthemen
-- data_source_id: `5a76447f-2b0a-4f6b-81bb-853f39aa04bb`
-- Properties: Name (title), Status (`Offen`|`In Bearbeitung`|`Abgeschlossen`), Kategorie (select), Priorität (select), Workspace (rich_text), Notiz (rich_text)
+- data_source_id: `38d4bba2-9c55-810d-8ada-d278460c1579`
+- Ort: Ideensammlung-Seite (`38b4bba29c55811ab459c95fd0b6c2ee`)
+- Properties: Name (title), Status (`Offen`|`In Bearbeitung`|`Abgeschlossen`)
 
 ## Spieleideen
 - data_source_id: `ce6783d1-54fe-421f-8d7d-aa8c34880853`

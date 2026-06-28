@@ -12,7 +12,7 @@ from core.claude import run_claude
 TASKS_DB_ID      = "38b4bba29c5581a7bd94cef1b0cc6c58"
 SPORT_DB_ID      = "38b4bba29c5581c88f49c67bb85f78c0"
 BACKLOG_DB_ID    = "0cb18d17-cf70-413d-b29d-adb4675db614"
-LERNTHEMEN_DB_ID = "5a76447f-2b0a-4f6b-81bb-853f39aa04bb"
+IDEENSAMMLUNG_PAGE_ID = "38b4bba29c55811ab459c95fd0b6c2ee"
 
 
 def seed_tasks(today: str) -> None:
@@ -75,10 +75,12 @@ def seed_lernthemen() -> None:
         '- "Notion API"                 | Status: In Bearbeitung',
     ])
     prompt = (
-        f'Erstelle folgende Einträge in der Notion-Datenbank {LERNTHEMEN_DB_ID} (Lernthemen DB):\n'
-        f'{entries}\n'
+        f'Erstelle auf der Notion-Seite {IDEENSAMMLUNG_PAGE_ID} eine Datenbank mit Titel "Lernthemen"'
+        f' und Properties: Name (title), Status (select: "Offen", "In Bearbeitung", "Abgeschlossen").'
+        f' Falls eine Datenbank "Lernthemen" dort bereits existiert, nutze diese.'
+        f' Erstelle danach folgende Einträge:\n{entries}\n'
         f'Überspringe Einträge, bei denen Name bereits existiert.\n'
-        f'Antworte mit: "<N> Lernthemen erstellt."'
+        f'Antworte mit: "<N> Lernthemen erstellt." und der database_id der genutzten DB.'
     )
     result = run_claude(prompt, automated=True)
     print(f"✅ Lernthemen: {result.strip()}")
