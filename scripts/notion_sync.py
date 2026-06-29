@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Sync Dev Skill feature status to Notion Arbeitsprojekte DB."""
-import argparse, json, os, re, sys
+import argparse, json, os, re, sys, time
+from datetime import datetime
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -200,6 +201,35 @@ def build_bulk_sync_prompt(slug: str, items: list, active: str, phase: str,
     return "\n".join(lines)
 
 
+def build_per_project_sync_prompt(slug: str, feature: str, status: str,
+                                   spec: str | None, plan: str | None,
+                                   db_id: str) -> str:
+    """Prompt for per-project Notion DB (schema: Name, Status, Aktiv, Position, Notiz)."""
+    done_block = ""
+    if status == "done":
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        position = 2_000_000_000 - int(time.time())
+        done_block = (
+            f'\n   - Notiz: "Abgeschlossen: {timestamp}"'
+            f"\n   - Position: {position}"
+            f"\n   - Aktiv: false"
+        )
+    notiz_extras = ""
+    if spec:
+        notiz_extras += f"\n   - Notiz-Ergänzung: Spec: {spec}"
+    if plan:
+        notiz_extras += f"\n   - Notiz-Ergänzung: Plan: {plan}"
+    return (
+        f"Datenbank (data_source_id: {db_id}).\n\n"
+        f'1. Suche Eintrag mit Name="{feature}".\n'
+        f"2. Falls gefunden: Aktualisiere Status={status}{done_block}.\n"
+        f"3. Falls nicht gefunden: Lege neuen Eintrag an:\n"
+        f"   - Name: {feature}\n"
+        f"   - Status: {status}{done_block}{notiz_extras}\n\n"
+        f'Antworte nur mit "OK" wenn erfolgreich.'
+    )
+
+
 def _update_status_active(path: Path, active: str) -> None:
     if not path.exists():
         return
@@ -315,12 +345,18 @@ def main() -> None:
     if direction in ("dev-to-notion", "both"):
         if not (args.slug and args.feature and args.status):
             parser.error("dev-to-notion requires --slug/--feature/--status")
-        db_id = load_notion_db_id(args.slug) or ARBEIT_DB_ID
-        if not db_id:
-            print("⚠️  No notion_db_id and ARBEIT_DB_ID not set — skipping", file=sys.stderr)
-            sys.exit(0)
-        prompt = build_sync_prompt(args.slug, args.feature, args.status,
-                                   args.spec, args.plan, db_id)
+        per_project_db_id = load_notion_db_id(args.slug)
+        if per_project_db_id:
+            prompt = build_per_project_sync_prompt(
+                args.slug, args.feature, args.status, args.spec, args.plan, per_project_db_id
+            )
+        else:
+            db_id = ARBEIT_DB_ID
+            if not db_id:
+                print("⚠️  No notion_db_id and ARBEIT_DB_ID not set — skipping", file=sys.stderr)
+                sys.exit(0)
+            prompt = build_sync_prompt(args.slug, args.feature, args.status,
+                                       args.spec, args.plan, db_id)
         result = run_claude(prompt, automated=True)
         print(result)
 

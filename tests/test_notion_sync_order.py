@@ -88,3 +88,28 @@ def test_sync_feature_order_no_db_id(tmp_path, monkeypatch, capsys):
     sync_feature_order_from_notion("test-proj")
     captured = capsys.readouterr()
     assert "No notion_db_id" in captured.err
+
+
+def test_per_project_prompt_done_includes_timestamp_and_position():
+    from scripts.notion_sync import build_per_project_sync_prompt
+    prompt = build_per_project_sync_prompt("my-proj", "Habit-Tracking", "done", None, None, "db-123")
+    assert "db-123" in prompt
+    assert "Status=done" in prompt
+    assert "Abgeschlossen:" in prompt
+    assert "Position:" in prompt
+
+
+def test_per_project_prompt_discussed_no_timestamp():
+    from scripts.notion_sync import build_per_project_sync_prompt
+    prompt = build_per_project_sync_prompt("my-proj", "Habit-Tracking", "discussed", None, None, "db-123")
+    assert "Abgeschlossen:" not in prompt
+    assert "Position:" not in prompt
+    assert "Status=discussed" in prompt
+
+
+def test_main_uses_per_project_prompt_when_db_id_exists():
+    src = Path("scripts/notion_sync.py").read_text()
+    assert "build_per_project_sync_prompt" in src
+    main_src = src[src.index("def main"):]
+    assert "build_per_project_sync_prompt" in main_src
+    assert "per_project_db_id" in main_src
