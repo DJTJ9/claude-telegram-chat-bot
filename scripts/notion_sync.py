@@ -356,6 +356,35 @@ def sync_feature_order_from_notion(slug: str) -> None:
     print(f"notion-to-dev: {slug} — {len(entries)} Features, aktiv: {active or '(keines)'}")
 
 
+def sync_reorder_to_notion(slug: str) -> None:
+    """Read STATUS.md Roadmap order and update Notion Position for all non-done features."""
+    db_id = load_notion_db_id(slug)
+    if not db_id:
+        print(f"⚠️  No notion_db_id for {slug} — skipping reorder", file=sys.stderr)
+        return
+
+    hub_dir = Path(os.environ.get("HUB_DIR", ""))
+    status_path = hub_dir / "topics" / slug / "STATUS.md"
+    data = parse_status_md(status_path)
+
+    non_done = [(st, name) for st, name in data["items"] if st != "done"]
+    if not non_done:
+        print(f"reorder: no non-done items for {slug}")
+        return
+
+    lines = [f"Datenbank (data_source_id: {db_id}).", ""]
+    for i, (_, name) in enumerate(non_done):
+        position = (i + 1) * 100
+        lines += [
+            f'{i + 1}. Suche Eintrag mit Name="{name}".',
+            f"   Falls gefunden: Setze Position={position}.",
+            "",
+        ]
+    lines.append('Antworte nur mit "OK" wenn fertig.')
+    result = run_claude("\n".join(lines), automated=True)
+    print(result)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sync feature to Notion Arbeitsprojekte DB")
     parser.add_argument("--slug")
@@ -370,7 +399,15 @@ def main() -> None:
         choices=["dev-to-notion", "notion-to-dev", "both"],
         default="dev-to-notion",
     )
+    parser.add_argument("--reorder", action="store_true",
+                        help="Sync STATUS.md roadmap order → Notion Position")
     args = parser.parse_args()
+
+    if args.reorder:
+        if not args.slug:
+            parser.error("--reorder requires --slug")
+        sync_reorder_to_notion(args.slug)
+        return
 
     if not ARBEIT_DB_ID:
         print("⚠️  ARBEIT_DB_ID not set — skipping Notion sync", file=sys.stderr)
