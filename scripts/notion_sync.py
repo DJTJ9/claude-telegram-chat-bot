@@ -353,12 +353,13 @@ def sync_feature_order_from_notion(slug: str) -> None:
         return
 
     hub_dir = Path(os.environ.get("HUB_DIR", ""))
-    auto_active = next((e["name"] for e in entries if e.get("status") != "done"), "")
+    non_done = [e for e in entries if e.get("status") != "done"]
+    auto_active = next((e["name"] for e in non_done), "")
     _update_status_active(hub_dir / "topics" / slug / "STATUS.md", auto_active, conditional=True)
     _reorder_vision_roadmap(hub_dir / "topics" / slug / "VISION.md",
-                            [e["name"] for e in entries])
-    _reorder_status_roadmap(hub_dir / "topics" / slug / "STATUS.md", entries)
-    print(f"notion-to-dev: {slug} — {len(entries)} Features, aktiv: {auto_active or '(keines)'}")
+                            [e["name"] for e in non_done])
+    _reorder_status_roadmap(hub_dir / "topics" / slug / "STATUS.md", non_done)
+    print(f"notion-to-dev: {slug} — {len(non_done)} Features, aktiv: {auto_active or '(keines)'}")
 
 
 def sync_reorder_to_notion(slug: str) -> None:
