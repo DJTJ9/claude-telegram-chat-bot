@@ -37,3 +37,27 @@ def test_write_db_id_unknown_slug_noop(tmp_path, monkeypatch):
     write_db_id_to_registry("nonexistent", "uuid-999")
     data = json.loads((tmp_path / "projects-registry.json").read_text())
     assert "notion_db_id" not in data[0]
+
+
+def test_all_flag_skips_existing_creates_missing(tmp_path, monkeypatch):
+    registry = [
+        {"slug": "a", "name": "A", "notion_db_id": "existing-id"},
+        {"slug": "b", "name": "B"},
+    ]
+    (tmp_path / "projects-registry.json").write_text(json.dumps(registry), encoding="utf-8")
+    monkeypatch.setenv("HUB_DIR", str(tmp_path))
+    monkeypatch.setenv("PROJEKTE_PAGE_ID", "page-id")
+    with patch("scripts.notion_create_db.run_claude") as mock:
+        mock.return_value = "Datenbank erstellt: 11111111-2222-3333-4444-555555555555"
+        from scripts.notion_create_db import create_all_missing
+        create_all_missing(tmp_path)
+    mock.assert_called_once()  # only for slug "b"
+    data = json.loads((tmp_path / "projects-registry.json").read_text())
+    assert data[0]["notion_db_id"] == "existing-id"
+    assert data[1]["notion_db_id"] == "11111111-2222-3333-4444-555555555555"
+
+
+def test_all_flag_main_has_route():
+    src = Path("scripts/notion_create_db.py").read_text()
+    assert "all_projects" in src
+    assert "create_all_missing" in src

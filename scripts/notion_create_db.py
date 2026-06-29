@@ -57,11 +57,38 @@ def write_db_id_to_registry(slug: str, db_id: str) -> None:
     registry_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def create_all_missing(hub_dir: Path) -> None:
+    """Create Notion DBs for all registry projects without notion_db_id."""
+    registry_path = hub_dir / "projects-registry.json"
+    data = json.loads(registry_path.read_text(encoding="utf-8"))
+    for entry in data:
+        if entry.get("notion_db_id"):
+            print(f"Skipping {entry['slug']} (already has notion_db_id)")
+            continue
+        slug = entry["slug"]
+        name = entry.get("name", slug)
+        print(f"Creating DB for {slug}...", flush=True)
+        db_id = create_notion_db(slug, name)
+        write_db_id_to_registry(slug, db_id)
+        print(f"  → {db_id}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create per-project Notion DB")
-    parser.add_argument("--slug", required=True)
-    parser.add_argument("--name", required=True)
+    parser.add_argument("--slug")
+    parser.add_argument("--name")
+    parser.add_argument("--all", dest="all_projects", action="store_true",
+                        help="Create DBs for all projects without notion_db_id")
     args = parser.parse_args()
+    if args.all_projects:
+        hub_dir = Path(os.environ.get("HUB_DIR", ""))
+        if not hub_dir or not hub_dir.exists():
+            print("⚠️  HUB_DIR not set or not found", file=sys.stderr)
+            sys.exit(1)
+        create_all_missing(hub_dir)
+        return
+    if not (args.slug and args.name):
+        parser.error("--slug and --name required when not using --all")
     db_id = create_notion_db(args.slug, args.name)
     write_db_id_to_registry(args.slug, db_id)
     print(db_id)
