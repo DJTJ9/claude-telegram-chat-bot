@@ -99,5 +99,43 @@ class TestSyncDevToNocodb(unittest.TestCase):
         mock_upsert.assert_not_called()
 
 
+import tempfile
+from scripts.nocodb_create_table import create_nocodb_table, write_table_id_to_registry
+
+
+class TestCreateNocobdTable(unittest.TestCase):
+    @patch("scripts.nocodb_create_table.requests.post")
+    def test_posts_to_correct_endpoint(self, mock_post):
+        mock_post.return_value.json.return_value = {"id": "tbl_newxyz", "title": "Test"}
+        result = create_nocodb_table("test-proj", "Test Proj")
+        self.assertEqual(result, "tbl_newxyz")
+        url = mock_post.call_args[0][0]
+        self.assertIn("/api/v1/db/meta/projects/", url)
+        self.assertIn("/tables", url)
+
+    @patch("scripts.nocodb_create_table.requests.post")
+    def test_sends_correct_columns(self, mock_post):
+        mock_post.return_value.json.return_value = {"id": "tbl_abc"}
+        create_nocodb_table("slug", "Name")
+        payload = mock_post.call_args[1]["json"]
+        titles = [c["title"] for c in payload["columns"]]
+        self.assertIn("Status", titles)
+        self.assertIn("Position", titles)
+        self.assertIn("Notiz", titles)
+
+
+class TestWriteTableIdToRegistry(unittest.TestCase):
+    def test_writes_table_id_to_correct_slug(self):
+        registry = [{"slug": "proj-a"}, {"slug": "proj-b"}]
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(registry, f)
+            tmp = Path(f.name)
+        write_table_id_to_registry("proj-a", "tbl_xyz", registry_path=tmp)
+        data = json.loads(tmp.read_text())
+        self.assertEqual(data[0]["nocodb_table_id"], "tbl_xyz")
+        self.assertNotIn("nocodb_table_id", data[1])
+        tmp.unlink()
+
+
 if __name__ == "__main__":
     unittest.main()
