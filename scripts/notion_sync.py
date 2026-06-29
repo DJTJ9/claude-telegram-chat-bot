@@ -358,7 +358,7 @@ def sync_feature_order_from_notion(slug: str) -> None:
     _reorder_vision_roadmap(hub_dir / "topics" / slug / "VISION.md",
                             [e["name"] for e in entries])
     _reorder_status_roadmap(hub_dir / "topics" / slug / "STATUS.md", entries)
-    print(f"notion-to-dev: {slug} — {len(entries)} Features, aktiv: {active or '(keines)'}")
+    print(f"notion-to-dev: {slug} — {len(entries)} Features, aktiv: {auto_active or '(keines)'}")
 
 
 def sync_reorder_to_notion(slug: str) -> None:
