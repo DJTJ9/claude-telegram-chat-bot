@@ -18,7 +18,7 @@ from core.telegram import (
     edit_message, transcribe_voice, build_inline_keyboard,
 )
 from core.settings import load_settings, save_settings
-from core import notion_direct
+from core import nocodb_direct as notion_direct
 
 TOKEN = os.environ["TOKEN_BRAIN"]
 CHAT_ID = int(os.environ.get("CHAT_ID", "0"))
