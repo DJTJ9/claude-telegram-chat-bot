@@ -113,3 +113,56 @@ def test_main_uses_per_project_prompt_when_db_id_exists():
     main_src = src[src.index("def main"):]
     assert "build_per_project_sync_prompt" in main_src
     assert "per_project_db_id" in main_src
+
+
+def test_reorder_status_roadmap_respects_notion_order(tmp_path):
+    status = tmp_path / "STATUS.md"
+    status.write_text(
+        "# Status\nActive: X\nPhase: plan\n## Roadmap\n"
+        "- [idea]      Feature B\n"
+        "- [discussed]  Feature A\n"
+        "- [done]      Feature C\n",
+        encoding="utf-8"
+    )
+    entries = [
+        {"name": "Feature A", "status": "discussed"},
+        {"name": "Feature B", "status": "idea"},
+        {"name": "Feature C", "status": "done"},
+    ]
+    from scripts.notion_sync import _reorder_status_roadmap
+    _reorder_status_roadmap(status, entries)
+    lines = [l for l in status.read_text().splitlines() if l.startswith("- [")]
+    assert "Feature A" in lines[0]
+    assert "Feature B" in lines[1]
+    assert "Feature C" in lines[2]
+
+
+def test_reorder_status_roadmap_updates_status_tag(tmp_path):
+    status = tmp_path / "STATUS.md"
+    status.write_text("## Roadmap\n- [idea]      Feature A\n", encoding="utf-8")
+    entries = [{"name": "Feature A", "status": "discussed"}]
+    from scripts.notion_sync import _reorder_status_roadmap
+    _reorder_status_roadmap(status, entries)
+    text = status.read_text()
+    assert "- [discussed]" in text
+    assert "- [idea]" not in text
+
+
+def test_reorder_status_roadmap_preserves_unlisted(tmp_path):
+    status = tmp_path / "STATUS.md"
+    status.write_text(
+        "## Roadmap\n- [idea]      Feature A\n- [done]      Unlisted\n",
+        encoding="utf-8"
+    )
+    entries = [{"name": "Feature A", "status": "idea"}]
+    from scripts.notion_sync import _reorder_status_roadmap
+    _reorder_status_roadmap(status, entries)
+    text = status.read_text()
+    assert "Feature A" in text
+    assert "Unlisted" in text
+
+
+def test_sync_feature_order_calls_reorder_status_roadmap():
+    src = Path("scripts/notion_sync.py").read_text()
+    func_src = src[src.index("def sync_feature_order_from_notion"):]
+    assert "_reorder_status_roadmap" in func_src

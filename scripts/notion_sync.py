@@ -272,6 +272,56 @@ def _reorder_vision_roadmap(path: Path, ordered_names: list[str]) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+_NOTION_TO_DEV_STATUS = {
+    "idea": "idea",
+    "discussed": "discussed",
+    "planned": "planned",
+    "done": "done",
+}
+
+
+def _reorder_status_roadmap(path: Path, entries: list[dict]) -> None:
+    """Reorder STATUS.md Roadmap section by Notion entry order, updating status tags."""
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    roadmap_idx = text.find("## Roadmap")
+    if roadmap_idx == -1:
+        return
+    after_header = roadmap_idx + len("## Roadmap")
+    next_sec = text.find("\n## ", after_header)
+    roadmap_text = text[after_header:next_sec] if next_sec != -1 else text[after_header:]
+    tail = text[next_sec:] if next_sec != -1 else ""
+
+    existing: dict[str, tuple[str, str]] = {}
+    existing_lines: dict[str, str] = {}
+    for line in roadmap_text.splitlines():
+        m = re.match(r'^- \[\w+\](\s+)(.+)$', line)
+        if m:
+            key = m.group(2).strip().lower()
+            existing[key] = (m.group(1), m.group(2).strip())
+            existing_lines[key] = line
+
+    seen: set[str] = set()
+    reordered: list[str] = []
+    for entry in entries:
+        name = entry.get("name", "").strip()
+        key = name.lower()
+        if not name or key not in existing:
+            continue
+        dev_status = _NOTION_TO_DEV_STATUS.get(entry.get("status", "idea"), "idea")
+        spacing, name_part = existing[key]
+        reordered.append(f"- [{dev_status}]{spacing}{name_part}")
+        seen.add(key)
+
+    for key, line in existing_lines.items():
+        if key not in seen:
+            reordered.append(line)
+
+    text = text[:after_header] + "\n" + "\n".join(reordered) + "\n" + tail
+    path.write_text(text, encoding="utf-8")
+
+
 def sync_feature_order_from_notion(slug: str) -> None:
     """Pull feature order + active item from per-project DB. Update Vision.md + STATUS.md."""
     db_id = load_notion_db_id(slug)
@@ -298,6 +348,7 @@ def sync_feature_order_from_notion(slug: str) -> None:
     _update_status_active(hub_dir / "topics" / slug / "STATUS.md", active)
     _reorder_vision_roadmap(hub_dir / "topics" / slug / "VISION.md",
                             [e["name"] for e in entries])
+    _reorder_status_roadmap(hub_dir / "topics" / slug / "STATUS.md", entries)
     print(f"notion-to-dev: {slug} — {len(entries)} Features, aktiv: {active or '(keines)'}")
 
 
