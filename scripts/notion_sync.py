@@ -219,13 +219,17 @@ def build_per_project_sync_prompt(slug: str, feature: str, status: str,
         notiz_extras += f"\n   - Notiz-Ergänzung: Spec: {spec}"
     if plan:
         notiz_extras += f"\n   - Notiz-Ergänzung: Plan: {plan}"
+    new_position_block = "" if status == "done" else (
+        "\n   - Position: (ermittle aktuellen Maximalwert des Position-Felds in der DB,"
+        " setze Position = Max + 100; falls keine Einträge vorhanden: Position = 100)"
+    )
     return (
         f"Datenbank (data_source_id: {db_id}).\n\n"
         f'1. Suche Eintrag mit Name="{feature}".\n'
         f"2. Falls gefunden: Aktualisiere Status={status}{done_block}.\n"
         f"3. Falls nicht gefunden: Lege neuen Eintrag an:\n"
         f"   - Name: {feature}\n"
-        f"   - Status: {status}{done_block}{notiz_extras}\n\n"
+        f"   - Status: {status}{done_block}{new_position_block}{notiz_extras}\n\n"
         f'Antworte nur mit "OK" wenn erfolgreich.'
     )
 

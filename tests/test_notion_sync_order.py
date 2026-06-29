@@ -103,7 +103,6 @@ def test_per_project_prompt_discussed_no_timestamp():
     from scripts.notion_sync import build_per_project_sync_prompt
     prompt = build_per_project_sync_prompt("my-proj", "Habit-Tracking", "discussed", None, None, "db-123")
     assert "Abgeschlossen:" not in prompt
-    assert "Position:" not in prompt
     assert "Status=discussed" in prompt
 
 
