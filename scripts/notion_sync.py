@@ -234,10 +234,16 @@ def build_per_project_sync_prompt(slug: str, feature: str, status: str,
     )
 
 
-def _update_status_active(path: Path, active: str) -> None:
+def _update_status_active(path: Path, active: str, conditional: bool = False) -> None:
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8")
+    if conditional:
+        m = re.search(r'^Active: (.*)$', text, re.MULTILINE)
+        if m:
+            current = m.group(1).strip()
+            if current and current not in ("(none)", "(keine aktive Entwicklung)"):
+                return
     display = active if active else "(keine aktive Entwicklung)"
     text = re.sub(r'^Active: .*$', f'Active: {display}', text, flags=re.MULTILINE)
     path.write_text(text, encoding="utf-8")
@@ -337,8 +343,7 @@ def sync_feature_order_from_notion(slug: str) -> None:
         f"Datenbank (data_source_id: {db_id}).\n\n"
         f"Lese alle Einträge, sortiert nach Position (aufsteigend).\n"
         f"Antworte NUR mit einem JSON-Array. Format:\n"
-        '[{"name": "...", "status": "idea|discussed|planned|done", "aktiv": true}]\n'
-        "aktiv nur bei dem einen aktiven Eintrag, bei allen anderen false oder weglassen.\n"
+        '[{"name": "...", "status": "idea|discussed|planned|done"}]\n'
         "Falls keine Einträge: []"
     )
     response = run_claude(prompt, automated=True)
@@ -348,8 +353,8 @@ def sync_feature_order_from_notion(slug: str) -> None:
         return
 
     hub_dir = Path(os.environ.get("HUB_DIR", ""))
-    active = next((e["name"] for e in entries if e.get("aktiv")), "")
-    _update_status_active(hub_dir / "topics" / slug / "STATUS.md", active)
+    auto_active = next((e["name"] for e in entries if e.get("status") != "done"), "")
+    _update_status_active(hub_dir / "topics" / slug / "STATUS.md", auto_active, conditional=True)
     _reorder_vision_roadmap(hub_dir / "topics" / slug / "VISION.md",
                             [e["name"] for e in entries])
     _reorder_status_roadmap(hub_dir / "topics" / slug / "STATUS.md", entries)
