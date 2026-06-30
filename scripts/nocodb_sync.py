@@ -51,15 +51,13 @@ def find_row(table_id: str, name: str) -> dict | None:
 
 
 def upsert_feature(table_id: str, name: str, status: str,
-                   spec: str = "", plan: str = "", position: int | None = None) -> None:
+                   spec: str = "", plan: str = "") -> None:
     notiz_parts = []
     if spec:
         notiz_parts.append(f"Spec: {spec}")
     if plan:
         notiz_parts.append(f"Plan: {plan}")
     payload: dict = {"Name": name, "Status": status}
-    if position is not None:
-        payload["Position"] = position
     if notiz_parts:
         payload["Notiz"] = "\n".join(notiz_parts)
     row = find_row(table_id, name)
@@ -77,8 +75,8 @@ def rebuild_nocodb_table(table_id: str, items: list[tuple[str, str]]) -> None:
     if ids:
         requests.delete(_table_url(table_id), headers=_headers(),
                         json=[{"Id": i} for i in ids])
-    for idx, (status, name) in enumerate(items):
-        upsert_feature(table_id, name, status, position=idx)
+    for status, name in items:
+        upsert_feature(table_id, name, status)
 
 
 def sync_rebuild(slug: str) -> None:
@@ -183,7 +181,7 @@ def sync_nocodb_to_dev(slug: str) -> None:
         print(f"⚠️  No nocodb_table_id for {slug} — skipping", file=sys.stderr)
         return
     r = requests.get(_table_url(table_id), headers=_headers(),
-                     params={"sort": "Position", "limit": 1000})
+                     params={"sort": "Id", "limit": 1000})
     entries = r.json().get("list", [])
     if not entries:
         print(f"nocodb-to-dev: keine Einträge in {slug}.")
@@ -208,9 +206,9 @@ def sync_all_to_nocodb(hub_dir: Path) -> None:
             print(f"Skipping {data['slug']} (no nocodb_table_id)")
             continue
         print(f"Syncing {data['slug']}...", flush=True)
-        for idx, (status, name) in enumerate(data["items"]):
+        for status, name in data["items"]:
             if status in ("idea", "discussed", "planned", "done"):
-                upsert_feature(table_id, name, status, position=idx)
+                upsert_feature(table_id, name, status)
         print(f"  → {len(data['items'])} features synced")
 
 
