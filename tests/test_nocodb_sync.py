@@ -116,7 +116,71 @@ class TestSyncDevToNocodb(unittest.TestCase):
 
 
 import tempfile
+from scripts.nocodb_sync import rebuild_nocodb_table, sync_rebuild
 from scripts.nocodb_create_table import create_nocodb_table, write_table_id_to_registry
+
+
+class TestRebuildNocobdTable(unittest.TestCase):
+    @patch("scripts.nocodb_sync.upsert_feature")
+    @patch("scripts.nocodb_sync.requests.delete")
+    @patch("scripts.nocodb_sync.requests.get")
+    def test_deletes_all_then_reinserts(self, mock_get, mock_delete, mock_upsert):
+        mock_get.return_value.json.return_value = {
+            "list": [{"Id": 1}, {"Id": 2}]
+        }
+        items = [("idea", "Feature A"), ("done", "Feature B")]
+        rebuild_nocodb_table("tbl_abc123", items)
+
+        delete_body = mock_delete.call_args[1]["json"]
+        self.assertEqual(delete_body, [{"Id": 1}, {"Id": 2}])
+
+        self.assertEqual(mock_upsert.call_count, 2)
+        mock_upsert.assert_any_call("tbl_abc123", "Feature A", "idea", position=0)
+        mock_upsert.assert_any_call("tbl_abc123", "Feature B", "done", position=1)
+
+    @patch("scripts.nocodb_sync.upsert_feature")
+    @patch("scripts.nocodb_sync.requests.delete")
+    @patch("scripts.nocodb_sync.requests.get")
+    def test_skips_delete_when_table_empty(self, mock_get, mock_delete, mock_upsert):
+        mock_get.return_value.json.return_value = {"list": []}
+        rebuild_nocodb_table("tbl_abc123", [("idea", "New Feature")])
+        mock_delete.assert_not_called()
+        mock_upsert.assert_called_once_with("tbl_abc123", "New Feature", "idea", position=0)
+
+
+class TestSyncRebuild(unittest.TestCase):
+    @patch("scripts.nocodb_sync.rebuild_nocodb_table")
+    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
+    def test_reads_status_md_and_rebuilds(self, mock_load, mock_rebuild):
+        status_content = """# Project Status — test-proj
+Active: Feature A
+Phase: plan
+Spec:
+Plan:
+Updated: 2026-06-30
+## Roadmap
+- [idea]      Feature A
+- [done]      Feature B
+- [idea]      Feature C
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hub_dir = Path(tmpdir)
+            topic_dir = hub_dir / "topics" / "test-proj"
+            topic_dir.mkdir(parents=True)
+            (topic_dir / "STATUS.md").write_text(status_content)
+            with patch.dict(os.environ, {"HUB_DIR": str(hub_dir)}):
+                sync_rebuild("test-proj")
+
+        items_arg = mock_rebuild.call_args[0][1]
+        self.assertEqual(len(items_arg), 3)
+        self.assertEqual(items_arg[0], ("idea", "Feature A"))
+        self.assertEqual(items_arg[1], ("done", "Feature B"))
+
+    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="")
+    @patch("scripts.nocodb_sync.rebuild_nocodb_table")
+    def test_skips_when_no_table_id(self, mock_rebuild, mock_load):
+        sync_rebuild("unknown-slug")
+        mock_rebuild.assert_not_called()
 
 
 class TestCreateNocobdTable(unittest.TestCase):

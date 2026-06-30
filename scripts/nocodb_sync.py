@@ -70,6 +70,30 @@ def upsert_feature(table_id: str, name: str, status: str,
         requests.post(_table_url(table_id), headers=_headers(), json=payload)
 
 
+def rebuild_nocodb_table(table_id: str, items: list[tuple[str, str]]) -> None:
+    r = requests.get(_table_url(table_id), headers=_headers(),
+                     params={"limit": 1000, "fields": "Id"})
+    ids = [row["Id"] for row in r.json().get("list", [])]
+    if ids:
+        requests.delete(_table_url(table_id), headers=_headers(),
+                        json=[{"Id": i} for i in ids])
+    for idx, (status, name) in enumerate(items):
+        upsert_feature(table_id, name, status, position=idx)
+
+
+def sync_rebuild(slug: str) -> None:
+    table_id = load_nocodb_table_id(slug)
+    if not table_id:
+        print(f"⚠️  No nocodb_table_id for {slug}", file=sys.stderr)
+        return
+    hub_dir = Path(os.environ.get("HUB_DIR", ""))
+    data = parse_status_md(hub_dir / "topics" / slug / "STATUS.md")
+    items = [(s, n) for s, n in data["items"]
+             if s in ("idea", "discussed", "planned", "done")]
+    rebuild_nocodb_table(table_id, items)
+    print(f"Rebuilt {slug}: {len(items)} entries")
+
+
 def sync_dev_to_nocodb(slug: str, feature: str, status: str,
                        spec: str = "", plan: str = "") -> None:
     table_id = load_nocodb_table_id(slug)
@@ -198,6 +222,8 @@ def main() -> None:
     parser.add_argument("--spec", default="")
     parser.add_argument("--plan", default="")
     parser.add_argument("--all", dest="all_projects", action="store_true")
+    parser.add_argument("--rebuild", action="store_true",
+                        help="Delete all rows and re-insert from STATUS.md (requires --slug)")
     parser.add_argument("--direction", choices=["dev-to-nocodb", "nocodb-to-dev"],
                         default="dev-to-nocodb")
     args = parser.parse_args()
@@ -205,6 +231,12 @@ def main() -> None:
     if not NOCODB_API_URL:
         print("⚠️  NOCODB_API_URL not set — skipping", file=sys.stderr)
         sys.exit(0)
+
+    if args.rebuild:
+        if not args.slug:
+            parser.error("--rebuild requires --slug")
+        sync_rebuild(args.slug)
+        return
 
     if args.all_projects:
         hub_dir = Path(os.environ.get("HUB_DIR", ""))
