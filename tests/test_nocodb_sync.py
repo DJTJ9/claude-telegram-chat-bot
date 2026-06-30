@@ -9,7 +9,7 @@ os.environ.setdefault("NOCODB_BASE_ID", "test_base")
 
 from scripts.nocodb_sync import (
     _headers, _table_url, load_nocodb_table_id, find_row, upsert_feature,
-    sync_dev_to_nocodb,
+    sync_dev_to_nocodb, sync_nocodb_to_dev,
 )
 
 FAKE_REGISTRY = [
@@ -211,6 +211,18 @@ class TestWriteTableIdToRegistry(unittest.TestCase):
         self.assertEqual(data[0]["nocodb_table_id"], "tbl_xyz")
         self.assertNotIn("nocodb_table_id", data[1])
         tmp.unlink()
+
+
+class TestSyncNocobdToDev(unittest.TestCase):
+    @patch("scripts.nocodb_sync.requests.get")
+    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
+    @patch("scripts.nocodb_sync.load_registry", return_value=[])
+    def test_no_sort_id_in_get_params(self, mock_reg, mock_table, mock_get):
+        mock_get.return_value.json.return_value = {"list": []}
+        sync_nocodb_to_dev("test-proj")
+        call_kwargs = mock_get.call_args[1]
+        params = call_kwargs.get("params", {})
+        self.assertNotIn("sort", params)
 
 
 if __name__ == "__main__":

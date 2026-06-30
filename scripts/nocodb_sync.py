@@ -181,7 +181,7 @@ def sync_nocodb_to_dev(slug: str) -> None:
         print(f"⚠️  No nocodb_table_id for {slug} — skipping", file=sys.stderr)
         return
     r = requests.get(_table_url(table_id), headers=_headers(),
-                     params={"sort": "Id", "limit": 1000})
+                     params={"limit": 1000})
     entries = r.json().get("list", [])
     if not entries:
         print(f"nocodb-to-dev: keine Einträge in {slug}.")
