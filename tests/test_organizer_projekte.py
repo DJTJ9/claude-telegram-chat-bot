@@ -103,6 +103,6 @@ def test_idea_pick_slug_callback_handler_present():
 
 def test_idea_for_project_workflow_step_present():
     import inspect
-    from organizer import _handle_workflow_step
-    src = inspect.getsource(_handle_workflow_step)
+    from organizer import handle_workflow_step
+    src = inspect.getsource(handle_workflow_step)
     assert '"idea_for_project:name"' in src

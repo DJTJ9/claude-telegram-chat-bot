@@ -548,6 +548,15 @@ def _build_projekte_message() -> tuple:
     return "\n".join(lines).rstrip(), buttons
 
 
+def _append_idea_hub(slug: str, text: str) -> None:
+    idea_line = f"- [idea]      {text}\n"
+    for filename in ("STATUS.md", "VISION.md"):
+        path = HUB_DIR / "topics" / slug / filename
+        if path.exists():
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(idea_line)
+
+
 def start_workflow(kind: str, chat_id: int) -> None:
     today = date.today().isoformat()
     _workflow[chat_id] = {"step": f"{kind}:init", "data": {}}
@@ -770,6 +779,14 @@ def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
             reply_markup={"inline_keyboard": buttons})
         return True
 
+    if step == "idea_for_project:name":
+        slug = state["data"].get("slug", "")
+        _workflow.pop(chat_id, None)
+        _append_idea_hub(slug, text)
+        send_message(TOKEN, chat_id, f"✅ Idee erfasst für {slug}: {text}",
+                     reply_markup=REPLY_KEYBOARD)
+        return True
+
     return False
 
 
@@ -904,6 +921,27 @@ def _handle_callback(cq: dict) -> None:
         if not features:
             lines.append("· (nichts in Planung)")
         send_message(TOKEN, chat_id, "\n".join(lines), reply_markup=REPLY_KEYBOARD)
+        return
+
+    if data == "idea_pick":
+        answer_callback_query(TOKEN, cq["id"])
+        registry = load_registry()
+        buttons = [
+            [{"text": proj.get("name", proj["slug"]),
+              "callback_data": f"idea_pick:{proj['slug']}"}]
+            for proj in registry
+        ]
+        send_message(TOKEN, chat_id, "💡 Für welches Projekt?",
+                     reply_markup={"inline_keyboard": buttons})
+        return
+
+    if data.startswith("idea_pick:"):
+        slug = data.split(":", 1)[1]
+        answer_callback_query(TOKEN, cq["id"])
+        _workflow[chat_id] = {"step": "idea_for_project:name", "data": {"slug": slug}}
+        _abort = [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]
+        send_message(TOKEN, chat_id, f"💡 Idee für {slug}?\nKurz beschreiben:",
+                     reply_markup={"inline_keyboard": _abort})
         return
 
     if data == "zyklen:neu":
