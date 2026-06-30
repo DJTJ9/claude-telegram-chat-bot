@@ -194,9 +194,10 @@ class TestCreateNocobdTable(unittest.TestCase):
         create_nocodb_table("slug", "Name")
         payload = mock_post.call_args[1]["json"]
         titles = [c["title"] for c in payload["columns"]]
+        self.assertIn("Name", titles)
         self.assertIn("Status", titles)
-        self.assertIn("Position", titles)
         self.assertIn("Notiz", titles)
+        self.assertNotIn("Position", titles)
 
 
 class TestWriteTableIdToRegistry(unittest.TestCase):

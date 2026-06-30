@@ -32,7 +32,6 @@ def create_nocodb_table(slug: str, name: str) -> str:
             {"title": "Name", "uidt": "SingleLineText"},
             {"title": "Status", "uidt": "SingleSelect",
              "dtxp": "'idea','discussed','planned','done'"},
-            {"title": "Position", "uidt": "Number"},
             {"title": "Notiz", "uidt": "LongText"},
         ],
     }
