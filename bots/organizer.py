@@ -20,6 +20,7 @@ from core.settings import load_settings, save_settings
 from core.claude import run_claude, run_claude_parse
 from core.state import load_reminders, save_reminders, load_plans, save_plans, load_registry
 from core import notion_direct
+from core import nocodb_direct
 
 TOKEN = os.environ["TOKEN_ORGANIZER"]
 CHAT_ID = int(os.environ.get("CHAT_ID", "8896609541"))
@@ -127,40 +128,6 @@ Leerzeile
 "💡 Offene Tasks verschieben? → verschieben: morgen"
 Kein Markdown."""
 
-MOIN_SYSTEM_PROMPT = f"""Du bist ein Notion-Morgen-Assistent.
-Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
-Finde alle Tasks mit Datum = heute ODER ohne Datum, Status Not started oder In progress.
-
-Trenne in zwei Gruppen:
-- Termine: Tasks wo Datum einen Zeitanteil hat (datetime, z.B. 2026-06-15T14:00)
-- Tasks: Tasks wo Datum nur ein Datum ist (date-only) oder kein Datum gesetzt ist
-
-Format:
-Zeile 1: "🌅 Guten Morgen! [DD.MM.YYYY]"
-Zeile 2 (nur wenn Projekt-Tasks vorhanden): "📁 " + je Projekt "[Name] ([N])"-Gruppen mit " · " getrennt (nur Tasks zählen, nicht Termine)
-Leerzeile
-
-Falls Termine vorhanden:
-  "📅 Termine heute ([N]):"
-  Je Termin: "· [HH:MM] · [Name]"
-  Sortiert nach Uhrzeit aufsteigend.
-  Leerzeile
-
-Falls Tasks vorhanden:
-  "📋 Tasks heute ([N]):"
-  Je Task: "· [Prio-Icon] [→Projekt falls gesetzt] [Name]"
-  Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
-  Sortiert nach Priorität (Hoch zuerst), dann alphabetisch.
-  Leerzeile
-
-Dann lies die Habits-Datenbank (data_source_id: {HABITS_DATA_SOURCE_ID}).
-Zeige alle Habits mit Nächste Fälligkeit ≤ heute UND Status = Aktiv.
-Falls solche Habits vorhanden:
-  "🔄 Habits heute ([N]):"
-  Je Habit: "· [Name] (alle [Intervall] Tage)"
-Falls keine fälligen Habits: diese Sektion weglassen.
-
-Kein Markdown. Kein Datum in der Task-Liste."""
 
 LERN_SYSTEM_PROMPT = """Du bist ein Lernthemen-Assistent. Der Nutzer nennt ein Thema, das er lernen möchte.
 Lege es in der Lernthemen-Datenbank an (data_source_id: 5a76447f-2b0a-4f6b-81bb-853f39aa04bb).
@@ -269,30 +236,6 @@ Antworte AUSSCHLIESSLICH mit diesem JSON (kein Markdown, keine Erklärung, nicht
 {"text": "<was erinnert werden soll>", "due": "<YYYY-MM-DDTHH:MM:SS>"}"""
 
 
-MOIN_JSON_SYSTEM_PROMPT = f"""Du bist ein Notion-Morgen-Assistent.
-Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
-Finde alle Tasks mit Datum = heute ODER ohne Datum, Status Not started oder In progress.
-
-Gruppen:
-- appointments: Tasks mit Datum als datetime (z.B. 2026-06-22T14:00) — sortiert nach Uhrzeit
-- tasks: Tasks mit nur Datum (date-only) oder ohne Datum — sortiert nach Prio (Hoch zuerst)
-
-Lies dann Habits-Datenbank (data_source_id: {HABITS_DATA_SOURCE_ID}).
-- habits: Habits mit Nächste Fälligkeit <= heute UND Status = Aktiv — sortiert alphabetisch
-
-Lies dann Arbeitsprojekte-Datenbank (data_source_id: {ARBEIT_DB_ID}).
-- proj_tasks: Features mit Typ = Feature, Datum = heute, Status = Offen oder In Arbeit
-
-Antworte AUSSCHLIESSLICH mit diesem JSON (kein Markdown, keine Erklärung):
-{{
-  "date": "YYYY-MM-DD",
-  "appointments": [{{"name": "...", "time": "HH:MM", "id": "<page_id_32_zeichen>"}}],
-  "tasks": [{{"name": "...", "prio": "Hoch|Mittel|Niedrig", "projekt": "...|null", "id": "<page_id_32_zeichen>"}}],
-  "habits": [{{"name": "...", "interval": <int_tage>, "id": "<page_id_32_zeichen>"}}],
-  "proj_tasks": [{{"name": "...", "projekt": "...", "status": "Offen|In Arbeit", "id": "<page_id_32_zeichen>"}}]
-}}
-page_id: Notion page ID als Hex-String ohne Bindestriche, exakt 32 Zeichen.
-Falls ARBEIT_DB_ID leer: proj_tasks = []"""
 
 ABEND_JSON_SYSTEM_PROMPT = f"""Du bist ein Notion-Abend-Assistent.
 Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
@@ -331,13 +274,6 @@ Du erhältst eine Notion page_id aus der Habits-Datenbank (data_source_id: {HABI
 Antworte NUR mit: ✅ <Name> — nächste Fälligkeit: DD.MM.YYYY
 Falls nicht gefunden: ❌ Habit nicht gefunden: <page_id>"""
 
-SPORT_CHALLENGES_SYSTEM_PROMPT = f"""Du bist ein Sport-Assistent.
-Lies die Notion-Datenbank (data_source_id: {SPORT_CHALLENGES_DB_ID}).
-Filtere: Status = "Not Started".
-Gruppiere die Ergebnisse nach der "Kategorie"-Property.
-Gib NUR dieses JSON zurück (kein Kommentar, kein Markdown):
-{{"kategorien": {{"<Kategoriename>": [{{"id": "<page_id>", "name": "<Name>"}}], ...}}}}
-Wenn keine offenen Challenges: {{"kategorien": {{}}}}"""
 
 SPORT_DONE_SYSTEM_PROMPT = f"""Du bist ein Sport-Assistent.
 Du erhältst eine Notion page_id aus der Sport-Challenges-Datenbank (data_source_id: {SPORT_CHALLENGES_DB_ID}).
@@ -566,19 +502,9 @@ def _send_moin_messages(data: dict) -> None:
 
 
 def _send_sport_challenges(chat_id: int) -> None:
-    raw = run_claude_parse("Lade Sport Challenges.", system_prompt=SPORT_CHALLENGES_SYSTEM_PROMPT)
-    try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return
-    kategorien = data.get("kategorien", {})
-    for kat, challenges in kategorien.items():
-        if not challenges:
-            continue
-        challenge = random.choice(challenges)
-        pid = challenge["id"].replace("-", "")
-        buttons = [[{"text": "✅ Erledigt", "callback_data": f"sport_done:{pid}"}]]
-        send_message(TOKEN, chat_id, f"🏋️ {kat}: {challenge['name']}",
+    for ch in nocodb_direct.fetch_sport_challenges():
+        buttons = [[{"text": "✅ Erledigt", "callback_data": f"sport_done:{ch['id']}"}]]
+        send_message(TOKEN, chat_id, f"🏋️ {ch['kategorie']}: {ch['name']}",
                      reply_markup={"inline_keyboard": buttons})
 
 
@@ -706,13 +632,8 @@ def start_workflow(kind: str, chat_id: int) -> None:
     elif kind == "morgen":
         _instanz_zyklen(today)
         send_message(TOKEN, chat_id, "⏳ Verarbeite...")
-        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=MOIN_JSON_SYSTEM_PROMPT)
-        try:
-            data = json.loads(raw)
-            _send_moin_messages(data)
-        except (json.JSONDecodeError, ValueError):
-            response = run_claude(f"Heute ist {today}.", system_prompt=MOIN_SYSTEM_PROMPT)
-            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+        data = nocodb_direct.fetch_tasks_today(today)
+        _send_moin_messages(data)
         _send_sport_challenges(chat_id)
         _workflow.pop(chat_id, None)
 
