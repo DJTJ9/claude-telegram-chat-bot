@@ -512,35 +512,39 @@ def _send_abend_messages(data: dict) -> None:
 
 
 def _build_projekte_message() -> tuple:
-    registry = load_registry()
-    if not registry:
-        return "🗂️ Keine Projekte registriert.", []
+    from datetime import date
+    result = subprocess.run(
+        ["python3", str(HUB_DIR / "scripts" / "dev_context.py"),
+         "--command", "projekte", "--hub-dir", str(HUB_DIR)],
+        capture_output=True, text=True
+    )
+    try:
+        projects = json.loads(result.stdout)
+    except Exception:
+        return "❌ Projekte nicht ladbar.", []
 
-    lines = ["🗂️ Aktive Projekte", ""]
-    buttons = []
-    for proj in registry:
-        slug = proj.get("slug", "")
-        name = proj.get("name", slug)
-        status_path = HUB_DIR / "topics" / slug / "STATUS.md"
-        features = []
-        if status_path.exists():
-            for line in status_path.read_text(encoding="utf-8").splitlines():
-                s = line.strip()
-                if s.startswith("- [") and "]" in s:
-                    tag = s[3:s.index("]")]
-                    if tag in ("planned", "discussed"):
-                        feat = s[s.index("]") + 1:].strip()
-                        if " (" in feat:
-                            feat = feat[:feat.index(" (")]
-                        features.append(feat)
-        lines.append(f"━━ {name} ━━")
-        for feat in features[:3]:
-            lines.append(f"· {feat}")
-        if not features:
-            lines.append("· (keine offenen Features)")
-        buttons.append([{"text": f"📣 {name}", "callback_data": f"standup:{slug}"}])
+    today_str = date.today().strftime("%-d. %B %Y")
+    lines = [f"📁 Projekte — {today_str}", ""]
+
+    for proj in projects:
+        name = proj.get("name", proj["slug"])
+        phase = proj.get("phase", "")
+        active = proj.get("active", "")
+        next_feat = proj.get("next_feature")
+
+        header = f"━━ {name}"
+        if phase:
+            header += f" — {phase}"
+        header += " ━━"
+        lines.append(header)
+
+        if active:
+            lines.append(f"▸ {active}")
+        if next_feat:
+            lines.append(f"⏭ {next_feat}")
         lines.append("")
 
+    buttons = [[{"text": "💡 Idee für...", "callback_data": "idea_pick"}]]
     return "\n".join(lines).rstrip(), buttons
 
 
