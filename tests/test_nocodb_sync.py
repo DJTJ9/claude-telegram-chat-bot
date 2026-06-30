@@ -83,6 +83,22 @@ class TestUpsertFeature(unittest.TestCase):
         self.assertIn("specs/foo.md", payload.get("Notiz", ""))
 
 
+class TestUpsertFeaturePosition(unittest.TestCase):
+    @patch("scripts.nocodb_sync.find_row", return_value=None)
+    @patch("scripts.nocodb_sync.requests.post")
+    def test_includes_position_in_payload(self, mock_post, mock_find):
+        upsert_feature("tbl_abc123", "Feature A", "idea", position=3)
+        payload = mock_post.call_args[1]["json"]
+        self.assertEqual(payload["Position"], 3)
+
+    @patch("scripts.nocodb_sync.find_row", return_value=None)
+    @patch("scripts.nocodb_sync.requests.post")
+    def test_omits_position_when_none(self, mock_post, mock_find):
+        upsert_feature("tbl_abc123", "Feature A", "idea")
+        payload = mock_post.call_args[1]["json"]
+        self.assertNotIn("Position", payload)
+
+
 class TestSyncDevToNocodb(unittest.TestCase):
     @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
     @patch("scripts.nocodb_sync.upsert_feature")

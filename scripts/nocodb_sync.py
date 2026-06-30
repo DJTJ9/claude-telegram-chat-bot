@@ -51,13 +51,15 @@ def find_row(table_id: str, name: str) -> dict | None:
 
 
 def upsert_feature(table_id: str, name: str, status: str,
-                   spec: str = "", plan: str = "") -> None:
+                   spec: str = "", plan: str = "", position: int | None = None) -> None:
     notiz_parts = []
     if spec:
         notiz_parts.append(f"Spec: {spec}")
     if plan:
         notiz_parts.append(f"Plan: {plan}")
     payload: dict = {"Name": name, "Status": status}
+    if position is not None:
+        payload["Position"] = position
     if notiz_parts:
         payload["Notiz"] = "\n".join(notiz_parts)
     row = find_row(table_id, name)
@@ -182,9 +184,9 @@ def sync_all_to_nocodb(hub_dir: Path) -> None:
             print(f"Skipping {data['slug']} (no nocodb_table_id)")
             continue
         print(f"Syncing {data['slug']}...", flush=True)
-        for status, name in data["items"]:
+        for idx, (status, name) in enumerate(data["items"]):
             if status in ("idea", "discussed", "planned", "done"):
-                upsert_feature(table_id, name, status)
+                upsert_feature(table_id, name, status, position=idx)
         print(f"  → {len(data['items'])} features synced")
 
 
