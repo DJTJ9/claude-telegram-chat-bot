@@ -95,38 +95,6 @@ Archiviere den Notion-Eintrag mit page_id {page_id} aus dem Tagesorganizer
 (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Antworte NUR mit: Zyklischer Task geloescht."""
 
-ABEND_SYSTEM_PROMPT = """Du bist ein Notion-Abend-Assistent.
-Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
-Zeige alle Tasks mit Datum = heute.
-
-Format:
-
-Zeile 1: "🌙 Tagesabschluss [DD.MM.YYYY]"
-Leerzeile
-
-Abschnitt 1: "✅ Heute erledigt ([N]):"
-Je Task: · [→Projekt falls gesetzt] [Name]
-Falls keine: · (nichts heute abgehakt)
-
-Leerzeile
-
-Abschnitt 2: "⏳ Noch offen ([N]):"
-Je Task: · [Prio-Icon] [→Projekt falls gesetzt] [Name]
-Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
-Sortiere nach Priorität (Hoch zuerst).
-Falls keine: · (alles erledigt — gut gemacht!)
-
-Leerzeile
-
-Abschnitt 3: "📊 Projekt-Bilanz:"
-Je Projekt das heute Tasks hat:
-· [Name]: [N_done] erledigt / [N_offen] offen
-Falls N_done = 0: füge " — kein Fortschritt heute" hinzu.
-Falls keine Projekt-Tasks heute: · (keine Projekt-Tasks heute)
-
-Leerzeile
-"💡 Offene Tasks verschieben? → verschieben: morgen"
-Kein Markdown."""
 
 
 LERN_SYSTEM_PROMPT = """Du bist ein Lernthemen-Assistent. Der Nutzer nennt ein Thema, das er lernen möchte.
@@ -237,22 +205,6 @@ Antworte AUSSCHLIESSLICH mit diesem JSON (kein Markdown, keine Erklärung, nicht
 
 
 
-ABEND_JSON_SYSTEM_PROMPT = f"""Du bist ein Notion-Abend-Assistent.
-Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
-Finde alle Tasks mit Datum = heute.
-
-Lies dann Habits-Datenbank (data_source_id: {HABITS_DATA_SOURCE_ID}).
-missed_habits: Habits mit Nächste Fälligkeit <= heute UND Status = Aktiv.
-
-Antworte AUSSCHLIESSLICH mit diesem JSON (kein Markdown, keine Erklärung):
-{{
-  "date": "YYYY-MM-DD",
-  "done": [{{"name": "...", "projekt": "...|null"}}],
-  "open": [{{"name": "...", "prio": "Hoch|Mittel|Niedrig", "projekt": "...|null", "id": "<page_id_ohne_bindestriche_32_zeichen>"}}],
-  "missed_habits": [{{"name": "...", "id": "<page_id_ohne_bindestriche_32_zeichen>"}}],
-  "projekt_bilanz": [{{"name": "...", "done": <int>, "open": <int>}}]
-}}
-Sortiere open nach prio (Hoch zuerst). projekt_bilanz nur für Projekte mit Tasks heute."""
 
 TASK_UPDATE_SYSTEM_PROMPT = """Du bist ein Notion-Update-Assistent.
 Du erhältst eine Notion page_id und ein zu aktualisierendes Feld mit dem neuen Wert.
@@ -639,13 +591,8 @@ def start_workflow(kind: str, chat_id: int) -> None:
 
     elif kind == "abend":
         send_message(TOKEN, chat_id, "⏳ Verarbeite...")
-        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=ABEND_JSON_SYSTEM_PROMPT)
-        try:
-            data = json.loads(raw)
-            _send_abend_messages(data)
-        except (json.JSONDecodeError, ValueError):
-            response = run_claude(f"Heute ist {today}.", system_prompt=ABEND_SYSTEM_PROMPT)
-            send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+        data = nocodb_direct.fetch_abend_data(today)
+        _send_abend_messages(data)
         _workflow.pop(chat_id, None)
 
     elif kind == "woche":

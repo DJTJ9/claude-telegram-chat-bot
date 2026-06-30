@@ -24,3 +24,15 @@ def test_moin_system_prompt_removed():
 
 def test_sport_challenges_prompt_removed():
     assert "SPORT_CHALLENGES_SYSTEM_PROMPT" not in src
+
+
+def test_abend_uses_fetch_abend_data():
+    assert "nocodb_direct.fetch_abend_data" in src
+
+
+def test_abend_json_prompt_removed():
+    assert "ABEND_JSON_SYSTEM_PROMPT" not in src
+
+
+def test_abend_system_prompt_removed():
+    assert "ABEND_SYSTEM_PROMPT" not in src
