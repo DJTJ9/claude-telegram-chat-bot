@@ -960,7 +960,7 @@ def _handle_callback(cq: dict) -> None:
 
     if data.startswith("done:"):
         pid = data[5:]
-        ok = notion_direct.mark_done(pid)
+        ok = nocodb_direct.mark_done(int(pid)) if pid.isdigit() else notion_direct.mark_done(pid)
         label = _extract_name_from_message(msg_text)
         edit_message(TOKEN, chat_id, msg_id, f"✅ {label} — erledigt!" if ok else f"❌ Fehler bei {label}")
 
@@ -975,7 +975,7 @@ def _handle_callback(cq: dict) -> None:
 
     elif data.startswith("sport_done:"):
         pid = data[11:]
-        ok = notion_direct.mark_sport_done(pid)
+        ok = nocodb_direct.mark_sport_done(int(pid))
         label = _extract_name_from_message(msg_text)
         edit_message(TOKEN, chat_id, msg_id, f"✅ {label} — erledigt!" if ok else "❌ Fehler")
 
@@ -1011,7 +1011,10 @@ def _handle_callback(cq: dict) -> None:
             send_message(TOKEN, chat_id, "Welches Datum? (z.B. 2026-06-25)")
         else:
             target = _resolve_date_key(date_key, today)
-            notion_direct.reschedule(pid, target)
+            if pid.isdigit():
+                nocodb_direct.reschedule(int(pid), target)
+            else:
+                notion_direct.reschedule(pid, target)
             d = date.fromisoformat(target)
             edit_message(TOKEN, chat_id, msg_id,
                          f"📅 {_extract_name_from_message(msg_text)} → {d.strftime('%d.%m.')}")

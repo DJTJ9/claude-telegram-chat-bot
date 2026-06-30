@@ -36,3 +36,19 @@ def test_abend_json_prompt_removed():
 
 def test_abend_system_prompt_removed():
     assert "ABEND_SYSTEM_PROMPT" not in src
+
+
+def test_done_callback_uses_nocodb():
+    assert "nocodb_direct.mark_done" in src
+
+
+def test_sport_done_callback_uses_nocodb():
+    assert "nocodb_direct.mark_sport_done" in src
+
+
+def test_reschedule_uses_nocodb():
+    assert "nocodb_direct.reschedule" in src
+
+
+def test_int_conversion_in_callbacks():
+    assert "int(pid)" in src
