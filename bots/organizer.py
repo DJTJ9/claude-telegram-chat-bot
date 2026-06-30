@@ -937,6 +937,10 @@ def _handle_callback(cq: dict) -> None:
 
     if data.startswith("idea_pick:"):
         slug = data.split(":", 1)[1]
+        valid_slugs = {p["slug"] for p in load_registry()}
+        if slug not in valid_slugs:
+            answer_callback_query(TOKEN, cq["id"])
+            return
         answer_callback_query(TOKEN, cq["id"])
         _workflow[chat_id] = {"step": "idea_for_project:name", "data": {"slug": slug}}
         _abort = [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]
