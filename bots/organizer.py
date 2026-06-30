@@ -19,7 +19,6 @@ from core.telegram import get_updates, send_message, build_inline_keyboard, answ
 from core.settings import load_settings, save_settings
 from core.claude import run_claude, run_claude_parse
 from core.state import load_reminders, save_reminders, load_plans, save_plans, load_registry
-from core import notion_direct
 from core import nocodb_direct
 
 TOKEN = os.environ["TOKEN_ORGANIZER"]
@@ -960,7 +959,10 @@ def _handle_callback(cq: dict) -> None:
 
     if data.startswith("done:"):
         pid = data[5:]
-        ok = nocodb_direct.mark_done(int(pid)) if pid.isdigit() else notion_direct.mark_done(pid)
+        if not pid.isdigit():
+            answer_callback_query(TOKEN, cq["id"], "Veralteter Button – bitte neu laden.")
+            return
+        ok = nocodb_direct.mark_done(int(pid))
         label = _extract_name_from_message(msg_text)
         edit_message(TOKEN, chat_id, msg_id, f"✅ {label} — erledigt!" if ok else f"❌ Fehler bei {label}")
 
@@ -981,8 +983,11 @@ def _handle_callback(cq: dict) -> None:
 
     if data.startswith("backlog_done:"):
         pid = data.split(":", 1)[1]
+        if not pid.isdigit():
+            answer_callback_query(TOKEN, cq["id"], "Veralteter Button – bitte neu laden.")
+            return
         answer_callback_query(TOKEN, cq["id"])
-        ok = notion_direct.archive_backlog_item(pid)
+        ok = nocodb_direct.archive_backlog_item(int(pid))
         if ok:
             send_message(TOKEN, chat_id, "✅ Backlog-Item archiviert.", reply_markup=REPLY_KEYBOARD)
         else:
@@ -1011,10 +1016,10 @@ def _handle_callback(cq: dict) -> None:
             send_message(TOKEN, chat_id, "Welches Datum? (z.B. 2026-06-25)")
         else:
             target = _resolve_date_key(date_key, today)
-            if pid.isdigit():
-                nocodb_direct.reschedule(int(pid), target)
-            else:
-                notion_direct.reschedule(pid, target)
+            if not pid.isdigit():
+                answer_callback_query(TOKEN, cq["id"], "Veralteter Button – bitte neu laden.")
+                return
+            nocodb_direct.reschedule(int(pid), target)
             d = date.fromisoformat(target)
             edit_message(TOKEN, chat_id, msg_id,
                          f"📅 {_extract_name_from_message(msg_text)} → {d.strftime('%d.%m.')}")
