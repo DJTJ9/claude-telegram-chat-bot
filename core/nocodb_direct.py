@@ -1,4 +1,4 @@
-import os, requests
+import os, random, requests
 from datetime import date
 from pathlib import Path
 
@@ -51,6 +51,65 @@ def mark_sport_done(row_id: int) -> bool:
     r = requests.patch(_url(SPORT_TABLE_ID, row_id),
                        headers=_headers(), json={"Status": "Done"})
     return r.status_code == 200
+
+
+_PRIO_ORDER: dict = {"Hoch": 0, "Mittel": 1, "Niedrig": 2}
+
+
+def fetch_tasks_today(date_iso: str) -> dict:
+    today_r = requests.get(_url(TASKS_TABLE_ID), headers=_headers(),
+                           params={"where": f"(Datum,like,{date_iso}%)~and(Status,neq,Done)",
+                                   "limit": 200})
+    null_r = requests.get(_url(TASKS_TABLE_ID), headers=_headers(),
+                          params={"where": "(Datum,is,null)~and(Status,neq,Done)",
+                                  "limit": 200})
+    today_rows = today_r.json().get("list", []) if today_r.status_code == 200 else []
+    null_rows = null_r.json().get("list", []) if null_r.status_code == 200 else []
+
+    appointments, tasks = [], []
+    for row in today_rows:
+        datum = row.get("Datum") or ""
+        entry = {"name": row.get("Title", ""), "prio": row.get("Priorität") or "Niedrig",
+                 "projekt": row.get("Bereich"), "id": str(row["Id"])}
+        if "T" in datum:
+            entry["time"] = datum.split("T")[1][:5]
+            appointments.append(entry)
+        else:
+            tasks.append(entry)
+    for row in null_rows:
+        tasks.append({"name": row.get("Title", ""), "prio": row.get("Priorität") or "Niedrig",
+                      "projekt": row.get("Bereich"), "id": str(row["Id"])})
+
+    appointments.sort(key=lambda a: a.get("time", ""))
+    tasks.sort(key=lambda t: _PRIO_ORDER.get(t["prio"], 1))
+    return {"date": date_iso, "appointments": appointments, "tasks": tasks,
+            "habits": [], "proj_tasks": []}
+
+
+def fetch_abend_data(date_iso: str) -> dict:
+    r = requests.get(_url(TASKS_TABLE_ID), headers=_headers(),
+                     params={"where": f"(Datum,like,{date_iso}%)", "limit": 200})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+    done = [{"name": row.get("Title", ""), "projekt": row.get("Bereich")}
+            for row in rows if row.get("Status") == "Done"]
+    open_tasks = [{"name": row.get("Title", ""), "prio": row.get("Priorität") or "Niedrig",
+                   "projekt": row.get("Bereich"), "id": str(row["Id"])}
+                  for row in rows if row.get("Status") != "Done"]
+    open_tasks.sort(key=lambda t: _PRIO_ORDER.get(t["prio"], 1))
+    return {"date": date_iso, "done": done, "open": open_tasks,
+            "missed_habits": [], "projekt_bilanz": []}
+
+
+def fetch_sport_challenges() -> list:
+    r = requests.get(_url(SPORT_TABLE_ID), headers=_headers(),
+                     params={"where": "(Status,eq,Not started)", "limit": 200})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+    by_cat: dict = {}
+    for row in rows:
+        kat = row.get("Kategorie") or "Sport"
+        by_cat.setdefault(kat, []).append(
+            {"name": row.get("Title", ""), "id": str(row["Id"]), "kategorie": kat})
+    return [random.choice(challenges) for challenges in by_cat.values() if challenges]
 
 
 def archive_backlog_item(row_id: int) -> bool:
