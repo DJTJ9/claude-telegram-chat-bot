@@ -22,9 +22,10 @@ class TestMarkDone(unittest.TestCase):
         self.assertTrue(result)
         url = mock_patch.call_args[0][0]
         self.assertIn("tbl_tasks", url)
-        self.assertIn("/42", url)
+        self.assertNotIn("/42", url)
         payload = mock_patch.call_args[1]["json"]
-        self.assertEqual(payload["Status"], "Done")
+        self.assertEqual(payload[0]["Id"], 42)
+        self.assertEqual(payload[0]["Status"], "Done")
 
 
 class TestReschedule(unittest.TestCase):
@@ -33,7 +34,8 @@ class TestReschedule(unittest.TestCase):
         mock_patch.return_value.status_code = 200
         reschedule(5, "2026-07-01")
         payload = mock_patch.call_args[1]["json"]
-        self.assertEqual(payload["Datum"], "2026-07-01")
+        self.assertEqual(payload[0]["Id"], 5)
+        self.assertEqual(payload[0]["Datum"], "2026-07-01")
 
 
 class TestAddIdea(unittest.TestCase):
@@ -54,7 +56,10 @@ class TestMarkSportDone(unittest.TestCase):
         mark_sport_done(7)
         url = mock_patch.call_args[0][0]
         self.assertIn("tbl_sport", url)
-        self.assertIn("/7", url)
+        self.assertNotIn("/7", url)
+        payload = mock_patch.call_args[1]["json"]
+        self.assertEqual(payload[0]["Id"], 7)
+        self.assertEqual(payload[0]["Status"], "Done")
 
 
 if __name__ == "__main__":

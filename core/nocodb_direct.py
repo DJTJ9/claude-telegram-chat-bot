@@ -31,14 +31,14 @@ def _url(table_id: str, row_id: int | None = None) -> str:
 
 
 def mark_done(row_id: int, table_id: str | None = None) -> bool:
-    r = requests.patch(_url(table_id or TASKS_TABLE_ID, row_id),
-                       headers=_headers(), json={"Status": "Done"})
+    r = requests.patch(_url(table_id or TASKS_TABLE_ID),
+                       headers=_headers(), json=[{"Id": row_id, "Status": "Done"}])
     return r.status_code == 200
 
 
 def reschedule(row_id: int, date_iso: str, table_id: str | None = None) -> bool:
-    r = requests.patch(_url(table_id or TASKS_TABLE_ID, row_id),
-                       headers=_headers(), json={"Datum": date_iso})
+    r = requests.patch(_url(table_id or TASKS_TABLE_ID),
+                       headers=_headers(), json=[{"Id": row_id, "Datum": date_iso}])
     return r.status_code == 200
 
 
@@ -49,8 +49,8 @@ def add_idea(text: str) -> bool:
 
 
 def mark_sport_done(row_id: int) -> bool:
-    r = requests.patch(_url(SPORT_TABLE_ID, row_id),
-                       headers=_headers(), json={"Status": "Done"})
+    r = requests.patch(_url(SPORT_TABLE_ID),
+                       headers=_headers(), json=[{"Id": row_id, "Status": "Done"}])
     return r.status_code == 200
 
 
