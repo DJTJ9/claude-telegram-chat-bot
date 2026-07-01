@@ -79,9 +79,10 @@ class TestUpsertFeature(unittest.TestCase):
         upsert_feature("tbl_abc123", "Feature A", "discussed", spec="specs/foo.md")
         mock_patch.assert_called_once()
         url = mock_patch.call_args[0][0]
-        self.assertIn("/5", url)
-        payload = mock_patch.call_args[1]["json"]
-        self.assertIn("specs/foo.md", payload.get("Notiz", ""))
+        self.assertNotIn("/5", url)
+        body = mock_patch.call_args[1]["json"]
+        self.assertEqual(body[0]["Id"], 5)
+        self.assertIn("specs/foo.md", body[0].get("Notiz", ""))
 
 
 class TestUpsertFeatureNoPosition(unittest.TestCase):
@@ -364,8 +365,8 @@ class TestUpsertFeatureWithPosition(unittest.TestCase):
     def test_patches_existing_row_regardless_of_position(self, mock_patch, mock_find):
         upsert_feature("tbl_abc123", "Existing", "planned", insert_position="top")
         mock_patch.assert_called_once()
-        url = mock_patch.call_args[0][0]
-        self.assertIn("/5", url)
+        body = mock_patch.call_args[1]["json"]
+        self.assertEqual(body[0]["Id"], 5)
 
 
 class TestSyncDevToNocodbWithPosition(unittest.TestCase):
