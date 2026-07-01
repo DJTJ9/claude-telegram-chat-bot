@@ -18,6 +18,7 @@ if env_file.exists():
 NOCODB_API_URL = os.environ.get("NOCODB_API_URL", "")
 NOCODB_API_TOKEN = os.environ.get("NOCODB_API_TOKEN", "")
 NOCODB_BASE_ID = os.environ.get("NOCODB_BASE_ID", "")
+TASKS_TABLE_ID = os.environ.get("NOCODB_TASKS_TABLE_ID", "")
 
 
 def _headers() -> dict:
@@ -93,12 +94,52 @@ def create_habits_table() -> str:
     return table_id
 
 
+def create_wochenplanung_view() -> str:
+    # NocoDB 2026.06.2: view creation API (feature_api_view_v3) is disabled on free plan.
+    # Try the API; on failure print manual setup instructions.
+    meta_url = f"{NOCODB_API_URL}/api/v1/db/meta/tables/{TASKS_TABLE_ID}"
+    r = requests.get(meta_url, headers=_headers())
+    columns = r.json().get("columns", [])
+    datum_col_id = next((c["id"] for c in columns if c["title"] == "Datum"), "")
+    if not datum_col_id:
+        print("⚠️  Datum column not found in Tasks table", file=sys.stderr)
+        sys.exit(1)
+
+    views_url = f"{NOCODB_API_URL}/api/v1/db/meta/tables/{TASKS_TABLE_ID}/views"
+    r = requests.post(views_url, headers=_headers(), json={"title": "Wochenplanung", "type": 0})
+    view_id = r.json().get("id", "")
+    if not view_id:
+        print("ℹ️  View-API nicht verfügbar (NocoDB free plan). Manuelle Einrichtung:")
+        print("   1. NocoDB → Tasks-Tabelle → + (View hinzufügen) → Grid View 'Wochenplanung'")
+        print("   2. Filter hinzufügen: Datum → is within → this week")
+        print("   3. Sortierung: Datum → Aufsteigend")
+        print(f"   (Datum-Spalten-ID für API: {datum_col_id})")
+        return ""
+
+    filter_url = f"{NOCODB_API_URL}/api/v1/db/meta/views/{view_id}/filters"
+    requests.post(filter_url, headers=_headers(), json={
+        "fk_column_id": datum_col_id,
+        "comparison_op": "isWithin",
+        "comparison_sub_op": "thisWeek",
+        "logical_op": "and",
+    })
+
+    sort_url = f"{NOCODB_API_URL}/api/v1/db/meta/views/{view_id}/sorts"
+    requests.post(sort_url, headers=_headers(), json={
+        "fk_column_id": datum_col_id,
+        "direction": "asc",
+    })
+
+    return view_id
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create per-project NocoDB tables")
     parser.add_argument("--slug")
     parser.add_argument("--name")
     parser.add_argument("--all", dest="all_projects", action="store_true")
     parser.add_argument("--habits", action="store_true", help="Create habits table")
+    parser.add_argument("--wochenplanung", action="store_true", help="Create Wochenplanung view on Tasks table")
     args = parser.parse_args()
 
     if not NOCODB_API_URL:
@@ -112,6 +153,11 @@ def main() -> None:
     if args.habits:
         table_id = create_habits_table()
         print(f"habits table_id: {table_id}")
+        return
+
+    if args.wochenplanung:
+        view_id = create_wochenplanung_view()
+        print(f"Wochenplanung view_id: {view_id}")
         return
 
     if not (args.slug and args.name):
