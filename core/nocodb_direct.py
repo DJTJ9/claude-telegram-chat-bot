@@ -65,8 +65,8 @@ def fetch_habits() -> list:
 
 
 def mark_habit_done(row_id: int) -> bool:
-    r = requests.patch(_url(HABITS_TABLE_ID, row_id),
-                       headers=_headers(), json={"Status": "Done"})
+    r = requests.patch(_url(HABITS_TABLE_ID),
+                       headers=_headers(), json=[{"Id": row_id, "Status": "Done"}])
     return r.status_code == 200
 
 

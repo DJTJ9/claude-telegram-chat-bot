@@ -74,9 +74,9 @@ class TestMarkHabitDone(unittest.TestCase):
         self.assertTrue(result)
         url = mock_patch.call_args[0][0]
         self.assertIn("tbl_habits", url)
-        self.assertIn("/3", url)
         payload = mock_patch.call_args[1]["json"]
-        self.assertEqual(payload["Status"], "Done")
+        self.assertEqual(payload[0]["Id"], 3)
+        self.assertEqual(payload[0]["Status"], "Done")
 
 
 class TestSeedHabits(unittest.TestCase):
