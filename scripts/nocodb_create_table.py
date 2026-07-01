@@ -72,11 +72,33 @@ def create_all_missing() -> None:
         print(f"  → {table_id}")
 
 
+def create_habits_table() -> str:
+    url = f"{NOCODB_API_URL}/api/v1/db/meta/projects/{NOCODB_BASE_ID}/tables"
+    payload = {
+        "title": "habits",
+        "columns": [
+            {"title": "Name", "uidt": "SingleLineText"},
+            {"title": "Kategorie", "uidt": "SingleSelect",
+             "dtxp": "'Gesundheit','Lernen','Produktivität'"},
+            {"title": "Zyklus", "uidt": "SingleLineText"},
+            {"title": "Status", "uidt": "SingleSelect",
+             "dtxp": "'Not Started','Done'"},
+        ],
+    }
+    r = requests.post(url, headers=_headers(), json=payload)
+    table_id = r.json().get("id", "")
+    if not table_id:
+        print(f"⚠️  Habits table creation failed: {r.json()}", file=sys.stderr)
+        sys.exit(1)
+    return table_id
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create per-project NocoDB tables")
     parser.add_argument("--slug")
     parser.add_argument("--name")
     parser.add_argument("--all", dest="all_projects", action="store_true")
+    parser.add_argument("--habits", action="store_true", help="Create habits table")
     args = parser.parse_args()
 
     if not NOCODB_API_URL:
@@ -85,6 +107,11 @@ def main() -> None:
 
     if args.all_projects:
         create_all_missing()
+        return
+
+    if args.habits:
+        table_id = create_habits_table()
+        print(f"habits table_id: {table_id}")
         return
 
     if not (args.slug and args.name):
