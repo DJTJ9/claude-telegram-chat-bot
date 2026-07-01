@@ -79,5 +79,49 @@ class TestCreateWochenplanungView(unittest.TestCase):
         self.assertEqual(sort_payload["direction"], "asc")
 
 
+import scripts.nocodb_promote_backlog as pb
+
+
+class TestNocobdPromoteBacklog(unittest.TestCase):
+    def test_script_exists(self):
+        self.assertTrue(Path("scripts/nocodb_promote_backlog.py").exists())
+
+    @patch("scripts.nocodb_promote_backlog.requests.get")
+    def test_fetch_open_backlog_items(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [
+            {"Id": 1, "Name": "Backlog Task A", "Status": "Offen", "Priorität": "Hoch"},
+            {"Id": 2, "Name": "Backlog Task B", "Status": "Offen", "Priorität": "Mittel"},
+        ]}
+        items = pb.fetch_open_backlog()
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0]["Name"], "Backlog Task A")
+
+    @patch("scripts.nocodb_promote_backlog.requests.get")
+    def test_fetch_filters_offen_only(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": []}
+        pb.fetch_open_backlog()
+        params = mock_get.call_args[1]["params"]
+        self.assertIn("Offen", str(params))
+
+    @patch("scripts.nocodb_promote_backlog.requests.post")
+    def test_promote_creates_task_with_datum(self, mock_post):
+        mock_post.return_value.status_code = 200
+        pb.promote_to_task("Fix login bug", "Hoch", "2026-07-03")
+        payload = mock_post.call_args[1]["json"]
+        self.assertEqual(payload["Name"], "Fix login bug")
+        self.assertEqual(payload["Datum"], "2026-07-03")
+        self.assertEqual(payload["Priorität"], "Hoch")
+        self.assertEqual(payload["Status"], "Not started")
+
+    @patch("scripts.nocodb_promote_backlog.requests.post")
+    def test_promote_uses_tasks_table_id(self, mock_post):
+        mock_post.return_value.status_code = 200
+        pb.promote_to_task("Task X", "Mittel", "2026-07-04")
+        url = mock_post.call_args[0][0]
+        self.assertIn("tbl_tasks_123", url)
+
+
 if __name__ == "__main__":
     unittest.main()
