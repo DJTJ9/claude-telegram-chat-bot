@@ -10,7 +10,7 @@ os.environ.setdefault("NOCODB_BASE_ID", "test_base")
 from scripts.nocodb_sync import (
     _headers, _table_url, load_nocodb_table_id, find_row, upsert_feature,
     sync_dev_to_nocodb, sync_nocodb_to_dev,
-    _get_all_rows, _insert_row_at_top, _insert_row_after, _move_row_to_top,
+    _get_all_rows, _insert_row_at_top, _insert_row_after, _move_row_to_top, _move_row_to_end,
 )
 
 FAKE_REGISTRY = [
@@ -382,6 +382,42 @@ class TestSyncDevToNocodbWithPosition(unittest.TestCase):
         sync_dev_to_nocodb("test-proj", "Feature", "idea", after_name="Feature X")
         call_kwargs = mock_upsert.call_args[1]
         self.assertEqual(call_kwargs["after_name"], "Feature X")
+
+
+class TestMoveRowToEnd(unittest.TestCase):
+    @patch("scripts.nocodb_sync._get_all_rows")
+    @patch("scripts.nocodb_sync.requests.delete")
+    @patch("scripts.nocodb_sync.requests.post")
+    def test_named_row_is_last_after_move(self, mock_post, mock_delete, mock_rows):
+        mock_rows.return_value = [
+            {"Id": 1, "Name": "Feature A", "Status": "idea", "Notiz": ""},
+            {"Id": 2, "Name": "Feature B", "Status": "planned", "Notiz": ""},
+            {"Id": 3, "Name": "Feature C", "Status": "done", "Notiz": ""},
+        ]
+        _move_row_to_end("tbl_abc123", "Feature A")
+        names = [c[1]["json"]["Name"] for c in mock_post.call_args_list]
+        self.assertEqual(names[-1], "Feature A")
+
+    @patch("scripts.nocodb_sync._get_all_rows")
+    @patch("scripts.nocodb_sync.requests.delete")
+    @patch("scripts.nocodb_sync.requests.post")
+    def test_all_rows_preserved_after_move(self, mock_post, mock_delete, mock_rows):
+        mock_rows.return_value = [
+            {"Id": 1, "Name": "A", "Status": "idea", "Notiz": ""},
+            {"Id": 2, "Name": "B", "Status": "done", "Notiz": ""},
+        ]
+        _move_row_to_end("tbl_abc123", "A")
+        names = [c[1]["json"]["Name"] for c in mock_post.call_args_list]
+        self.assertEqual(set(names), {"A", "B"})
+
+    @patch("scripts.nocodb_sync._get_all_rows")
+    @patch("scripts.nocodb_sync.requests.delete")
+    @patch("scripts.nocodb_sync.requests.post")
+    def test_no_op_when_name_not_found(self, mock_post, mock_delete, mock_rows):
+        mock_rows.return_value = [{"Id": 1, "Name": "A", "Status": "idea", "Notiz": ""}]
+        _move_row_to_end("tbl_abc123", "Missing")
+        mock_delete.assert_not_called()
+        mock_post.assert_not_called()
 
 
 if __name__ == "__main__":

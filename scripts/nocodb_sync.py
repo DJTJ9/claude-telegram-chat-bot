@@ -112,6 +112,29 @@ def _move_row_to_top(table_id: str, name: str) -> None:
     print(f"Moved '{name}' to top")
 
 
+def _move_row_to_end(table_id: str, name: str) -> None:
+    rows = _get_all_rows(table_id)
+    target = next((r for r in rows if r["Name"].lower() == name.lower()), None)
+    if not target:
+        print(f"⚠️  Feature '{name}' not found", file=sys.stderr)
+        return
+    ids = [r["Id"] for r in rows]
+    requests.delete(_table_url(table_id), headers=_headers(),
+                    json=[{"Id": i} for i in ids])
+    for row in rows:
+        if row["Id"] == target["Id"]:
+            continue
+        p: dict = {"Name": row["Name"], "Status": row.get("Status", "idea")}
+        if row.get("Notiz"):
+            p["Notiz"] = row["Notiz"]
+        requests.post(_table_url(table_id), headers=_headers(), json=p)
+    t_p: dict = {"Name": target["Name"], "Status": target.get("Status", "idea")}
+    if target.get("Notiz"):
+        t_p["Notiz"] = target["Notiz"]
+    requests.post(_table_url(table_id), headers=_headers(), json=t_p)
+    print(f"Moved '{name}' to end")
+
+
 def upsert_feature(table_id: str, name: str, status: str,
                    spec: str = "", plan: str = "",
                    insert_position: str = "bottom",
@@ -126,8 +149,8 @@ def upsert_feature(table_id: str, name: str, status: str,
         payload["Notiz"] = "\n".join(notiz_parts)
     row = find_row(table_id, name)
     if row:
-        requests.patch(f"{_table_url(table_id)}/{row['Id']}",
-                       headers=_headers(), json=payload)
+        requests.patch(_table_url(table_id),
+                       headers=_headers(), json=[{**payload, "Id": row["Id"]}])
     else:
         if after_name:
             _insert_row_after(table_id, after_name, payload)
@@ -302,6 +325,8 @@ def main() -> None:
                         metavar="NAME", help="Insert new row after this feature name")
     parser.add_argument("--move-to-top", dest="move_to_top", default="",
                         metavar="NAME", help="Move existing row to top position")
+    parser.add_argument("--move-to-end", dest="move_to_end", default="",
+                        metavar="NAME", help="Move existing row to end position")
     args = parser.parse_args()
 
     if not NOCODB_API_URL:
@@ -322,6 +347,16 @@ def main() -> None:
             print(f"⚠️  No nocodb_table_id for {args.slug}", file=sys.stderr)
             sys.exit(1)
         _move_row_to_top(table_id, args.move_to_top)
+        return
+
+    if args.move_to_end:
+        if not args.slug:
+            parser.error("--move-to-end requires --slug")
+        table_id = load_nocodb_table_id(args.slug)
+        if not table_id:
+            print(f"⚠️  No nocodb_table_id for {args.slug}", file=sys.stderr)
+            sys.exit(1)
+        _move_row_to_end(table_id, args.move_to_end)
         return
 
     if args.all_projects:
