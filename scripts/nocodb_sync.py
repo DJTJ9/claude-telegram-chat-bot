@@ -50,8 +50,72 @@ def find_row(table_id: str, name: str) -> dict | None:
     return rows[0] if rows else None
 
 
+def _get_all_rows(table_id: str) -> list[dict]:
+    r = requests.get(_table_url(table_id), headers=_headers(),
+                     params={"limit": 1000})
+    return r.json().get("list", [])
+
+
+def _insert_row_at_top(table_id: str, payload: dict) -> None:
+    rows = _get_all_rows(table_id)
+    ids = [r["Id"] for r in rows]
+    if ids:
+        requests.delete(_table_url(table_id), headers=_headers(),
+                        json=[{"Id": i} for i in ids])
+    requests.post(_table_url(table_id), headers=_headers(), json=payload)
+    for row in rows:
+        old_p: dict = {"Name": row["Name"], "Status": row.get("Status", "idea")}
+        if row.get("Notiz"):
+            old_p["Notiz"] = row["Notiz"]
+        requests.post(_table_url(table_id), headers=_headers(), json=old_p)
+
+
+def _insert_row_after(table_id: str, after_name: str, payload: dict) -> None:
+    rows = _get_all_rows(table_id)
+    ids = [r["Id"] for r in rows]
+    if ids:
+        requests.delete(_table_url(table_id), headers=_headers(),
+                        json=[{"Id": i} for i in ids])
+    inserted = False
+    for row in rows:
+        old_p: dict = {"Name": row["Name"], "Status": row.get("Status", "idea")}
+        if row.get("Notiz"):
+            old_p["Notiz"] = row["Notiz"]
+        requests.post(_table_url(table_id), headers=_headers(), json=old_p)
+        if row["Name"].lower() == after_name.lower():
+            requests.post(_table_url(table_id), headers=_headers(), json=payload)
+            inserted = True
+    if not inserted:
+        requests.post(_table_url(table_id), headers=_headers(), json=payload)
+
+
+def _move_row_to_top(table_id: str, name: str) -> None:
+    rows = _get_all_rows(table_id)
+    target = next((r for r in rows if r["Name"].lower() == name.lower()), None)
+    if not target:
+        print(f"⚠️  Feature '{name}' not found", file=sys.stderr)
+        return
+    ids = [r["Id"] for r in rows]
+    requests.delete(_table_url(table_id), headers=_headers(),
+                    json=[{"Id": i} for i in ids])
+    t_p: dict = {"Name": target["Name"], "Status": target.get("Status", "idea")}
+    if target.get("Notiz"):
+        t_p["Notiz"] = target["Notiz"]
+    requests.post(_table_url(table_id), headers=_headers(), json=t_p)
+    for row in rows:
+        if row["Id"] == target["Id"]:
+            continue
+        p: dict = {"Name": row["Name"], "Status": row.get("Status", "idea")}
+        if row.get("Notiz"):
+            p["Notiz"] = row["Notiz"]
+        requests.post(_table_url(table_id), headers=_headers(), json=p)
+    print(f"Moved '{name}' to top")
+
+
 def upsert_feature(table_id: str, name: str, status: str,
-                   spec: str = "", plan: str = "") -> None:
+                   spec: str = "", plan: str = "",
+                   insert_position: str = "bottom",
+                   after_name: str = "") -> None:
     notiz_parts = []
     if spec:
         notiz_parts.append(f"Spec: {spec}")
@@ -65,7 +129,12 @@ def upsert_feature(table_id: str, name: str, status: str,
         requests.patch(f"{_table_url(table_id)}/{row['Id']}",
                        headers=_headers(), json=payload)
     else:
-        requests.post(_table_url(table_id), headers=_headers(), json=payload)
+        if after_name:
+            _insert_row_after(table_id, after_name, payload)
+        elif insert_position == "top":
+            _insert_row_at_top(table_id, payload)
+        else:
+            requests.post(_table_url(table_id), headers=_headers(), json=payload)
 
 
 def rebuild_nocodb_table(table_id: str, items: list[tuple[str, str]]) -> None:
@@ -93,12 +162,15 @@ def sync_rebuild(slug: str) -> None:
 
 
 def sync_dev_to_nocodb(slug: str, feature: str, status: str,
-                       spec: str = "", plan: str = "") -> None:
+                       spec: str = "", plan: str = "",
+                       insert_position: str = "bottom",
+                       after_name: str = "") -> None:
     table_id = load_nocodb_table_id(slug)
     if not table_id:
         print(f"⚠️  No nocodb_table_id for {slug} — skipping", file=sys.stderr)
         return
-    upsert_feature(table_id, feature, status, spec=spec, plan=plan)
+    upsert_feature(table_id, feature, status, spec=spec, plan=plan,
+                   insert_position=insert_position, after_name=after_name)
     print("OK")
 
 
@@ -224,6 +296,12 @@ def main() -> None:
                         help="Delete all rows and re-insert from STATUS.md (requires --slug)")
     parser.add_argument("--direction", choices=["dev-to-nocodb", "nocodb-to-dev"],
                         default="dev-to-nocodb")
+    parser.add_argument("--insert-position", dest="insert_position",
+                        choices=["top", "bottom"], default="bottom")
+    parser.add_argument("--after", dest="after_name", default="",
+                        metavar="NAME", help="Insert new row after this feature name")
+    parser.add_argument("--move-to-top", dest="move_to_top", default="",
+                        metavar="NAME", help="Move existing row to top position")
     args = parser.parse_args()
 
     if not NOCODB_API_URL:
@@ -236,6 +314,16 @@ def main() -> None:
         sync_rebuild(args.slug)
         return
 
+    if args.move_to_top:
+        if not args.slug:
+            parser.error("--move-to-top requires --slug")
+        table_id = load_nocodb_table_id(args.slug)
+        if not table_id:
+            print(f"⚠️  No nocodb_table_id for {args.slug}", file=sys.stderr)
+            sys.exit(1)
+        _move_row_to_top(table_id, args.move_to_top)
+        return
+
     if args.all_projects:
         hub_dir = Path(os.environ.get("HUB_DIR", ""))
         sync_all_to_nocodb(hub_dir)
@@ -245,7 +333,9 @@ def main() -> None:
         if not (args.slug and args.feature and args.status):
             parser.error("dev-to-nocodb requires --slug/--feature/--status")
         sync_dev_to_nocodb(args.slug, args.feature, args.status,
-                           spec=args.spec, plan=args.plan)
+                           spec=args.spec, plan=args.plan,
+                           insert_position=args.insert_position,
+                           after_name=args.after_name)
 
     elif args.direction == "nocodb-to-dev":
         if not args.slug:
