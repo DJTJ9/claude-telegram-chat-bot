@@ -66,3 +66,28 @@ def test_status_callback_sends_message(tmp_path):
     sent_text = mock_send.call_args[0][2]
     assert "Dev Status" in sent_text
     mock_ack.assert_called_once()
+
+
+def test_run_bug_summary_parses_groq_response():
+    import bots.brain as brain
+    mock_resp = MagicMock()
+    mock_resp.choices[0].message.content = (
+        "TITEL: chunk_retry Handler fehlt\n"
+        "BESCHREIBUNG: Der Button wird gesendet aber kein Handler existiert."
+    )
+    with patch.object(brain, "_groq_client") as mock_groq:
+        mock_groq.return_value.chat.completions.create.return_value = mock_resp
+        result = brain._run_bug_summary("chunk_retry callback missing")
+    assert result["title"] == "Bug: chunk_retry Handler fehlt"
+    assert "Handler" in result["summary"]
+
+
+def test_run_bug_summary_fallback_on_bad_format():
+    import bots.brain as brain
+    mock_resp = MagicMock()
+    mock_resp.choices[0].message.content = "Some unstructured text"
+    with patch.object(brain, "_groq_client") as mock_groq:
+        mock_groq.return_value.chat.completions.create.return_value = mock_resp
+        result = brain._run_bug_summary("something broke")
+    assert result["title"].startswith("Bug: ")
+    assert isinstance(result["summary"], str)

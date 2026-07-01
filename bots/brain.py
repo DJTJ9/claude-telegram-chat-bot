@@ -436,6 +436,35 @@ def _summarize_idea(text: str) -> str:
     return response.choices[0].message.content.strip()
 
 
+def _run_bug_summary(description: str) -> dict:
+    response = _groq_client().chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[{
+            "role": "user",
+            "content": (
+                "Erstelle aus dieser Bug-Beschreibung einen kurzen Titel (max 60 Zeichen) "
+                "und eine kompakte Beschreibung (2-3 Sätze).\n\n"
+                "Format:\nTITEL: <titel>\nBESCHREIBUNG: <beschreibung>\n\n"
+                f"Bug-Beschreibung: {description}"
+            ),
+        }],
+    )
+    text = response.choices[0].message.content.strip()
+    title = summary = ""
+    for line in text.splitlines():
+        if line.startswith("TITEL:"):
+            title = "Bug: " + line[6:].strip()
+        elif line.startswith("BESCHREIBUNG:"):
+            summary = line[13:].strip()
+        elif summary and line.strip():
+            summary += " " + line.strip()
+    if not title:
+        title = "Bug: " + description[:50]
+    if not summary:
+        summary = description
+    return {"title": title, "summary": summary}
+
+
 def _append_idea(slug: str, summary: str) -> None:
     idea_line = f"- [idea]      {summary}\n"
     for filename in ("STATUS.md", "VISION.md"):
