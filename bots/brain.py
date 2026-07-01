@@ -138,6 +138,61 @@ def _get_dev_status(slug: str) -> tuple[str, str]:
     return active, phase
 
 
+def _get_dev_status_full(slug: str) -> str:
+    path = HUB_DIR / "topics" / slug / "STATUS.md"
+    try:
+        content = path.read_text()
+    except FileNotFoundError:
+        return "❌ STATUS.md nicht gefunden"
+
+    active = phase = ""
+    roadmap_items: list[dict] = []
+    in_roadmap = False
+
+    for line in content.splitlines():
+        if line.startswith("Active:"):
+            active = line.split(":", 1)[1].strip()
+        elif line.startswith("Phase:"):
+            phase = line.split(":", 1)[1].strip()
+        elif line.startswith("## Roadmap"):
+            in_roadmap = True
+        elif in_roadmap and line.startswith("- ["):
+            close = line.index("]")
+            tag = line[3:close]
+            name = line[close + 1:].strip()
+            roadmap_items.append({"tag": tag, "name": name})
+
+    epics: dict[str, dict] = {}
+    for item in roadmap_items:
+        prefix = item["name"].split(":")[0].strip() if ":" in item["name"] else "(Sonstige)"
+        if prefix not in epics:
+            epics[prefix] = {"open": 0, "done": 0}
+        if item["tag"] == "done":
+            epics[prefix]["done"] += 1
+        else:
+            epics[prefix]["open"] += 1
+
+    next_items = [i["name"] for i in roadmap_items if i["tag"] != "done"][:5]
+    total_open = sum(e["open"] for e in epics.values())
+    total_done = sum(e["done"] for e in epics.values())
+
+    proj_name = slug.replace("-", " ").title()
+    out = [f"📊 Dev Status — {proj_name}", ""]
+    out.append(f"▶ Aktiv: {active} ({phase})" if active else "▶ Aktiv: (kein aktives Feature)")
+    out.append("")
+    out.append("━━ Epics ━━")
+    for epic, counts in epics.items():
+        out.append(f"🔷 {epic:<18} {counts['open']} offen · {counts['done']} done")
+    out.append("")
+    if next_items:
+        out.append("⏭ Nächste 5:")
+        for i, name in enumerate(next_items, 1):
+            out.append(f"{i}. {name}")
+        out.append("")
+    out.append(f"📈 Gesamt: {total_open} offen · {total_done} done")
+    return "\n".join(out)
+
+
 def _get_planned_items(slug: str) -> list[dict]:
     path = HUB_DIR / "topics" / slug / "STATUS.md"
     try:
@@ -297,9 +352,9 @@ def _handle_callback(cq: dict) -> None:
 
     elif data.startswith("status:"):
         slug = data[7:]
-        active, phase = _get_dev_status(slug)
-        answer_callback_query(TOKEN, cq_id,
-                              text=f"Active: {active or '—'} | Phase: {phase or '—'}")
+        status_text = _get_dev_status_full(slug)
+        send_message(TOKEN, CHAT_ID, status_text)
+        answer_callback_query(TOKEN, cq_id, text="📊 Status geladen")
 
     elif data == "notify:on":
         _toggle_notify(True)
