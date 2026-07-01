@@ -16,6 +16,7 @@ NOCODB_API_TOKEN = os.environ.get("NOCODB_API_TOKEN", "")
 TASKS_TABLE_ID = os.environ.get("NOCODB_TASKS_TABLE_ID", "")
 SPORT_TABLE_ID = os.environ.get("NOCODB_SPORT_TABLE_ID", "")
 BACKLOG_TABLE_ID = os.environ.get("NOCODB_BACKLOG_TABLE_ID", "")
+HABITS_TABLE_ID = os.environ.get("NOCODB_HABITS_TABLE_ID", "")
 IDEENSAMMLUNG_TABLE_ID = os.environ.get("NOCODB_IDEENSAMMLUNG_TABLE_ID", "")
 ARCHIV_TABLE_ID = os.environ.get("NOCODB_ARCHIV_TABLE_ID", "")
 
@@ -49,6 +50,22 @@ def add_idea(text: str) -> bool:
 
 def mark_sport_done(row_id: int) -> bool:
     r = requests.patch(_url(SPORT_TABLE_ID, row_id),
+                       headers=_headers(), json={"Status": "Done"})
+    return r.status_code == 200
+
+
+def fetch_habits() -> list:
+    r = requests.get(_url(HABITS_TABLE_ID), headers=_headers(),
+                     params={"limit": 200})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+    return [{"id": str(row["Id"]), "name": row.get("Name", ""),
+             "kategorie": row.get("Kategorie") or "", "zyklus": row.get("Zyklus") or "",
+             "status": row.get("Status", "Not Started")}
+            for row in rows]
+
+
+def mark_habit_done(row_id: int) -> bool:
+    r = requests.patch(_url(HABITS_TABLE_ID, row_id),
                        headers=_headers(), json={"Status": "Done"})
     return r.status_code == 200
 
