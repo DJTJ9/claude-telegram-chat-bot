@@ -31,6 +31,7 @@ _relay_await_input: str | None = None
 _accordion_msg_id: int | None = None
 _capture_state: dict | None = None
 _impl_state: dict | None = None
+_bug_state: dict | None = None
 
 
 # ── Webhook server ───────────────────────────────────────────────────────────
@@ -302,7 +303,7 @@ def _toggle_notify(value: bool) -> None:
 
 
 def _handle_callback(cq: dict) -> None:
-    global _capture_state, _impl_state
+    global _capture_state, _impl_state, _bug_state
     cq_id = cq["id"]
     data = cq.get("data", "")
 
@@ -320,7 +321,7 @@ def _handle_callback(cq: dict) -> None:
 
     is_relay_answer = (
         _relay_request_id is not None
-        and not data.startswith(("proj:", "notify:", "status:", "capture:", "back", "impl"))
+        and not data.startswith(("proj:", "notify:", "status:", "capture:", "back", "bug"))
     )
     if is_relay_answer:
         _handle_relay_callback(cq_id, data)
@@ -341,7 +342,7 @@ def _handle_callback(cq: dict) -> None:
                 {"text": "📊 Dev Status", "callback_data": f"status:{slug}"},
                 {"text": "💡 Idee erfassen", "callback_data": f"capture:{slug}"},
             ],
-            [{"text": "🚀 Plan umsetzen", "callback_data": f"impl:{slug}"}],
+            [{"text": "🐛 Bug festhalten", "callback_data": f"bug:{slug}"}],
             [{"text": "← Zurück", "callback_data": "back"}],
         ]
         if _accordion_msg_id:
@@ -372,6 +373,36 @@ def _handle_callback(cq: dict) -> None:
         send_message(TOKEN, CHAT_ID,
                      f"💡 Schreib oder sprich deine Idee für {proj['name']}:")
         answer_callback_query(TOKEN, cq_id)
+
+    elif data.startswith("bug:"):
+        slug = data[4:]
+        _bug_state = {"slug": slug}
+        send_message(TOKEN, CHAT_ID, "🐛 Beschreibe den Bug — Freitext oder Sprachnachricht:")
+        answer_callback_query(TOKEN, cq_id)
+
+    elif data.startswith("bug_save:"):
+        slug = data[9:]
+        if not _bug_state or "pending" not in _bug_state:
+            answer_callback_query(TOKEN, cq_id, text="❌ Kein Bug pending")
+            return
+        pending = _bug_state["pending"]
+        title = pending["title"]
+        _bug_state = None
+        _append_bug_to_status_md(slug, title)
+        subprocess.run(
+            ["python", str(WORK_DIR / "scripts" / "nocodb_sync.py"),
+             "--direction", "dev-to-nocodb",
+             "--slug", slug,
+             "--feature", title,
+             "--status", "bug",
+             "--insert-position", "top"],
+            capture_output=True,
+        )
+        answer_callback_query(TOKEN, cq_id, text="🐛 Bug gespeichert!")
+
+    elif data == "bug_cancel":
+        _bug_state = None
+        answer_callback_query(TOKEN, cq_id, text="❌ Abgebrochen")
 
     elif data.startswith("impl:"):
         slug = data[5:]
@@ -474,8 +505,15 @@ def _append_idea(slug: str, summary: str) -> None:
                 f.write(idea_line)
 
 
+def _append_bug_to_status_md(slug: str, title: str) -> None:
+    path = HUB_DIR / "topics" / slug / "STATUS.md"
+    if path.exists():
+        with open(path, "a") as f:
+            f.write(f"- [idea]      {title}\n")
+
+
 def _handle_message(msg: dict) -> None:
-    global _capture_state, _impl_state, _accordion_msg_id, _relay_await_input, _relay_request_id
+    global _capture_state, _impl_state, _bug_state, _accordion_msg_id, _relay_await_input, _relay_request_id
     if _relay_request_id is not None and _relay_await_input == "voice" and "voice" in msg:
         raw = transcribe_voice(TOKEN, msg["voice"]["file_id"])
         if raw:
@@ -495,6 +533,32 @@ def _handle_message(msg: dict) -> None:
 
     if _impl_state and _impl_state.get("step") == "await_time":
         _handle_impl_time_input(text)
+        return
+
+    if _bug_state is not None and "pending" not in _bug_state:
+        slug = _bug_state["slug"]
+        if "voice" in msg:
+            raw = transcribe_voice(TOKEN, msg["voice"]["file_id"])
+        else:
+            raw = text
+        if not raw:
+            send_message(TOKEN, CHAT_ID, "❌ Keine Beschreibung erkannt.")
+            _bug_state = None
+            return
+        try:
+            result = _run_bug_summary(raw)
+        except Exception:
+            result = {"title": "Bug: " + raw[:50], "summary": raw}
+        _bug_state["pending"] = result
+        confirm_text = (
+            f"🐛 Bug erkannt:\n{result['title']}\n\n{result['summary']}\n\nAlles korrekt?"
+        )
+        send_message(TOKEN, CHAT_ID, confirm_text, reply_markup={
+            "inline_keyboard": [[
+                {"text": "✅ Speichern", "callback_data": f"bug_save:{slug}"},
+                {"text": "❌ Abbrechen", "callback_data": "bug_cancel"},
+            ]]
+        })
         return
 
     if _capture_state is None:

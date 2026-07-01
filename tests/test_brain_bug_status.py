@@ -91,3 +91,64 @@ def test_run_bug_summary_fallback_on_bad_format():
         result = brain._run_bug_summary("something broke")
     assert result["title"].startswith("Bug: ")
     assert isinstance(result["summary"], str)
+
+
+def test_bug_callback_sets_state_and_prompts():
+    import bots.brain as brain
+    brain._bug_state = None
+    with patch("bots.brain.send_message") as mock_send, \
+         patch("bots.brain.answer_callback_query"):
+        brain._handle_callback({"id": "cq1", "data": "bug:myslug"})
+    assert brain._bug_state == {"slug": "myslug"}
+    mock_send.assert_called_once()
+    assert "Bug" in mock_send.call_args[0][2]
+    brain._bug_state = None
+
+
+def test_handle_bug_input_calls_summary_and_shows_confirm():
+    import bots.brain as brain
+    brain._bug_state = {"slug": "myslug"}
+    mock_result = {"title": "Bug: X", "summary": "Something broke."}
+    with patch("bots.brain._run_bug_summary", return_value=mock_result), \
+         patch("bots.brain.send_message") as mock_send:
+        brain._handle_message({"text": "crash on startup", "chat": {"id": 12345}})
+    mock_send.assert_called_once()
+    sent = mock_send.call_args[0][2]
+    assert "Bug erkannt" in sent
+    assert "Bug: X" in sent
+    assert brain._bug_state.get("pending") == mock_result
+    brain._bug_state = None
+
+
+def test_bug_save_writes_status_md_and_clears_state(tmp_path):
+    import bots.brain as brain
+    status_md = tmp_path / "topics" / "myslug" / "STATUS.md"
+    status_md.parent.mkdir(parents=True)
+    status_md.write_text("## Roadmap\n")
+    brain._bug_state = {"slug": "myslug", "pending": {"title": "Bug: X", "summary": "desc"}}
+    with patch.object(brain, "HUB_DIR", tmp_path), \
+         patch("bots.brain.answer_callback_query"), \
+         patch("subprocess.run"):
+        brain._handle_callback({"id": "cq1", "data": "bug_save:myslug"})
+    content = status_md.read_text()
+    assert "- [idea]      Bug: X" in content
+    assert brain._bug_state is None
+
+
+def test_bug_cancel_clears_state():
+    import bots.brain as brain
+    brain._bug_state = {"slug": "myslug"}
+    with patch("bots.brain.answer_callback_query"):
+        brain._handle_callback({"id": "cq1", "data": "bug_cancel"})
+    assert brain._bug_state is None
+
+
+def test_append_bug_to_status_md(tmp_path):
+    import bots.brain as brain
+    status_md = tmp_path / "topics" / "proj" / "STATUS.md"
+    status_md.parent.mkdir(parents=True)
+    status_md.write_text("## Roadmap\n- [idea]      Existing\n")
+    with patch.object(brain, "HUB_DIR", tmp_path):
+        brain._append_bug_to_status_md("proj", "Bug: crash on load")
+    content = status_md.read_text()
+    assert "- [idea]      Bug: crash on load" in content
