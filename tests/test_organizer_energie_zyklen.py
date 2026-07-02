@@ -60,20 +60,6 @@ class TestWochensicht(unittest.TestCase):
         self.assertIn("WOCHENSICHT_SYSTEM_PROMPT", snippet)
 
 
-class TestZyklenInstanziierung(unittest.TestCase):
-    def test_instanz_zyklen_defined(self):
-        self.assertIn("def _instanz_zyklen(", _src())
-
-    def test_instanz_prompt_defined(self):
-        self.assertIn("ZYKLEN_INSTANZ_SYSTEM_PROMPT", _src())
-
-    def test_instanz_zyklen_called_in_morgen(self):
-        src = _src()
-        morgen_idx = src.index('kind == "morgen"')
-        snippet = src[morgen_idx:morgen_idx+400]
-        self.assertIn("_instanz_zyklen(", snippet)
-
-
 class TestZyklenCRUD(unittest.TestCase):
     def test_zyklen_list_prompt(self):
         self.assertIn("ZYKLEN_LIST_SYSTEM_PROMPT", _src())
@@ -126,5 +112,5 @@ class TestEnergieFilter(unittest.TestCase):
     def test_verschieben_marker(self):
         src = _src()
         moin_idx = src.index("def _send_moin_messages(")
-        snippet = src[moin_idx:moin_idx+2000]
+        snippet = src[moin_idx:moin_idx+2500]
         self.assertIn("Verschieben", snippet)

@@ -22,7 +22,7 @@ class TestSportChallengesPrompts(unittest.TestCase):
         self.assertIn("import random", _src())
 
     def test_send_sport_challenges_defined(self):
-        self.assertIn("def _send_sport_challenges(", _src())
+        self.assertIn("def _send_habits_sport_message(", _src())
 
     def test_send_sport_challenges_uses_random_choice(self):
         self.assertIn("random.choice(", _src())
@@ -52,13 +52,14 @@ class TestMorgenFlowWiring(unittest.TestCase):
     def test_send_sport_challenges_called_in_morgen(self):
         src = _src()
         morgen_idx = src.index('elif kind == "morgen":')
-        sport_call_idx = src.index("_send_sport_challenges(chat_id)", morgen_idx)
+        sport_call_idx = src.index("_send_habits_sport_message(", morgen_idx)
         self.assertLess(morgen_idx, sport_call_idx)
 
     def test_sport_challenges_after_moin_messages(self):
         src = _src()
-        moin_idx = src.index("_send_moin_messages(data)")
-        sport_idx = src.index("_send_sport_challenges(chat_id)")
+        morgen_idx = src.index('elif kind == "morgen":')
+        moin_idx = src.index("_send_moin_messages(data)", morgen_idx)
+        sport_idx = src.index("_send_habits_sport_message(", moin_idx)
         self.assertLess(moin_idx, sport_idx)
 
     def test_claude_md_has_sport_challenges_section(self):

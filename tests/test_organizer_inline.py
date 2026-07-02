@@ -144,7 +144,6 @@ def test_send_moin_messages_header_task_habit():
         assert any("Guten Morgen" in t for t in all_texts)
         assert any("Zahnarzt" in t for t in all_texts)
         assert any("PR Review" in t for t in all_texts)
-        assert any("Sport" in t for t in all_texts)
 
 def test_send_abend_messages_header_open_missed():
     from bots.organizer import _send_abend_messages
