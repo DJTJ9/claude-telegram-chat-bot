@@ -116,9 +116,9 @@ def test_send_task_message_no_projekt():
         assert "→" not in text
         assert "Einkaufen" in text
 
-def test_send_habit_message_taglich():
+def test_send_habit_message_with_zyklus():
     from bots.organizer import _send_habit_message
-    habit = {"name": "Sport", "interval": 1, "id": "hab001"}
+    habit = {"name": "Sport", "zyklus": "täglich", "id": "1"}
     with patch("bots.organizer.send_message") as mock_send:
         _send_habit_message(habit)
         args = mock_send.call_args[0]
@@ -126,14 +126,14 @@ def test_send_habit_message_taglich():
         markup = args[3] if len(args) > 3 else mock_send.call_args[1].get("reply_markup")
         assert "Sport" in text
         assert "täglich" in text
-        assert markup["inline_keyboard"][0][0]["callback_data"] == "habit_done:hab001"
+        assert markup["inline_keyboard"][0][0]["callback_data"] == "habit_done:1"
 
-def test_send_habit_message_interval():
+def test_send_habit_message_without_zyklus():
     from bots.organizer import _send_habit_message
-    habit = {"name": "Yoga", "interval": 3, "id": "hab002"}
+    habit = {"name": "Yoga", "zyklus": "", "id": "2"}
     with patch("bots.organizer.send_message") as mock_send:
         _send_habit_message(habit)
-        assert "alle 3 Tage" in mock_send.call_args[0][2]
+        assert mock_send.call_args[0][2] == "🔄 Yoga"
 
 def test_send_moin_messages_header_task_habit():
     from bots.organizer import _send_moin_messages
@@ -194,8 +194,8 @@ def test_callback_done_updates_message():
 
 def test_callback_habit_done():
     from bots.organizer import _handle_callback
-    cq = _make_cq("habit_done:hab001", text="🔄 Sport (täglich)")
-    with patch("bots.organizer.run_claude", return_value="✅ Sport — nächste Fälligkeit: 23.06.2026"), \
+    cq = _make_cq("habit_done:42", text="🔄 Sport (täglich)")
+    with patch("bots.organizer.nocodb_direct.mark_habit_done", return_value=True), \
          patch("bots.organizer.edit_message") as mock_edit:
         _handle_callback(cq)
         text = mock_edit.call_args[0][3]
