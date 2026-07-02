@@ -150,3 +150,31 @@ def archive_backlog_item(row_id: int) -> bool:
 
     r3 = requests.delete(_url(BACKLOG_TABLE_ID, row_id), headers=_headers())
     return r3.status_code == 200
+
+
+def create_task(title: str, datum: str, prio: str = "Niedrig") -> bool:
+    r = requests.post(_url(TASKS_TABLE_ID), headers=_headers(),
+                      json={"Title": title, "Datum": datum, "Priorität": prio,
+                            "Status": "Not started"})
+    return r.status_code in (200, 201)
+
+
+def fetch_tasks_month(year: int, month: int) -> dict:
+    prefix = f"{year:04d}-{month:02d}"
+    r = requests.get(_url(TASKS_TABLE_ID), headers=_headers(),
+                     params={"where": f"(Datum,like,{prefix}%)", "limit": 500})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+    termine, tasks_done, tasks_total = [], 0, 0
+    for row in rows:
+        datum = row.get("Datum") or ""
+        if "T" in datum:
+            termine.append({"name": row.get("Title", ""), "datum": datum,
+                            "time": datum.split("T")[1][:5],
+                            "prio": row.get("Priorität") or "Niedrig",
+                            "id": str(row["Id"])})
+        else:
+            tasks_total += 1
+            if row.get("Status") == "Done":
+                tasks_done += 1
+    termine.sort(key=lambda a: a["datum"])
+    return {"termine": termine, "tasks_done": tasks_done, "tasks_total": tasks_total}
