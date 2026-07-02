@@ -80,5 +80,35 @@ class TestProjectActionState(unittest.TestCase):
     def test_bug_sets_bug_capture_state(self):
         self.assertIn('_kb_state[chat_id] = f"bug_capture:{slug}"', ORG_SRC)
 
+class TestBugCapture(unittest.TestCase):
+    def test_summarize_bug_defined(self):
+        self.assertIn("def _summarize_bug(", ORG_SRC)
+
+    def test_summarize_bug_uses_groq(self):
+        idx = ORG_SRC.index("def _summarize_bug(")
+        snippet = ORG_SRC[idx:idx+300]
+        self.assertIn("Groq", snippet)
+
+    def test_bug_capture_state_checked(self):
+        self.assertIn('startswith("bug_capture:")', ORG_SRC)
+
+    def test_bug_capture_calls_nocodb_sync(self):
+        idx = ORG_SRC.index('startswith("bug_capture:")')
+        snippet = ORG_SRC[idx:idx+500]
+        self.assertIn("nocodb_sync.py", snippet)
+
+    def test_bug_capture_uses_insert_position_top(self):
+        idx = ORG_SRC.index('startswith("bug_capture:")')
+        snippet = ORG_SRC[idx:idx+700]
+        self.assertIn("insert-position", snippet)
+
+    def test_bug_feature_name_prefix(self):
+        self.assertIn('"Bug: "', ORG_SRC)
+
+    def test_abbrechen_returns_to_project_state(self):
+        idx = ORG_SRC.index('startswith("bug_capture:")')
+        snippet = ORG_SRC[idx:idx+400]
+        self.assertIn("⬅️ Abbrechen", snippet)
+
 if __name__ == "__main__":
     unittest.main()

@@ -533,6 +533,23 @@ def _send_moin_messages(data: dict) -> None:
         send_message(TOKEN, CHAT_ID, "Nichts zu tun heute 🎉")
 
 
+def _summarize_bug(text: str) -> str:
+    try:
+        from groq import Groq
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+        resp = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": "Fasse diesen Bug-Bericht in maximal 8 Wörtern zusammen. Nur die Zusammenfassung, kein Präfix."},
+                {"role": "user", "content": text},
+            ],
+            max_tokens=30,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception:
+        return text[:60]
+
+
 def _send_dev_status(chat_id: int, slug: str) -> None:
     status_path = HUB_DIR / "topics" / slug / "STATUS.md"
     if not status_path.exists():
@@ -1559,6 +1576,28 @@ def _handle_message(msg: dict) -> None:
             if active and active not in ("(none)", ""):
                 info += f"\n▸ {active}"
             send_message(TOKEN, chat_id, info, reply_markup=_project_action_kb())
+        return
+
+    if _kb_state.get(chat_id, "").startswith("bug_capture:"):
+        slug = _kb_state[chat_id][len("bug_capture:"):]
+        if t == "⬅️ Abbrechen":
+            _kb_state[chat_id] = f"project:{slug}"
+            send_message(TOKEN, chat_id, "❌ Abgebrochen.", reply_markup=_project_action_kb())
+            return
+        summary = _summarize_bug(t)
+        feature_name = "Bug: " + summary
+        subprocess.run(
+            ["python", str(WORK_DIR / "scripts" / "nocodb_sync.py"),
+             "--direction", "dev-to-nocodb",
+             "--slug", slug,
+             "--feature", feature_name,
+             "--status", "bug",
+             "--insert-position", "top"],
+            capture_output=True
+        )
+        _kb_state[chat_id] = f"project:{slug}"
+        send_message(TOKEN, chat_id, f"✅ Bug erfasst: {feature_name}",
+                     reply_markup=_project_action_kb())
         return
 
     state_val = _kb_state.get(chat_id, "")
