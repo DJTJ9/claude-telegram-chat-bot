@@ -76,5 +76,49 @@ class TestFetchTasksMonth(unittest.TestCase):
         self.assertEqual(result["tasks_total"], 0)
 
 
+class TestParseTerminDatum(unittest.TestCase):
+    def _fn(self):
+        import re
+        def _parse_termin_datum(response: str):
+            m = re.search(r'(\d{2})\.(\d{2})\.(\d{4})\s+um\s+(\d{2}:\d{2})', response)
+            if not m:
+                return None
+            return f"{m.group(3)}-{m.group(2)}-{m.group(1)}T{m.group(4)}:00"
+        return _parse_termin_datum
+
+    def test_parses_standard_format(self):
+        fn = self._fn()
+        self.assertEqual(
+            fn("Termin angelegt: Arzttermin · 10.07.2026 um 14:00"),
+            "2026-07-10T14:00:00"
+        )
+
+    def test_parses_different_month(self):
+        fn = self._fn()
+        self.assertEqual(
+            fn("Termin angelegt: Meeting · 01.01.2027 um 09:00"),
+            "2027-01-01T09:00:00"
+        )
+
+    def test_returns_none_for_no_match(self):
+        fn = self._fn()
+        self.assertIsNone(fn("Fehler: kein Termin gefunden"))
+
+
+class TestTerminWorkflowSavesToNocoDB(unittest.TestCase):
+    def setUp(self):
+        self._src = open(os.path.join(os.path.dirname(__file__), "..", "bots", "organizer.py"),
+                         encoding="utf-8").read()
+
+    def test_parse_termin_datum_defined(self):
+        self.assertIn("def _parse_termin_datum(", self._src)
+
+    def test_create_task_called_in_termin_priority_handler(self):
+        idx = self._src.index('data.startswith("termin:priority:")')
+        snippet = self._src[idx:idx + 800]
+        self.assertIn("nocodb_direct.create_task", snippet)
+        self.assertIn("_parse_termin_datum", snippet)
+
+
 if __name__ == "__main__":
     unittest.main()

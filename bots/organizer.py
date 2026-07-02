@@ -133,6 +133,12 @@ Leite aus dem Text ab:
   "um 14" oder "14 Uhr" → 14:00:00, "halb drei" → 14:30:00
 Antworte NUR mit einer Zeile: 📅 Termin angelegt: [Name] · [DD.MM.YYYY um HH:MM]"""
 
+def _parse_termin_datum(response: str) -> str | None:
+    m = re.search(r'(\d{2})\.(\d{2})\.(\d{4})\s+um\s+(\d{2}:\d{2})', response)
+    if not m:
+        return None
+    return f"{m.group(3)}-{m.group(2)}-{m.group(1)}T{m.group(4)}:00"
+
 BACKLOG_SYSTEM_PROMPT = f"""Du bist ein Notion-Backlog-Assistent. Der Nutzer nennt eine Aufgabe ohne festen Termin.
 Lege sie im Backlog an (data_source_id: {BACKLOG_DATA_SOURCE_ID}).
 Leite ab: Name, Priorität (Hoch/Mittel/Niedrig, Mittel falls nicht angegeben), Bereich (Arbeit/Privat/Lernen/Gesundheit, Privat falls unklar).
@@ -878,6 +884,9 @@ def _handle_callback(cq: dict) -> None:
             f"Heute ist {today}. Termin: {name}. Datum/Uhrzeit: {datum}. Priorität: {prio}.",
             system_prompt=TERMIN_SYSTEM_PROMPT, automated=True,
         )
+        datum_iso = _parse_termin_datum(result)
+        if datum_iso:
+            nocodb_direct.create_task(name, datum_iso, prio)
         send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
         return
 
