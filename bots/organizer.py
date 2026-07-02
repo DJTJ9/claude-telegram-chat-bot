@@ -28,7 +28,6 @@ HUB_DIR = Path(os.environ.get("HUB_DIR", str(WORK_DIR)))
 PORT = int(os.environ.get("PORT", "8002"))
 
 TAGESORGANIZER_ID      = "38b4bba29c5581a7bd94cef1b0cc6c58"
-HABITS_DATA_SOURCE_ID  = "6a4d7e7d-dcde-44e3-b7a0-c46330a6261c"
 BACKLOG_DATA_SOURCE_ID = "0cb18d17-cf70-413d-b29d-adb4675db614"
 ARCHIV_DATA_SOURCE_ID  = "38b4bba29c558102b9aecb790594aff6"
 SPORT_CHALLENGES_DB_ID = "38b4bba29c5581c88f49c67bb85f78c0"
@@ -296,15 +295,6 @@ Felder:
 Antworte NUR mit einer Zeile: ✏️ <Feld> → <Wert>
 Falls Page nicht gefunden: ❌ Page nicht gefunden: <page_id>"""
 
-HABIT_DONE_SYSTEM_PROMPT = f"""Du bist ein Habit-Assistent.
-Du erhältst eine Notion page_id aus der Habits-Datenbank (data_source_id: {HABITS_DATA_SOURCE_ID}).
-1. Lese den Habit — Properties "Name" und "Intervall" (Anzahl Tage als Zahl)
-2. Berechne Nächste Fälligkeit = heutiges Datum + Intervall Tage (ISO 8601)
-3. Setze Property "Nächste Fälligkeit" auf dieses Datum. Status bleibt "Aktiv".
-Antworte NUR mit: ✅ <Name> — nächste Fälligkeit: DD.MM.YYYY
-Falls nicht gefunden: ❌ Habit nicht gefunden: <page_id>"""
-
-
 SPORT_DONE_SYSTEM_PROMPT = f"""Du bist ein Sport-Assistent.
 Du erhältst eine Notion page_id aus der Sport-Challenges-Datenbank (data_source_id: {SPORT_CHALLENGES_DB_ID}).
 Setze die Property "Status" auf "Done".
@@ -460,9 +450,9 @@ def _send_task_message(task: dict) -> None:
 
 
 def _send_habit_message(habit: dict) -> None:
-    pid = habit["id"].replace("-", "")
-    freq = "täglich" if habit.get("interval", 1) == 1 else f"alle {habit['interval']} Tage"
-    text = f"🔄 {habit['name']} ({freq})"
+    pid = habit["id"]
+    suffix = f" ({habit['zyklus']})" if habit.get("zyklus") else ""
+    text = f"🔄 {habit['name']}{suffix}"
     buttons = [[{"text": "✅ Erledigt", "callback_data": f"habit_done:{pid}"}]]
     send_message(TOKEN, CHAT_ID, text, reply_markup={"inline_keyboard": buttons})
 
@@ -518,18 +508,13 @@ def _send_moin_messages(data: dict) -> None:
         buttons = [[{"text": f"✅ {task['name']}", "callback_data": f"done:{pid}"}]]
         send_message(TOKEN, CHAT_ID, label, reply_markup={"inline_keyboard": buttons})
 
-    for habit in data.get("habits", []):
+    habits = data.get("habits", [])
+    if habits:
+        send_message(TOKEN, CHAT_ID, f"🔁 Fällig heute ({len(habits)}):")
+    for habit in habits:
         _send_habit_message(habit)
 
-    proj_tasks = data.get("proj_tasks", [])
-    if proj_tasks:
-        lines = [f"🏗️ Projekt-Tasks heute ({len(proj_tasks)}):"]
-        for pt in proj_tasks:
-            icon = "🔨" if pt.get("status") == "In Arbeit" else "⬜"
-            lines.append(f"· {icon} {pt['name']} ({pt.get('projekt', '?')})")
-        send_message(TOKEN, CHAT_ID, "\n".join(lines))
-
-    if not tasks and not data.get("habits") and not proj_tasks:
+    if not tasks and not habits:
         send_message(TOKEN, CHAT_ID, "Nichts zu tun heute 🎉")
 
 
@@ -1152,12 +1137,12 @@ def _handle_callback(cq: dict) -> None:
 
     elif data.startswith("habit_done:"):
         pid = data[11:]
-        send_message(TOKEN, chat_id, "⏳ Habit wird aktualisiert...")
-        result = run_claude(
-            f"Heute ist {today}. page_id: {pid}.",
-            system_prompt=HABIT_DONE_SYSTEM_PROMPT, automated=True,
-        )
-        edit_message(TOKEN, chat_id, msg_id, result)
+        if not pid.isdigit():
+            answer_callback_query(TOKEN, cq["id"], "Veralteter Button – bitte neu laden.")
+            return
+        ok = nocodb_direct.mark_habit_done(int(pid))
+        label = _extract_name_from_message(msg_text)
+        edit_message(TOKEN, chat_id, msg_id, f"✅ {label} — erledigt!" if ok else "❌ Fehler")
 
     elif data.startswith("sport_done:"):
         pid = data[11:]
