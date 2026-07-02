@@ -97,16 +97,6 @@ Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
 Kein Markdown."""
 
 
-ZYKLEN_INSTANZ_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
-Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
-Schritt 1: Finde alle Eintraege mit Zyklus-Property != null/leer. Das sind Vorlagen.
-Schritt 2: Fuer jede Vorlage: existiert heute ({today}) schon eine Instanz?
-  (Eintrag gleicher Name, Datum = {today}, Status != Done, ohne Zyklus-Property)
-Schritt 3: Falls keine Instanz: erstelle neuen Eintrag mit Name = Vorlage-Name,
-  Datum = {today}, Status = Not started, Prioritaet = Vorlage-Prioritaet.
-  Zyklus-Property NICHT auf neuen Eintrag setzen.
-Antworte NUR mit: "{n} Zyklen instanziiert: Name1, Name2" oder "Keine faelligen Zyklen." """
-
 ZYKLEN_LIST_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
 Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Finde alle Eintraege mit Zyklus-Property != null/leer.
@@ -589,11 +579,6 @@ def _send_project_features(chat_id: int) -> None:
     send_message(TOKEN, chat_id, "\n".join(lines))
 
 
-def _instanz_zyklen(today: str) -> None:
-    prompt = ZYKLEN_INSTANZ_SYSTEM_PROMPT.replace("{today}", today)
-    run_claude(prompt, automated=True)
-
-
 def _send_abend_messages(data: dict) -> None:
     try:
         d = date.fromisoformat(data.get("date", date.today().isoformat()))
@@ -728,7 +713,7 @@ def start_workflow(kind: str, chat_id: int) -> None:
             reply_markup={"inline_keyboard": buttons})
 
     elif kind == "morgen":
-        _instanz_zyklen(today)
+        nocodb_direct.instantiate_recurring_tasks(today)
         send_message(TOKEN, chat_id, "⏳ Verarbeite...")
         data = nocodb_direct.fetch_tasks_today(today)
         _send_moin_messages(data)
