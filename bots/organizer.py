@@ -50,6 +50,37 @@ REPLY_KEYBOARD = {
 }
 
 
+def _main_reply_kb() -> dict:
+    return {
+        "keyboard": [
+            ["🔔 Notify AN", "🔕 Notify AUS", "📁 Projekte"],
+            ["📋 Task", "📅 Termin", "💡 Ideen"],
+            ["📚 Lern", "🌅 Morgen", "🌙 Abend"],
+            ["📆 Woche", "📥 Backlog"],
+            ["🔋 Energie", "🔄 Zyklen"],
+        ],
+        "resize_keyboard": True,
+        "one_time_keyboard": False,
+        "persistent": True,
+    }
+
+
+def _projekte_reply_kb(projects: list) -> dict:
+    rows = []
+    for i in range(0, len(projects), 2):
+        rows.append([p.get("name", p["slug"]) for p in projects[i:i+2]])
+    rows.append(["⬅️ Zurück"])
+    return {"keyboard": rows, "resize_keyboard": True, "one_time_keyboard": False}
+
+
+def _project_action_kb() -> dict:
+    return {
+        "keyboard": [["💡 Idee", "🐛 Bug"], ["📊 Dev Status"], ["⬅️ Zurück"]],
+        "resize_keyboard": True,
+        "one_time_keyboard": False,
+    }
+
+
 
 WOCHENSICHT_SYSTEM_PROMPT = """Du bist ein Notion-Wochenvorschau-Assistent.
 Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
@@ -372,6 +403,8 @@ BUTTON_MAP = {
 
 _workflow: dict = {}
 callback_state: dict = {}   # {chat_id: {action, page_id, task_name, field?, msg_id?}}
+_kb_state: dict = {}      # {chat_id: str}
+_projekte_data: dict = {}  # {chat_id: {display_name: slug}}
 
 
 def _extract_name_from_message(text: str) -> str:
@@ -1450,6 +1483,57 @@ def _handle_message(msg: dict) -> None:
 
     t = text.strip()
     response = None
+
+    if t == "🔔 Notify AN":
+        settings = load_settings()
+        settings["notifications_enabled"] = True
+        (WORK_DIR / "settings.json").write_text(json.dumps(settings, indent=2))
+        send_message(TOKEN, chat_id, "🔔 Benachrichtigungen AN", reply_markup=_main_reply_kb())
+        return
+
+    if t == "🔕 Notify AUS":
+        settings = load_settings()
+        settings["notifications_enabled"] = False
+        (WORK_DIR / "settings.json").write_text(json.dumps(settings, indent=2))
+        send_message(TOKEN, chat_id, "🔕 Benachrichtigungen AUS", reply_markup=_main_reply_kb())
+        return
+
+    if t in ("📁 Projekte", "🗂️ Projekte"):
+        result = subprocess.run(
+            ["python3", str(HUB_DIR / "scripts" / "dev_context.py"),
+             "--command", "projekte", "--hub-dir", str(HUB_DIR)],
+            capture_output=True, text=True
+        )
+        try:
+            projects = json.loads(result.stdout)
+        except Exception:
+            projects = []
+        _kb_state[chat_id] = "projekte"
+        _projekte_data[chat_id] = {p.get("name", p["slug"]): p["slug"] for p in projects}
+        msg, _ = _build_projekte_message()
+        send_message(TOKEN, chat_id, msg, reply_markup=_projekte_reply_kb(projects))
+        return
+
+    if _kb_state.get(chat_id) == "projekte":
+        if t == "⬅️ Zurück":
+            _kb_state[chat_id] = "main"
+            send_message(TOKEN, chat_id, "🏠 Hauptmenü", reply_markup=_main_reply_kb())
+            return
+        slug = _projekte_data.get(chat_id, {}).get(t)
+        if slug:
+            _kb_state[chat_id] = f"project:{slug}"
+            status_path = HUB_DIR / "topics" / slug / "STATUS.md"
+            active = ""
+            if status_path.exists():
+                for line in status_path.read_text().splitlines():
+                    if line.startswith("Active:"):
+                        active = line[7:].strip()
+                        break
+            info = f"📁 {t}"
+            if active and active not in ("(none)", ""):
+                info += f"\n▸ {active}"
+            send_message(TOKEN, chat_id, info, reply_markup=_project_action_kb())
+        return
 
     if t.lower().startswith("erinnere") or t.lower().startswith("erinnerung:"):
         now_time = datetime.now().strftime("%H:%M")
