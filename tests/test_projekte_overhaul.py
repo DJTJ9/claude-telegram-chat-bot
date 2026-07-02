@@ -58,5 +58,27 @@ class TestKbState(unittest.TestCase):
     def test_projekte_state_zurück_sets_main(self):
         self.assertIn('_kb_state[chat_id] = "main"', ORG_SRC)
 
+class TestProjectActionState(unittest.TestCase):
+    def test_send_dev_status_defined(self):
+        self.assertIn("def _send_dev_status(", ORG_SRC)
+
+    def test_dev_status_reads_status_md(self):
+        idx = ORG_SRC.index("def _send_dev_status(")
+        snippet = ORG_SRC[idx:idx+400]
+        self.assertIn("STATUS.md", snippet)
+
+    def test_project_state_zurück_sets_projekte(self):
+        occurrences = ORG_SRC.count('_kb_state[chat_id] = "projekte"')
+        self.assertGreaterEqual(occurrences, 2)
+
+    def test_idee_starts_idea_workflow(self):
+        self.assertIn('"idea_for_project:name"', ORG_SRC)
+
+    def test_dev_status_called_in_project_state(self):
+        self.assertIn("_send_dev_status(chat_id, slug)", ORG_SRC)
+
+    def test_bug_sets_bug_capture_state(self):
+        self.assertIn('_kb_state[chat_id] = f"bug_capture:{slug}"', ORG_SRC)
+
 if __name__ == "__main__":
     unittest.main()

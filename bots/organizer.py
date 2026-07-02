@@ -533,6 +533,32 @@ def _send_moin_messages(data: dict) -> None:
         send_message(TOKEN, CHAT_ID, "Nichts zu tun heute 🎉")
 
 
+def _send_dev_status(chat_id: int, slug: str) -> None:
+    status_path = HUB_DIR / "topics" / slug / "STATUS.md"
+    if not status_path.exists():
+        send_message(TOKEN, chat_id, f"❌ Kein STATUS.md für {slug}.",
+                     reply_markup=_project_action_kb())
+        return
+    active = phase = ""
+    roadmap = []
+    in_roadmap = False
+    for line in status_path.read_text().splitlines():
+        if line.startswith("Active:"):
+            active = line[7:].strip()
+        elif line.startswith("Phase:"):
+            phase = line[6:].strip()
+        elif line.startswith("## Roadmap"):
+            in_roadmap = True
+        elif in_roadmap and line.startswith("- [") and "[done]" not in line:
+            roadmap.append(line.strip())
+    lines = [f"📊 {slug}"]
+    if active and active not in ("(none)", ""):
+        lines.append(f"▸ {active} ({phase})")
+    for item in roadmap[:3]:
+        lines.append(item)
+    send_message(TOKEN, chat_id, "\n".join(lines), reply_markup=_project_action_kb())
+
+
 def _send_sport_challenges(chat_id: int) -> None:
     for ch in nocodb_direct.fetch_sport_challenges():
         buttons = [[{"text": "✅ Erledigt", "callback_data": f"sport_done:{ch['id']}"}]]
@@ -1533,6 +1559,38 @@ def _handle_message(msg: dict) -> None:
             if active and active not in ("(none)", ""):
                 info += f"\n▸ {active}"
             send_message(TOKEN, chat_id, info, reply_markup=_project_action_kb())
+        return
+
+    state_val = _kb_state.get(chat_id, "")
+    if state_val.startswith("project:"):
+        slug = state_val[len("project:"):]
+        if t == "⬅️ Zurück":
+            _kb_state[chat_id] = "projekte"
+            result = subprocess.run(
+                ["python3", str(HUB_DIR / "scripts" / "dev_context.py"),
+                 "--command", "projekte", "--hub-dir", str(HUB_DIR)],
+                capture_output=True, text=True
+            )
+            try:
+                projects = json.loads(result.stdout)
+            except Exception:
+                projects = []
+            _projekte_data[chat_id] = {p.get("name", p["slug"]): p["slug"] for p in projects}
+            msg, _ = _build_projekte_message()
+            send_message(TOKEN, chat_id, msg, reply_markup=_projekte_reply_kb(projects))
+            return
+        if t == "💡 Idee":
+            _workflow[chat_id] = {"step": "idea_for_project:name", "data": {"slug": slug}}
+            send_message(TOKEN, chat_id, f"💡 Idee für {slug}?\nKurz beschreiben:")
+            return
+        if t == "🐛 Bug":
+            _kb_state[chat_id] = f"bug_capture:{slug}"
+            send_message(TOKEN, chat_id, "Beschreibe den Bug (Text oder Sprachnachricht):",
+                         reply_markup={"keyboard": [["⬅️ Abbrechen"]], "resize_keyboard": True})
+            return
+        if t == "📊 Dev Status":
+            _send_dev_status(chat_id, slug)
+            return
         return
 
     if t.lower().startswith("erinnere") or t.lower().startswith("erinnerung:"):
