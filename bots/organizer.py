@@ -821,7 +821,9 @@ def start_workflow(kind: str, chat_id: int) -> None:
                 icon = PRIO_ICON.get(item.get("prio", ""), "⚪")
                 lines.append(f"{i}. {icon} {item['name']}")
                 buttons.append([{"text": f"✅ {item['name']}",
-                                  "callback_data": f"backlog_done:{item['id']}"}])
+                                  "callback_data": f"backlog_done:{item['id']}"},
+                                 {"text": "📅 Planen",
+                                  "callback_data": f"backlog_promote:{item['id']}"}])
             send_message(TOKEN, chat_id, "\n".join(lines),
                          reply_markup={"inline_keyboard": buttons + new_btn})
         _workflow.pop(chat_id, None)
@@ -1307,6 +1309,37 @@ def _handle_callback(cq: dict) -> None:
             send_message(TOKEN, chat_id, "❌ Fehler beim Einplanen.", reply_markup=REPLY_KEYBOARD)
         return
 
+    elif data.startswith("backlog_promote:") and data.count(":") == 1:
+        pid = data.split(":", 1)[1]
+        if not pid.isdigit():
+            answer_callback_query(TOKEN, cq["id"], "Veralteter Button – bitte neu laden.")
+            return
+        buttons = [[
+            {"text": "Morgen",        "callback_data": f"backlog_promote_d:{pid}:morgen"},
+            {"text": "Übermorgen",     "callback_data": f"backlog_promote_d:{pid}:uebermorgen"},
+        ], [
+            {"text": "Nächste Woche",  "callback_data": f"backlog_promote_d:{pid}:naechste_woche"},
+            {"text": "Datum eingeben", "callback_data": f"backlog_promote_d:{pid}:freitext"},
+        ]]
+        edit_message(TOKEN, chat_id, msg_id, msg_text, {"inline_keyboard": buttons})
+
+    elif data.startswith("backlog_promote_d:"):
+        parts = data.split(":", 2)
+        pid, date_key = parts[1], parts[2]
+        if date_key == "freitext":
+            callback_state[chat_id] = {
+                "action": "backlog_promote_freitext", "page_id": pid,
+            }
+            send_message(TOKEN, chat_id, "Welches Datum? (z.B. 2026-06-25)")
+        else:
+            target = _resolve_date_key(date_key, today)
+            answer_callback_query(TOKEN, cq["id"])
+            ok = nocodb_direct.promote_backlog_item(int(pid), target)
+            if ok:
+                send_message(TOKEN, chat_id, "✅ Als Task eingeplant.", reply_markup=REPLY_KEYBOARD)
+            else:
+                send_message(TOKEN, chat_id, "❌ Promoten fehlgeschlagen.", reply_markup=REPLY_KEYBOARD)
+
     elif data.startswith("reschedule:") and data.count(":") == 1:
         pid = data[11:]
         buttons = [[
@@ -1633,6 +1666,19 @@ def _handle_message(msg: dict) -> None:
             send_message(TOKEN, CHAT_ID,
                          f"📅 {cb.get('task_name', '')} — Datum aktualisiert",
                          reply_markup=REPLY_KEYBOARD)
+            return
+        elif cb["action"] == "backlog_promote_freitext":
+            del callback_state[chat_id]
+            target = _parse_user_date(text, date.fromisoformat(today))
+            if target is None:
+                send_message(TOKEN, CHAT_ID, "❌ Datum nicht erkannt. Bitte erneut versuchen.",
+                             reply_markup=REPLY_KEYBOARD)
+                return
+            ok = nocodb_direct.promote_backlog_item(int(cb["page_id"]), target)
+            if ok:
+                send_message(TOKEN, CHAT_ID, "✅ Als Task eingeplant.", reply_markup=REPLY_KEYBOARD)
+            else:
+                send_message(TOKEN, CHAT_ID, "❌ Promoten fehlgeschlagen.", reply_markup=REPLY_KEYBOARD)
             return
 
     if handle_workflow_step(text, chat_id, today):
