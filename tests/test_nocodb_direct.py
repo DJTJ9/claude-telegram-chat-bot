@@ -62,5 +62,42 @@ class TestMarkSportDone(unittest.TestCase):
         self.assertEqual(payload[0]["Status"], "Done")
 
 
+class TestFetchBacklogItems(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.get")
+    def test_returns_sorted_list(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            "list": [
+                {"Id": 1, "Name": "Task A", "Priorität": "Niedrig"},
+                {"Id": 2, "Name": "Task B", "Priorität": "Hoch"},
+            ]
+        }
+        from core.nocodb_direct import fetch_backlog_items
+        items = fetch_backlog_items()
+        self.assertEqual(items[0]["name"], "Task B")
+        self.assertEqual(items[0]["id"], "2")
+
+    @patch("core.nocodb_direct.requests.get")
+    def test_returns_empty_on_error(self, mock_get):
+        mock_get.return_value.status_code = 500
+        from core.nocodb_direct import fetch_backlog_items
+        self.assertEqual(fetch_backlog_items(), [])
+
+
+class TestCreateBacklogItem(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.post")
+    def test_posts_to_backlog_table(self, mock_post):
+        mock_post.return_value.status_code = 200
+        from core.nocodb_direct import create_backlog_item
+        result = create_backlog_item("Neue Aufgabe", "Mittel")
+        self.assertTrue(result)
+        url = mock_post.call_args[0][0]
+        self.assertIn("tbl_backlog", url)
+        payload = mock_post.call_args[1]["json"]
+        self.assertEqual(payload["Name"], "Neue Aufgabe")
+        self.assertEqual(payload["Status"], "Offen")
+        self.assertEqual(payload["Priorität"], "Mittel")
+
+
 if __name__ == "__main__":
     unittest.main()
