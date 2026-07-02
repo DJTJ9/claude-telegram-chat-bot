@@ -639,6 +639,10 @@ def _send_abend_messages(data: dict) -> None:
                      f"⚠️ {habit['name']} — heute fällig, nicht erledigt",
                      reply_markup={"inline_keyboard": buttons})
 
+    focus_buttons = [[{"text": "🚀 Projekt für morgen wählen", "callback_data": "focus_pick"}]]
+    send_message(TOKEN, CHAT_ID, "Welches Projekt ist dein Fokus für morgen?",
+                 reply_markup={"inline_keyboard": focus_buttons})
+
 
 
 def _build_projekte_message() -> tuple:
@@ -1091,6 +1095,31 @@ def _handle_callback(cq: dict) -> None:
         _abort = [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]
         send_message(TOKEN, chat_id, f"💡 Idee für {slug}?\nKurz beschreiben:",
                      reply_markup={"inline_keyboard": _abort})
+        return
+
+    if data == "focus_pick":
+        answer_callback_query(TOKEN, cq["id"])
+        registry = load_registry()
+        buttons = [
+            [{"text": proj.get("name", proj["slug"]),
+              "callback_data": f"focus_pick:{proj['slug']}"}]
+            for proj in registry
+        ]
+        send_message(TOKEN, chat_id, "🚀 Welches Projekt?",
+                     reply_markup={"inline_keyboard": buttons})
+        return
+
+    if data.startswith("focus_pick:"):
+        slug = data.split(":", 1)[1]
+        valid_slugs = {p["slug"] for p in load_registry()}
+        if slug not in valid_slugs:
+            answer_callback_query(TOKEN, cq["id"])
+            return
+        answer_callback_query(TOKEN, cq["id"])
+        nocodb_direct.set_focus_project(slug)
+        name = next((p.get("name", slug) for p in load_registry() if p["slug"] == slug), slug)
+        send_message(TOKEN, chat_id, f"🚀 {name} ist dein Fokus für morgen.",
+                     reply_markup=REPLY_KEYBOARD)
         return
 
     if data == "zyklen:neu":

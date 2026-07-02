@@ -68,3 +68,25 @@ class TestProjectFeaturesSection(unittest.TestCase):
         sport_idx = src.index("_send_sport_challenges(chat_id)", morgen_idx)
         feat_idx = src.index("_send_project_features(chat_id)", morgen_idx)
         self.assertLess(sport_idx, feat_idx)
+
+
+class TestFocusPickerButton(unittest.TestCase):
+    def test_focus_pick_button_in_abend_messages(self):
+        src = _src()
+        idx = src.index("def _send_abend_messages(")
+        end_idx = src.index("\n\n\n", idx)
+        block = src[idx:end_idx]
+        self.assertIn('"callback_data": "focus_pick"', block)
+        self.assertIn("🚀 Projekt für morgen wählen", block)
+
+
+class TestFocusPickCallbacks(unittest.TestCase):
+    def test_focus_pick_list_handler_exists(self):
+        self.assertIn('data == "focus_pick"', _src())
+
+    def test_focus_pick_select_handler_validates_slug(self):
+        src = _src()
+        idx = src.index('data.startswith("focus_pick:")')
+        block = src[idx:idx + 450]
+        self.assertIn("valid_slugs", block)
+        self.assertIn("nocodb_direct.set_focus_project(slug)", block)
