@@ -1,5 +1,5 @@
 import os, random, requests
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from core.state import load_registry
 
@@ -293,3 +293,49 @@ def get_focus_project() -> str | None:
     r = requests.get(_url(FOCUS_TABLE_ID), headers=_headers(), params={"limit": 1})
     rows = r.json().get("list", []) if r.status_code == 200 else []
     return rows[0].get("Slug") if rows else None
+
+
+def fetch_woche_data(date_iso: str) -> dict:
+    start = date.fromisoformat(date_iso)
+    end = start + timedelta(days=6)
+    end_iso = end.isoformat()
+
+    r = requests.get(_url(TASKS_TABLE_ID), headers=_headers(),
+                     params={"where": "(Status,neq,Done)", "limit": 500})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+
+    appointments, tasks = [], []
+    for row in rows:
+        datum = row.get("Datum") or ""
+        d_only = datum[:10]
+        if not d_only or not (date_iso <= d_only <= end_iso):
+            continue
+        entry = {"name": row.get("Title", ""), "prio": row.get("Priorität") or "Niedrig",
+                  "datum": d_only, "id": str(row["Id"])}
+        if "T" in datum:
+            entry["time"] = datum.split("T")[1][:5]
+            appointments.append(entry)
+        else:
+            tasks.append(entry)
+    appointments.sort(key=lambda a: (a["datum"], a.get("time", "")))
+    tasks.sort(key=lambda t: _PRIO_ORDER.get(t["prio"], 1))
+
+    habits = fetch_habits()
+    seen_habit_ids: set = set()
+    due_habits = []
+    for offset in range(7):
+        weekday = (start + timedelta(days=offset)).weekday()
+        for h in habits:
+            if h["id"] in seen_habit_ids or h["status"] == "Done":
+                continue
+            if _habit_due_today(h["zyklus"], weekday):
+                due_habits.append(h)
+                seen_habit_ids.add(h["id"])
+
+    backlog = [b for b in fetch_backlog_items() if b["prio"] == "Hoch"]
+    termin_days = sorted({a["datum"] for a in appointments})
+
+    return {"start": date_iso, "end": end_iso,
+            "appointments": appointments, "tasks": tasks,
+            "habits": due_habits, "backlog": backlog,
+            "termin_days": termin_days}
