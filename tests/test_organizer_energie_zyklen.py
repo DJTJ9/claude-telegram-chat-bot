@@ -44,20 +44,25 @@ class TestEnergieLevel(unittest.TestCase):
 
 
 class TestWochensicht(unittest.TestCase):
-    def test_wochensicht_prompt_defined(self):
-        self.assertIn("WOCHENSICHT_SYSTEM_PROMPT", _src())
+    def test_wochensicht_prompt_removed(self):
+        self.assertNotIn("WOCHENSICHT_SYSTEM_PROMPT", _src())
 
-    def test_wochensicht_prompt_forward(self):
-        src = _src()
-        idx = src.index("WOCHENSICHT_SYSTEM_PROMPT")
-        snippet = src[idx:idx+400]
-        self.assertIn("heute+7", snippet)
-
-    def test_woche_handler_uses_new_prompt(self):
+    def test_woche_handler_uses_fetch_woche_data(self):
         src = _src()
         woche_idx = src.index('kind == "woche"')
-        snippet = src[woche_idx:woche_idx+200]
-        self.assertIn("WOCHENSICHT_SYSTEM_PROMPT", snippet)
+        snippet = src[woche_idx:woche_idx + 600]
+        self.assertIn("fetch_woche_data", snippet)
+
+    def test_woche_frieze_marker_present(self):
+        self.assertIn("_build_wochenfries", _src())
+
+    def test_woche_prio_icons_defined(self):
+        src = _src()
+        idx = src.index("_format_woche_message")
+        snippet = src[idx:idx + 1200]
+        self.assertIn("🔴", snippet)
+        self.assertIn("🟡", snippet)
+        self.assertIn("🟢", snippet)
 
 
 class TestZyklenCRUD(unittest.TestCase):

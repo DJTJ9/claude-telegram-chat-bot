@@ -81,22 +81,6 @@ def _project_action_kb() -> dict:
 
 
 
-WOCHENSICHT_SYSTEM_PROMPT = """Du bist ein Notion-Wochenvorschau-Assistent.
-Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
-Finde alle Tasks mit Datum >= heute UND Datum <= heute+7, Status != Done.
-Gruppiere nach Datum, sortiere Tage chronologisch.
-Format:
-Zeile 1: "━━ Woche DD.MM – DD.MM ━━"
-Leerzeile
-Pro Tag (Mo bis So):
-  "Wochentag DD.MM"
-  Je Task: "  • [Name]  [Prio-Icon]"
-  Falls kein Task: "  —  frei"
-  Leerzeile
-Prio-Icons: Hoch=🔴 Mittel=🟡 Niedrig=🟢
-Kein Markdown."""
-
-
 ZYKLEN_LIST_SYSTEM_PROMPT = """Du bist ein Zyklen-Assistent.
 Lies den Tagesorganizer (data_source_id: 38b4bba29c5581a7bd94cef1b0cc6c58).
 Finde alle Eintraege mit Zyklus-Property != null/leer.
@@ -690,6 +674,80 @@ def _append_idea_hub(slug: str, text: str) -> None:
                 f.write(idea_line)
 
 
+_WOCHENTAGE_KURZ = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+_PRIO_ICON = {"Hoch": "🔴", "Mittel": "🟡", "Niedrig": "🟢"}
+
+
+def _build_wochenfries(start_iso: str, termin_days: list) -> str:
+    start = date.fromisoformat(start_iso)
+    termin_set = set(termin_days)
+    labels = []
+    for offset in range(7):
+        day = start + timedelta(days=offset)
+        label = _WOCHENTAGE_KURZ[day.weekday()]
+        if day.isoformat() in termin_set:
+            label += "🔴"
+        labels.append(label)
+    return "·".join(labels)
+
+
+def _format_woche_message(data: dict) -> tuple:
+    # Prio-Icons: 🔴 Hoch / 🟡 Mittel / 🟢 Niedrig
+    start = date.fromisoformat(data["start"])
+    end = date.fromisoformat(data["end"])
+    lines = [f"📆 WOCHENÜBERSICHT — {start.strftime('%a %d.%m')} – {end.strftime('%a %d.%m')}", ""]
+    lines.append(_build_wochenfries(data["start"], data["termin_days"]))
+    lines.append("        (🔴 = Termin an dem Tag)")
+    lines.append("")
+
+    lines.append("━━ 📅 Termine ━━")
+    if data["appointments"]:
+        current_day = None
+        for a in data["appointments"]:
+            if a["datum"] != current_day:
+                d = date.fromisoformat(a["datum"])
+                lines.append(d.strftime("%a %d.%m"))
+                current_day = a["datum"]
+            lines.append(f"  {a['time']}  {a['name']}")
+    else:
+        lines.append("  (keine Termine diese Woche)")
+    lines.append("")
+
+    lines.append("━━ ✅ Tasks (7 Tage) ━━")
+    if data["tasks"]:
+        by_prio: dict = {}
+        for t in data["tasks"]:
+            by_prio.setdefault(t["prio"], []).append(t)
+        for prio in ("Hoch", "Mittel", "Niedrig"):
+            if prio in by_prio:
+                lines.append(f"{_PRIO_ICON[prio]} {prio}")
+                for t in by_prio[prio]:
+                    lines.append(f"  • {t['name']}")
+    else:
+        lines.append("  (keine Tasks diese Woche)")
+    lines.append("")
+
+    lines.append("━━ 🔁 Habits fällig ━━")
+    if data["habits"]:
+        for h in data["habits"]:
+            lines.append(f"🔁 {h['name']} ({h['zyklus'] or 'täglich'})")
+    else:
+        lines.append("  (keine fälligen Habits)")
+    lines.append("")
+
+    buttons = []
+    lines.append("━━ 📥 Backlog (Hoch) ━━")
+    if data["backlog"]:
+        for i, b in enumerate(data["backlog"], 1):
+            lines.append(f"{i}. {b['name']}")
+            buttons.append([{"text": f"📥 Einplanen: {b['name']}",
+                              "callback_data": f"woche_promote:{b['id']}"}])
+    else:
+        lines.append("  (kein Backlog mit Priorität Hoch)")
+
+    return "\n".join(lines), buttons
+
+
 def start_workflow(kind: str, chat_id: int) -> None:
     today = date.today().isoformat()
     _workflow[chat_id] = {"step": f"{kind}:init", "data": {}}
@@ -743,9 +801,10 @@ def start_workflow(kind: str, chat_id: int) -> None:
         _workflow.pop(chat_id, None)
 
     elif kind == "woche":
-        send_message(TOKEN, chat_id, "⏳ Verarbeite...")
-        response = run_claude(f"Heute ist {today}.", system_prompt=WOCHENSICHT_SYSTEM_PROMPT)
-        send_message(TOKEN, chat_id, response, reply_markup=REPLY_KEYBOARD)
+        data = nocodb_direct.fetch_woche_data(today)
+        text, buttons = _format_woche_message(data)
+        reply_markup = {"inline_keyboard": buttons} if buttons else REPLY_KEYBOARD
+        send_message(TOKEN, chat_id, text, reply_markup=reply_markup)
         _workflow.pop(chat_id, None)
 
     elif kind == "backlog_list":
