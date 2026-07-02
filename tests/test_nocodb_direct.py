@@ -17,6 +17,7 @@ from core.nocodb_direct import (
     _habit_due_today, fetch_habits_due,
     fetch_project_features, set_focus_project, get_focus_project,
     fetch_project_bilanz, fetch_abend_data,
+    instantiate_recurring_tasks,
 )
 
 
@@ -285,6 +286,51 @@ class TestFetchAbendDataBilanzHabits(unittest.TestCase):
         result = fetch_abend_data("2026-07-06")
 
         self.assertEqual(result["projekt_bilanz"], [])
+
+
+class TestInstantiateRecurringTasks(unittest.TestCase):
+    @patch("core.nocodb_direct.create_task")
+    @patch("core.nocodb_direct.requests.get")
+    def test_creates_instance_for_due_template_without_existing_instance(self, mock_get, mock_create):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [
+            {"Id": 1, "Title": "Sport", "Zyklus": "täglich", "Priorität": "Mittel", "Datum": None, "Status": "Not started"},
+        ]}
+        mock_create.return_value = True
+        result = instantiate_recurring_tasks("2026-07-06")  # Montag
+        self.assertEqual(result, ["Sport"])
+        mock_create.assert_called_once_with("Sport", "2026-07-06", "Mittel")
+
+    @patch("core.nocodb_direct.create_task")
+    @patch("core.nocodb_direct.requests.get")
+    def test_skips_template_when_instance_already_exists_today(self, mock_get, mock_create):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [
+            {"Id": 1, "Title": "Sport", "Zyklus": "täglich", "Priorität": "Mittel", "Datum": None, "Status": "Not started"},
+            {"Id": 2, "Title": "Sport", "Zyklus": None, "Priorität": "Mittel", "Datum": "2026-07-06", "Status": "Not started"},
+        ]}
+        result = instantiate_recurring_tasks("2026-07-06")
+        self.assertEqual(result, [])
+        mock_create.assert_not_called()
+
+    @patch("core.nocodb_direct.create_task")
+    @patch("core.nocodb_direct.requests.get")
+    def test_skips_template_not_due_today(self, mock_get, mock_create):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [
+            {"Id": 1, "Title": "Meditieren", "Zyklus": "montags", "Priorität": "Niedrig", "Datum": None, "Status": "Not started"},
+        ]}
+        result = instantiate_recurring_tasks("2026-07-07")  # Dienstag
+        self.assertEqual(result, [])
+        mock_create.assert_not_called()
+
+    @patch("core.nocodb_direct.requests.get")
+    def test_returns_empty_list_without_templates(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [
+            {"Id": 1, "Title": "Einkaufen", "Zyklus": None, "Priorität": "Niedrig", "Datum": "2026-07-06", "Status": "Not started"},
+        ]}
+        self.assertEqual(instantiate_recurring_tasks("2026-07-06"), [])
 
 
 if __name__ == "__main__":

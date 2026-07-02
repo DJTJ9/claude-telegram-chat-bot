@@ -257,6 +257,26 @@ def fetch_project_bilanz(table_id: str) -> dict:
     return {"done": done, "open": open_count}
 
 
+def instantiate_recurring_tasks(date_iso: str) -> list:
+    weekday = date.fromisoformat(date_iso).weekday()
+    r = requests.get(_url(TASKS_TABLE_ID), headers=_headers(), params={"limit": 200})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+    templates = [row for row in rows if row.get("Zyklus")]
+    existing_today = {row.get("Title", "") for row in rows
+                       if (row.get("Datum") or "").startswith(date_iso) and row.get("Status") != "Done"}
+    created = []
+    for tpl in templates:
+        name = tpl.get("Title", "")
+        if name in existing_today:
+            continue
+        if not _habit_due_today(tpl.get("Zyklus", ""), weekday):
+            continue
+        prio = tpl.get("Priorität") or "Niedrig"
+        if create_task(name, date_iso, prio):
+            created.append(name)
+    return created
+
+
 def set_focus_project(slug: str) -> bool:
     r = requests.get(_url(FOCUS_TABLE_ID), headers=_headers(), params={"limit": 1})
     rows = r.json().get("list", []) if r.status_code == 200 else []
