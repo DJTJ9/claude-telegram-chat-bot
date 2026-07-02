@@ -474,38 +474,41 @@ def _send_moin_messages(data: dict) -> None:
     send_message(TOKEN, CHAT_ID, header, reply_markup=REPLY_KEYBOARD)
 
     appts = data.get("appointments", [])
+    lines = []
     if appts:
-        lines = [f"📅 Termine heute ({len(appts)}):"]
+        lines.append(f"📅 Termine heute ({len(appts)}):")
         for a in appts:
             lines.append(f"· {a['time']} · {a['name']}")
-        send_message(TOKEN, CHAT_ID, "\n".join(lines))
 
-    # Energie-basierte Sortierung
     if energie_level == "niedrig":
         prio_order = {"Niedrig": 0, "Mittel": 1, "Hoch": 2}
     else:
         prio_order = {"Hoch": 0, "Mittel": 1, "Niedrig": 2}
     sorted_tasks = sorted(tasks, key=lambda t: prio_order.get(t.get("prio", "Mittel"), 1))
 
-    for task in sorted_tasks:
-        pid = task["id"].replace("-", "")
-        prio_icon = PRIO_ICONS.get(task.get("prio", ""), "")
-        label = f"{prio_icon} {task['name']}" if prio_icon else task["name"]
-        if task.get("projekt"):
-            label += f"  →{task['projekt']}"
-        if energie_level == "niedrig" and task.get("prio") == "Hoch":
-            label += "  ↔ Verschieben?"
-        buttons = [[{"text": f"✅ {task['name']}", "callback_data": f"done:{pid}"}]]
-        send_message(TOKEN, CHAT_ID, label, reply_markup={"inline_keyboard": buttons})
+    buttons = []
+    if sorted_tasks:
+        if lines:
+            lines.append("")
+        lines.append(f"📋 Aufgaben heute ({len(sorted_tasks)}):")
+        for task in sorted_tasks:
+            pid = task["id"].replace("-", "")
+            prio_icon = PRIO_ICONS.get(task.get("prio", ""), "")
+            label = f"{prio_icon} {task['name']}" if prio_icon else task["name"]
+            if task.get("projekt"):
+                label += f"  →{task['projekt']}"
+            if energie_level == "niedrig" and task.get("prio") == "Hoch":
+                label += "  ↔ Verschieben?"
+            lines.append(f"· {label}")
+            buttons.append([{"text": f"✅ {task['name']}", "callback_data": f"done:{pid}"}])
 
-    habits = data.get("habits", [])
-    if habits:
-        send_message(TOKEN, CHAT_ID, f"🔁 Fällig heute ({len(habits)}):")
-    for habit in habits:
-        _send_habit_message(habit)
-
-    if not tasks and not habits:
-        send_message(TOKEN, CHAT_ID, "Nichts zu tun heute 🎉")
+    if lines:
+        text = "\n".join(lines)
+        markup = {"inline_keyboard": buttons} if buttons else None
+    else:
+        text = "Nichts zu tun heute 🎉"
+        markup = None
+    send_message(TOKEN, CHAT_ID, text, reply_markup=markup)
 
 
 def _summarize_bug(text: str) -> str:

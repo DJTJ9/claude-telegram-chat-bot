@@ -21,3 +21,29 @@ class TestZyklenUsesNocodb(unittest.TestCase):
 
     def test_zyklen_system_prompt_removed(self):
         self.assertNotIn("ZYKLEN_INSTANZ_SYSTEM_PROMPT =", _src())
+
+
+class TestMoinMessagesConsolidated(unittest.TestCase):
+    def test_moin_sends_termine_and_tasks_in_one_message(self):
+        src = _src()
+        idx = src.index("def _send_moin_messages(")
+        end_idx = src.index("\n\n\n", idx)
+        block = src[idx:end_idx]
+        send_calls = block.count("send_message(TOKEN, CHAT_ID")
+        # genau 2: Header-Nachricht + eine konsolidierte Termine+Tasks-Nachricht (oder Fallback)
+        self.assertEqual(send_calls, 2)
+
+    def test_moin_task_buttons_use_multi_row_keyboard(self):
+        src = _src()
+        idx = src.index("def _send_moin_messages(")
+        end_idx = src.index("\n\n\n", idx)
+        block = src[idx:end_idx]
+        self.assertIn("buttons.append(", block)
+        self.assertIn('"inline_keyboard": buttons', block)
+
+    def test_moin_no_longer_handles_habits(self):
+        src = _src()
+        idx = src.index("def _send_moin_messages(")
+        end_idx = src.index("\n\n\n", idx)
+        block = src[idx:end_idx]
+        self.assertNotIn('data.get("habits"', block)
