@@ -70,6 +70,35 @@ def mark_habit_done(row_id: int) -> bool:
     return r.status_code == 200
 
 
+_ZYKLUS_WOCHENTAGE = {
+    0: "montags", 1: "dienstags", 2: "mittwochs", 3: "donnerstags",
+    4: "freitags", 5: "samstags", 6: "sonntags",
+}
+
+
+def _habit_due_today(zyklus: str, weekday: int) -> bool:
+    z = (zyklus or "").strip().lower()
+    if not z or z == "täglich":
+        return True
+    if z == "wochentags":
+        return weekday < 5
+    if z == "wochenends":
+        return weekday >= 5
+    if z == _ZYKLUS_WOCHENTAGE.get(weekday):
+        return True
+    if z in _ZYKLUS_WOCHENTAGE.values():
+        return False
+    # "alle N Tage" / Tag-im-Monat-Listen brauchen ein Anker-Datum, das die
+    # Habits-Tabelle nicht hat -> als immer fällig behandeln.
+    return True
+
+
+def fetch_habits_due(date_iso: str) -> list:
+    weekday = date.fromisoformat(date_iso).weekday()
+    return [h for h in fetch_habits()
+            if h["status"] != "Done" and _habit_due_today(h["zyklus"], weekday)]
+
+
 _PRIO_ORDER: dict = {"Hoch": 0, "Mittel": 1, "Niedrig": 2}
 
 
@@ -100,7 +129,7 @@ def fetch_tasks_today(date_iso: str) -> dict:
     appointments.sort(key=lambda a: a.get("time", ""))
     tasks.sort(key=lambda t: _PRIO_ORDER.get(t["prio"], 1))
     return {"date": date_iso, "appointments": appointments, "tasks": tasks,
-            "habits": [], "proj_tasks": []}
+            "habits": fetch_habits_due(date_iso), "proj_tasks": []}
 
 
 def fetch_abend_data(date_iso: str) -> dict:

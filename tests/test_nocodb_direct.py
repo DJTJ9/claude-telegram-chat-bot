@@ -11,7 +11,10 @@ os.environ.setdefault("NOCODB_IDEENSAMMLUNG_TABLE_ID", "tbl_ideas")
 os.environ.setdefault("NOCODB_BACKLOG_TABLE_ID", "tbl_backlog")
 os.environ.setdefault("NOCODB_ARCHIV_TABLE_ID", "tbl_archiv")
 
-from core.nocodb_direct import mark_done, reschedule, add_idea, mark_sport_done
+from core.nocodb_direct import (
+    mark_done, reschedule, add_idea, mark_sport_done,
+    _habit_due_today, fetch_habits_due,
+)
 
 
 class TestMarkDone(unittest.TestCase):
@@ -97,6 +100,55 @@ class TestCreateBacklogItem(unittest.TestCase):
         self.assertEqual(payload["Name"], "Neue Aufgabe")
         self.assertEqual(payload["Status"], "Offen")
         self.assertEqual(payload["Priorität"], "Mittel")
+
+
+class TestHabitDueToday(unittest.TestCase):
+    def test_taeglich_always_due(self):
+        self.assertTrue(_habit_due_today("täglich", weekday=2))
+
+    def test_specific_weekday_matches(self):
+        self.assertTrue(_habit_due_today("montags", weekday=0))
+
+    def test_specific_weekday_does_not_match_other_day(self):
+        self.assertFalse(_habit_due_today("montags", weekday=1))
+
+    def test_wochentags_true_on_weekday(self):
+        self.assertTrue(_habit_due_today("wochentags", weekday=3))
+
+    def test_wochentags_false_on_weekend(self):
+        self.assertFalse(_habit_due_today("wochentags", weekday=5))
+
+    def test_wochenends_true_on_saturday(self):
+        self.assertTrue(_habit_due_today("wochenends", weekday=5))
+
+    def test_unknown_format_defaults_to_due(self):
+        self.assertTrue(_habit_due_today("alle 3 Tage", weekday=0))
+
+    def test_empty_zyklus_defaults_to_due(self):
+        self.assertTrue(_habit_due_today("", weekday=0))
+
+
+class TestFetchHabitsDue(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.get")
+    def test_filters_done_and_keeps_due(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [
+            {"Id": 1, "Name": "Laufen", "Kategorie": "Gesundheit", "Zyklus": "täglich", "Status": "Not Started"},
+            {"Id": 2, "Name": "Meditieren", "Kategorie": "Gesundheit", "Zyklus": "montags", "Status": "Not Started"},
+            {"Id": 3, "Name": "Lesen", "Kategorie": "Lernen", "Zyklus": "täglich", "Status": "Done"},
+        ]}
+        result = fetch_habits_due("2026-07-06")  # Montag
+        names = [h["name"] for h in result]
+        self.assertEqual(names, ["Laufen", "Meditieren"])
+
+    @patch("core.nocodb_direct.requests.get")
+    def test_excludes_habit_not_due_today(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [
+            {"Id": 1, "Name": "Meditieren", "Kategorie": "Gesundheit", "Zyklus": "montags", "Status": "Not Started"},
+        ]}
+        result = fetch_habits_due("2026-07-07")  # Dienstag
+        self.assertEqual(result, [])
 
 
 if __name__ == "__main__":
