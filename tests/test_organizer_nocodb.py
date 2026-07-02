@@ -95,3 +95,22 @@ def test_backlog_new_button_in_backlog_list():
     idx = src.index('kind == "backlog_list"')
     snippet = src[idx:idx+700]
     assert "backlog:new" in snippet
+
+
+def test_termin_priority_no_llm_call():
+    idx = src.index('data.startswith("termin:priority:")')
+    snippet = src[idx:idx+450]
+    assert "run_claude" not in snippet
+    assert "TERMIN_SYSTEM_PROMPT" not in snippet
+
+
+def test_termin_priority_uses_parse_user_date():
+    idx = src.index('data.startswith("termin:priority:")')
+    snippet = src[idx:idx+450]
+    assert "_parse_user_date" in snippet
+
+
+def test_termin_priority_uses_create_task():
+    idx = src.index('data.startswith("termin:priority:")')
+    snippet = src[idx:idx+450]
+    assert "nocodb_direct.create_task" in snippet

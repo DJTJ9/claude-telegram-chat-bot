@@ -923,22 +923,24 @@ def _handle_callback(cq: dict) -> None:
         send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
         return
 
-    # Termin: final priority step
     if data.startswith("termin:priority:"):
-        prio_key = data.split(":")[-1]
-        prio = {"hoch": "Hoch", "mittel": "Mittel", "niedrig": "Niedrig"}.get(prio_key, "Mittel")
-        state = _workflow.pop(chat_id, {})
-        name = state.get("data", {}).get("name", "?")
-        datum = state.get("data", {}).get("datum", "heute")
-        answer_callback_query(TOKEN, cq["id"])
-        result = run_claude(
-            f"Heute ist {today}. Termin: {name}. Datum/Uhrzeit: {datum}. Priorität: {prio}.",
-            system_prompt=TERMIN_SYSTEM_PROMPT, automated=True,
-        )
-        datum_iso = _parse_termin_datum(result)
+        prio={"hoch":"Hoch","mittel":"Mittel","niedrig":"Niedrig"}.get(data.split(":")[-1],"Mittel")
+        state=_workflow.pop(chat_id,{})
+        name=state.get("data",{}).get("name","?")
+        dr=state.get("data",{}).get("datum","heute")
+        answer_callback_query(TOKEN,cq["id"])
+        datum_iso=_parse_user_date(dr,date.today())
         if datum_iso:
-            nocodb_direct.create_task(name, datum_iso, prio)
-        send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
+            nocodb_direct.create_task(name,datum_iso,prio)
+            d=datum_iso[:10]
+            d_display=f"{d[8:]}.{d[5:7]}.{d[:4]}"
+            send_message(TOKEN,chat_id,
+                         f"📅 Termin angelegt: {name} · {d_display} um {datum_iso[11:16]}",
+                         reply_markup=REPLY_KEYBOARD)
+        else:
+            send_message(TOKEN,chat_id,
+                         f'❌ Datum nicht erkannt: "{dr}". Bitte YYYY-MM-DD eingeben.',
+                         reply_markup=REPLY_KEYBOARD)
         return
 
     # Ideen: typ selection → move to name step
