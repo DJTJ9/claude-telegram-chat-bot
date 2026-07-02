@@ -73,6 +73,12 @@ def _write_relay_response(request_id: str, answer: str) -> None:
 
 def _check_relay_question() -> None:
     global _relay_request_id
+    try:
+        settings = json.loads((WORK_DIR / "settings.json").read_text())
+        if not settings.get("notifications_enabled", False):
+            return
+    except Exception:
+        return
     pq_path = WORK_DIR / "pending_question.json"
     if not pq_path.exists():
         return
