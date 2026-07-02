@@ -47,3 +47,31 @@ class TestMoinMessagesConsolidated(unittest.TestCase):
         end_idx = src.index("\n\n\n", idx)
         block = src[idx:end_idx]
         self.assertNotIn('data.get("habits"', block)
+
+
+class TestHabitsSportMessageConsolidated(unittest.TestCase):
+    def test_send_habits_sport_message_defined(self):
+        self.assertIn("def _send_habits_sport_message(", _src())
+
+    def test_habits_sport_message_uses_both_callback_prefixes(self):
+        src = _src()
+        idx = src.index("def _send_habits_sport_message(")
+        end_idx = src.index("\n\n\n", idx)
+        block = src[idx:end_idx]
+        self.assertIn('"habit_done:', block)
+        self.assertIn('"sport_done:', block)
+        self.assertIn('"inline_keyboard": buttons', block)
+
+    def test_send_sport_challenges_function_removed(self):
+        self.assertNotIn("def _send_sport_challenges(", _src())
+
+    def test_morgen_calls_habits_sport_message_after_moin(self):
+        src = _src()
+        morgen_idx = src.index('elif kind == "morgen":')
+        next_elif = src.index('elif kind ==', morgen_idx + 1)
+        block = src[morgen_idx:next_elif]
+        moin_idx = block.index("_send_moin_messages(data)")
+        habits_sport_idx = block.index("_send_habits_sport_message(")
+        feat_idx = block.index("_send_project_features(chat_id)")
+        self.assertLess(moin_idx, habits_sport_idx)
+        self.assertLess(habits_sport_idx, feat_idx)

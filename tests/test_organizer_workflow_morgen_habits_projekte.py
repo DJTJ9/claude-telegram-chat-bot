@@ -45,8 +45,9 @@ class TestHabitDoneCallbackUsesNocodb(unittest.TestCase):
 class TestSportChallengeHeader(unittest.TestCase):
     def test_sport_header_present(self):
         src = _src()
-        idx = src.index("def _send_sport_challenges(")
-        block = src[idx:idx + 400]
+        idx = src.index("def _send_habits_sport_message(")
+        end_idx = src.index("\n\n\n", idx)
+        block = src[idx:end_idx]
         self.assertIn("🔁 Sport Challenge", block)
 
 
@@ -65,7 +66,7 @@ class TestProjectFeaturesSection(unittest.TestCase):
     def test_project_features_called_after_sport_in_morgen(self):
         src = _src()
         morgen_idx = src.index('elif kind == "morgen":')
-        sport_idx = src.index("_send_sport_challenges(chat_id)", morgen_idx)
+        sport_idx = src.index("_send_habits_sport_message(", morgen_idx)
         feat_idx = src.index("_send_project_features(chat_id)", morgen_idx)
         self.assertLess(sport_idx, feat_idx)
 

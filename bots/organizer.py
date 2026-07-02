@@ -554,14 +554,25 @@ def _send_dev_status(chat_id: int, slug: str) -> None:
     send_message(TOKEN, chat_id, "\n".join(lines), reply_markup=_project_action_kb())
 
 
-def _send_sport_challenges(chat_id: int) -> None:
-    challenges = nocodb_direct.fetch_sport_challenges()
-    if challenges:
-        send_message(TOKEN, chat_id, "🔁 Sport Challenge:")
-    for ch in challenges:
-        buttons = [[{"text": "✅ Erledigt", "callback_data": f"sport_done:{ch['id']}"}]]
-        send_message(TOKEN, chat_id, f"🏋️ {ch['kategorie']}: {ch['name']}",
-                     reply_markup={"inline_keyboard": buttons})
+def _send_habits_sport_message(chat_id: int, habits: list, sport_challenges: list) -> None:
+    if not habits and not sport_challenges:
+        return
+    lines = []
+    buttons = []
+    if habits:
+        lines.append(f"🔁 Fällig heute ({len(habits)}):")
+        for habit in habits:
+            suffix = f" ({habit['zyklus']})" if habit.get("zyklus") else ""
+            lines.append(f"· {habit['name']}{suffix}")
+            buttons.append([{"text": f"✅ {habit['name']}", "callback_data": f"habit_done:{habit['id']}"}])
+    if sport_challenges:
+        if lines:
+            lines.append("")
+        lines.append("🔁 Sport Challenge:")
+        for ch in sport_challenges:
+            lines.append(f"· {ch['kategorie']}: {ch['name']}")
+            buttons.append([{"text": f"✅ {ch['name']}", "callback_data": f"sport_done:{ch['id']}"}])
+    send_message(TOKEN, chat_id, "\n".join(lines), reply_markup={"inline_keyboard": buttons})
 
 
 def _send_project_features(chat_id: int) -> None:
@@ -720,7 +731,8 @@ def start_workflow(kind: str, chat_id: int) -> None:
         send_message(TOKEN, chat_id, "⏳ Verarbeite...")
         data = nocodb_direct.fetch_tasks_today(today)
         _send_moin_messages(data)
-        _send_sport_challenges(chat_id)
+        sport_challenges = nocodb_direct.fetch_sport_challenges()
+        _send_habits_sport_message(chat_id, data.get("habits", []), sport_challenges)
         _send_project_features(chat_id)
         _workflow.pop(chat_id, None)
 
