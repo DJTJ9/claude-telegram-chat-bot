@@ -866,16 +866,12 @@ def _handle_callback(cq: dict) -> None:
 
     # Task: final priority step
     if data.startswith("task:priority:"):
-        prio_key = data.split(":")[-1]
-        prio = {"hoch": "Hoch", "mittel": "Mittel", "niedrig": "Niedrig"}.get(prio_key, "Mittel")
-        state = _workflow.pop(chat_id, {})
-        name = state.get("data", {}).get("name", "?")
-        answer_callback_query(TOKEN, cq["id"])
-        result = run_claude(
-            f"Heute ist {today}. Backlog-Aufgabe: {name}. Priorität: {prio}.",
-            system_prompt=BACKLOG_SYSTEM_PROMPT, automated=True,
-        )
-        send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
+        prio={"hoch":"Hoch","mittel":"Mittel","niedrig":"Niedrig"}.get(data.split(":")[-1],"Mittel")
+        name=_workflow.pop(chat_id,{}).get("data",{}).get("name","?")
+        msg=f"✅ Task angelegt: {name} · {prio}"
+        nocodb_direct.create_task(name,today,prio)
+        answer_callback_query(TOKEN,cq["id"])
+        send_message(TOKEN,chat_id,msg,reply_markup=REPLY_KEYBOARD)
         return
 
     # Lern: kategorie step

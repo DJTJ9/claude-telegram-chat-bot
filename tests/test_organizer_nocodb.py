@@ -52,3 +52,21 @@ def test_reschedule_uses_nocodb():
 
 def test_int_conversion_in_callbacks():
     assert "int(pid)" in src
+
+
+def test_task_priority_callback_uses_nocodb():
+    idx = src.index('data.startswith("task:priority:")')
+    snippet = src[idx:idx+300]
+    assert "nocodb_direct.create_task" in snippet
+
+
+def test_task_priority_no_backlog_system_prompt():
+    idx = src.index('data.startswith("task:priority:")')
+    snippet = src[idx:idx+300]
+    assert "BACKLOG_SYSTEM_PROMPT" not in snippet
+
+
+def test_task_priority_confirmation_message():
+    idx = src.index('data.startswith("task:priority:")')
+    snippet = src[idx:idx+300]
+    assert "✅ Task angelegt" in snippet
