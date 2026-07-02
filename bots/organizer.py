@@ -662,29 +662,29 @@ def start_workflow(kind: str, chat_id: int) -> None:
         _workflow.pop(chat_id, None)
 
     elif kind == "backlog_list":
-        send_message(TOKEN, chat_id, "⏳ Verarbeite...")
-        raw = run_claude_parse(f"Heute ist {today}.", system_prompt=BACKLOG_JSON_SYSTEM_PROMPT)
-        try:
-            items = json.loads(raw).get("items", [])
-        except (json.JSONDecodeError, ValueError):
-            items = []
-
+        items = nocodb_direct.fetch_backlog_items()
+        PRIO_ICON = {"Hoch": "🔴", "Mittel": "🟡", "Niedrig": "🟢"}
+        new_btn = [[{"text": "➕ Neuer Eintrag", "callback_data": "backlog:new"}]]
         if not items:
-            send_message(TOKEN, chat_id, "📌 Backlog leer.", reply_markup=REPLY_KEYBOARD)
+            send_message(TOKEN, chat_id, "📌 Backlog leer.",
+                         reply_markup={"inline_keyboard": new_btn})
         else:
-            PRIO_ICON = {"Hoch": "🔴", "Mittel": "🟡", "Niedrig": "🟢"}
             lines = [f"📌 Backlog ({len(items)} offen):"]
             buttons = []
             for i, item in enumerate(items, 1):
                 icon = PRIO_ICON.get(item.get("prio", ""), "⚪")
                 lines.append(f"{i}. {icon} {item['name']}")
-                pid = item["id"].replace("-", "")
-                buttons.append([
-                    {"text": f"✅ {item['name']}", "callback_data": f"backlog_done:{pid}"},
-                ])
+                buttons.append([{"text": f"✅ {item['name']}",
+                                  "callback_data": f"backlog_done:{item['id']}"}])
             send_message(TOKEN, chat_id, "\n".join(lines),
-                         reply_markup={"inline_keyboard": buttons})
+                         reply_markup={"inline_keyboard": buttons + new_btn})
         _workflow.pop(chat_id, None)
+
+    elif kind == "backlog_new":
+        _workflow[chat_id] = {"step": "backlog_new:name", "data": {}}
+        send_message(TOKEN, chat_id,
+            "📌 Neuer Backlog-Eintrag\n\n1 / 2 · Name?",
+            reply_markup={"inline_keyboard": [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]})
 
     elif kind == "projekte":
         msg, buttons = _build_projekte_message()
@@ -833,6 +833,19 @@ def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
         _append_idea_hub(slug, text)
         send_message(TOKEN, chat_id, f"✅ Idee erfasst für {slug}: {text}",
                      reply_markup=REPLY_KEYBOARD)
+        return True
+
+    if step == "backlog_new:name":
+        state["data"]["name"] = text
+        state["step"] = "backlog_new:priority"
+        buttons = [[
+            {"text": "🔴 Hoch",    "callback_data": "backlog_new:priority:hoch"},
+            {"text": "🟡 Mittel",  "callback_data": "backlog_new:priority:mittel"},
+            {"text": "🟢 Niedrig", "callback_data": "backlog_new:priority:niedrig"},
+        ]]
+        send_message(TOKEN, chat_id,
+            f'📌 "{text}"\n\n2 / 2 · Priorität?',
+            reply_markup={"inline_keyboard": buttons})
         return True
 
     return False
@@ -1073,6 +1086,21 @@ def _handle_callback(cq: dict) -> None:
         ok = nocodb_direct.mark_sport_done(int(pid))
         label = _extract_name_from_message(msg_text)
         edit_message(TOKEN, chat_id, msg_id, f"✅ {label} — erledigt!" if ok else "❌ Fehler")
+
+    if data == "backlog:new":
+        answer_callback_query(TOKEN, cq["id"])
+        start_workflow("backlog_new", chat_id)
+        return
+
+    if data.startswith("backlog_new:priority:"):
+        prio_key = data.split(":")[-1]
+        prio = {"hoch": "Hoch", "mittel": "Mittel", "niedrig": "Niedrig"}.get(prio_key, "Niedrig")
+        state = _workflow.pop(chat_id, {})
+        name = state.get("data", {}).get("name", "?")
+        answer_callback_query(TOKEN, cq["id"])
+        nocodb_direct.create_backlog_item(name, prio)
+        send_message(TOKEN, chat_id, f"✅ Backlog: {name} · {prio}", reply_markup=REPLY_KEYBOARD)
+        return
 
     if data.startswith("backlog_done:"):
         pid = data.split(":", 1)[1]

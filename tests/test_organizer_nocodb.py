@@ -70,3 +70,28 @@ def test_task_priority_confirmation_message():
     idx = src.index('data.startswith("task:priority:")')
     snippet = src[idx:idx+300]
     assert "✅ Task angelegt" in snippet
+
+
+def test_backlog_list_uses_fetch_backlog_items():
+    assert "nocodb_direct.fetch_backlog_items" in src
+
+
+def test_backlog_list_no_backlog_json_prompt():
+    idx = src.index('"backlog_list"')
+    snippet = src[idx:idx+700]
+    assert "BACKLOG_JSON_SYSTEM_PROMPT" not in snippet
+
+
+def test_backlog_new_workflow_exists():
+    assert '"backlog_new"' in src
+    assert "backlog_new:name" in src
+
+
+def test_backlog_new_uses_create_backlog_item():
+    assert "nocodb_direct.create_backlog_item" in src
+
+
+def test_backlog_new_button_in_backlog_list():
+    idx = src.index('kind == "backlog_list"')
+    snippet = src[idx:idx+700]
+    assert "backlog:new" in snippet
