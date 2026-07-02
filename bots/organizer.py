@@ -562,10 +562,31 @@ def _send_dev_status(chat_id: int, slug: str) -> None:
 
 
 def _send_sport_challenges(chat_id: int) -> None:
-    for ch in nocodb_direct.fetch_sport_challenges():
+    challenges = nocodb_direct.fetch_sport_challenges()
+    if challenges:
+        send_message(TOKEN, chat_id, "🔁 Sport Challenge:")
+    for ch in challenges:
         buttons = [[{"text": "✅ Erledigt", "callback_data": f"sport_done:{ch['id']}"}]]
         send_message(TOKEN, chat_id, f"🏋️ {ch['kategorie']}: {ch['name']}",
                      reply_markup={"inline_keyboard": buttons})
+
+
+def _send_project_features(chat_id: int) -> None:
+    slug = nocodb_direct.get_focus_project()
+    if not slug:
+        return
+    registry = load_registry()
+    proj = next((p for p in registry if p["slug"] == slug), None)
+    if not proj or not proj.get("nocodb_table_id"):
+        return
+    features = nocodb_direct.fetch_project_features(proj["nocodb_table_id"])
+    if not features:
+        return
+    name = proj.get("name", slug)
+    lines = [f"🚀 {name} — Nächste Schritte"]
+    for i, feat in enumerate(features, 1):
+        lines.append(f"{i}. {feat}")
+    send_message(TOKEN, chat_id, "\n".join(lines))
 
 
 def _instanz_zyklen(today: str) -> None:
@@ -708,6 +729,7 @@ def start_workflow(kind: str, chat_id: int) -> None:
         data = nocodb_direct.fetch_tasks_today(today)
         _send_moin_messages(data)
         _send_sport_challenges(chat_id)
+        _send_project_features(chat_id)
         _workflow.pop(chat_id, None)
 
     elif kind == "abend":
