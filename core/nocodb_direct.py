@@ -19,6 +19,7 @@ BACKLOG_TABLE_ID = os.environ.get("NOCODB_BACKLOG_TABLE_ID", "")
 HABITS_TABLE_ID = os.environ.get("NOCODB_HABITS_TABLE_ID", "")
 IDEENSAMMLUNG_TABLE_ID = os.environ.get("NOCODB_IDEENSAMMLUNG_TABLE_ID", "")
 ARCHIV_TABLE_ID = os.environ.get("NOCODB_ARCHIV_TABLE_ID", "")
+FOCUS_TABLE_ID = os.environ.get("NOCODB_FOCUS_TABLE_ID", "")
 
 
 def _headers() -> dict:
@@ -225,3 +226,30 @@ def fetch_tasks_month(year: int, month: int) -> dict:
                 tasks_done += 1
     termine.sort(key=lambda a: a["datum"])
     return {"termine": termine, "tasks_done": tasks_done, "tasks_total": tasks_total}
+
+
+def fetch_project_features(table_id: str, limit: int = 5) -> list:
+    if not table_id:
+        return []
+    r = requests.get(_url(table_id), headers=_headers(), params={"limit": 200})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+    features = [row.get("Name", "") for row in rows if row.get("Status") != "done"]
+    return features[:limit]
+
+
+def set_focus_project(slug: str) -> bool:
+    r = requests.get(_url(FOCUS_TABLE_ID), headers=_headers(), params={"limit": 1})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+    payload = {"Slug": slug, "Updated": date.today().isoformat()}
+    if rows:
+        r2 = requests.patch(_url(FOCUS_TABLE_ID), headers=_headers(),
+                            json=[{**payload, "Id": rows[0]["Id"]}])
+        return r2.status_code == 200
+    r2 = requests.post(_url(FOCUS_TABLE_ID), headers=_headers(), json=payload)
+    return r2.status_code in (200, 201)
+
+
+def get_focus_project() -> str | None:
+    r = requests.get(_url(FOCUS_TABLE_ID), headers=_headers(), params={"limit": 1})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+    return rows[0].get("Slug") if rows else None

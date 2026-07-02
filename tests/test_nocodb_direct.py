@@ -10,10 +10,12 @@ os.environ.setdefault("NOCODB_SPORT_TABLE_ID", "tbl_sport")
 os.environ.setdefault("NOCODB_IDEENSAMMLUNG_TABLE_ID", "tbl_ideas")
 os.environ.setdefault("NOCODB_BACKLOG_TABLE_ID", "tbl_backlog")
 os.environ.setdefault("NOCODB_ARCHIV_TABLE_ID", "tbl_archiv")
+os.environ.setdefault("NOCODB_FOCUS_TABLE_ID", "tbl_focus")
 
 from core.nocodb_direct import (
     mark_done, reschedule, add_idea, mark_sport_done,
     _habit_due_today, fetch_habits_due,
+    fetch_project_features, set_focus_project, get_focus_project,
 )
 
 
@@ -149,6 +151,62 @@ class TestFetchHabitsDue(unittest.TestCase):
         ]}
         result = fetch_habits_due("2026-07-07")  # Dienstag
         self.assertEqual(result, [])
+
+
+class TestFetchProjectFeatures(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.get")
+    def test_returns_top_5_non_done_names_in_order(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [
+            {"Id": 1, "Name": "Feature A", "Status": "idea"},
+            {"Id": 2, "Name": "Feature B", "Status": "done"},
+            {"Id": 3, "Name": "Feature C", "Status": "planned"},
+            {"Id": 4, "Name": "Feature D", "Status": "discussed"},
+            {"Id": 5, "Name": "Feature E", "Status": "idea"},
+            {"Id": 6, "Name": "Feature F", "Status": "idea"},
+        ]}
+        result = fetch_project_features("tbl_proj")
+        self.assertEqual(result, ["Feature A", "Feature C", "Feature D", "Feature E", "Feature F"])
+
+    def test_returns_empty_list_without_table_id(self):
+        self.assertEqual(fetch_project_features(""), [])
+
+
+class TestFocusProject(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.post")
+    @patch("core.nocodb_direct.requests.get")
+    def test_set_focus_project_creates_row_when_none_exists(self, mock_get, mock_post):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": []}
+        mock_post.return_value.status_code = 200
+        result = set_focus_project("shopping-navigator")
+        self.assertTrue(result)
+        payload = mock_post.call_args[1]["json"]
+        self.assertEqual(payload["Slug"], "shopping-navigator")
+
+    @patch("core.nocodb_direct.requests.patch")
+    @patch("core.nocodb_direct.requests.get")
+    def test_set_focus_project_patches_existing_row(self, mock_get, mock_patch):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [{"Id": 9, "Slug": "old-slug"}]}
+        mock_patch.return_value.status_code = 200
+        result = set_focus_project("new-slug")
+        self.assertTrue(result)
+        payload = mock_patch.call_args[1]["json"]
+        self.assertEqual(payload[0]["Id"], 9)
+        self.assertEqual(payload[0]["Slug"], "new-slug")
+
+    @patch("core.nocodb_direct.requests.get")
+    def test_get_focus_project_returns_slug(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [{"Id": 9, "Slug": "shopping-navigator"}]}
+        self.assertEqual(get_focus_project(), "shopping-navigator")
+
+    @patch("core.nocodb_direct.requests.get")
+    def test_get_focus_project_returns_none_when_empty(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": []}
+        self.assertIsNone(get_focus_project())
 
 
 if __name__ == "__main__":
