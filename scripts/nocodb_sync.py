@@ -311,7 +311,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Sync feature status to NocoDB")
     parser.add_argument("--slug")
     parser.add_argument("--feature")
-    parser.add_argument("--status", choices=["idea", "discussed", "planned", "done"])
+    parser.add_argument("--status", choices=["idea", "discussed", "planned", "done", "bug"])
     parser.add_argument("--spec", default="")
     parser.add_argument("--plan", default="")
     parser.add_argument("--all", dest="all_projects", action="store_true")
