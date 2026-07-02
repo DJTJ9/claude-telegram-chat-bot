@@ -1288,6 +1288,22 @@ def _handle_callback(cq: dict) -> None:
             send_message(TOKEN, chat_id, "❌ Archivierung fehlgeschlagen.", reply_markup=REPLY_KEYBOARD)
         return
 
+    if data.startswith("woche_promote:"):
+        pid = data.split(":", 1)[1]
+        if not pid.isdigit():
+            answer_callback_query(TOKEN, cq["id"], "Veralteter Button – bitte neu laden.")
+            return
+        answer_callback_query(TOKEN, cq["id"])
+        items = nocodb_direct.fetch_backlog_items()
+        item = next((i for i in items if i["id"] == pid), None)
+        name = item["name"] if item else "?"
+        ok = nocodb_direct.create_task(name, today, "Hoch")
+        if ok:
+            send_message(TOKEN, chat_id, f"✅ Eingeplant: {name}", reply_markup=REPLY_KEYBOARD)
+        else:
+            send_message(TOKEN, chat_id, "❌ Fehler beim Einplanen.", reply_markup=REPLY_KEYBOARD)
+        return
+
     elif data.startswith("reschedule:") and data.count(":") == 1:
         pid = data[11:]
         buttons = [[
