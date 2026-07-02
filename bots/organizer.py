@@ -139,6 +139,48 @@ def _parse_termin_datum(response: str) -> str | None:
         return None
     return f"{m.group(3)}-{m.group(2)}-{m.group(1)}T{m.group(4)}:00"
 
+_WOCHENTAGE = {
+    "montag": 0, "dienstag": 1, "mittwoch": 2,
+    "donnerstag": 3, "freitag": 4, "samstag": 5, "sonntag": 6,
+}
+
+def _parse_user_date(text: str, today: date) -> str | None:
+    t = text.lower().strip()
+    time_str = "09:00"
+    m = re.search(r'(?:um\s*)?(\d{1,2}):(\d{2})', t)
+    if m:
+        time_str = f"{int(m.group(1)):02d}:{m.group(2)}"
+        t = (t[:m.start()] + t[m.end():]).strip()
+    else:
+        m2 = re.search(r'(\d{1,2})\s*uhr', t)
+        if m2:
+            time_str = f"{int(m2.group(1)):02d}:00"
+            t = t[:m2.start()].strip()
+    t = re.sub(r'\bum\b', '', t).strip()
+    if t in ("heute", "today", ""):
+        base = today
+    elif t in ("morgen", "tomorrow"):
+        base = today + timedelta(days=1)
+    elif t in ("übermorgen",):
+        base = today + timedelta(days=2)
+    elif t in _WOCHENTAGE:
+        days = (_WOCHENTAGE[t] - today.weekday()) % 7 or 7
+        base = today + timedelta(days=days)
+    elif re.match(r'\d{4}-\d{2}-\d{2}$', t):
+        try:
+            base = date.fromisoformat(t)
+        except ValueError:
+            return None
+    elif re.match(r'\d{1,2}\.\d{1,2}\.?$', t):
+        m3 = re.match(r'(\d{1,2})\.(\d{1,2})\.?$', t)
+        try:
+            base = date(today.year, int(m3.group(2)), int(m3.group(1)))
+        except ValueError:
+            return None
+    else:
+        return None
+    return f"{base.isoformat()}T{time_str}:00"
+
 BACKLOG_SYSTEM_PROMPT = f"""Du bist ein Notion-Backlog-Assistent. Der Nutzer nennt eine Aufgabe ohne festen Termin.
 Lege sie im Backlog an (data_source_id: {BACKLOG_DATA_SOURCE_ID}).
 Leite ab: Name, Priorität (Hoch/Mittel/Niedrig, Mittel falls nicht angegeben), Bereich (Arbeit/Privat/Lernen/Gesundheit, Privat falls unklar).
