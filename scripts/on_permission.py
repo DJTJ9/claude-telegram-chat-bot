@@ -14,18 +14,27 @@ if env_file.exists():
             os.environ.setdefault(k.strip(), v.strip())
 
 settings_path = PROJECT_DIR / "settings.json"
+session_id = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+if session_id:
+    session_path = PROJECT_DIR / "dev_sessions" / f"{session_id}.json"
+    if session_path.exists():
+        try:
+            sdata = json.loads(session_path.read_text())
+            impl_mode = sdata.get("implementation_mode", False)
+            impl_until = sdata.get("implementation_mode_until")
+            if impl_mode and impl_until:
+                try:
+                    if datetime.now() < datetime.fromisoformat(impl_until):
+                        print(json.dumps({"decision": "approve"}))
+                        sys.exit(0)
+                except (ValueError, TypeError):
+                    pass  # malformed timestamp → fall through
+        except Exception:
+            pass
+
 if settings_path.exists():
     try:
         settings = json.loads(settings_path.read_text())
-        impl_mode = settings.get("implementation_mode", False)
-        impl_until = settings.get("implementation_mode_until")
-        if impl_mode and impl_until:
-            try:
-                if datetime.now() < datetime.fromisoformat(impl_until):
-                    print(json.dumps({"decision": "approve"}))
-                    sys.exit(0)
-            except (ValueError, TypeError):
-                pass  # malformed timestamp → fall through
         if not settings.get("notifications_enabled", True):
             print(json.dumps({"decision": "approve"}))
             sys.exit(0)
