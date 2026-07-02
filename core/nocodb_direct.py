@@ -1,6 +1,7 @@
 import os, random, requests
 from datetime import date
 from pathlib import Path
+from core.state import load_registry
 
 _env = Path(__file__).parent.parent / ".env"
 if _env.exists():
@@ -143,8 +144,17 @@ def fetch_abend_data(date_iso: str) -> dict:
                    "projekt": row.get("Bereich"), "id": str(row["Id"])}
                   for row in rows if row.get("Status") != "Done"]
     open_tasks.sort(key=lambda t: _PRIO_ORDER.get(t["prio"], 1))
+
+    projekt_bilanz = []
+    focus_slug = get_focus_project()
+    if focus_slug:
+        proj = next((p for p in load_registry() if p["slug"] == focus_slug), None)
+        if proj and proj.get("nocodb_table_id"):
+            bilanz = fetch_project_bilanz(proj["nocodb_table_id"])
+            projekt_bilanz = [{"name": proj.get("name", focus_slug), **bilanz}]
+
     return {"date": date_iso, "done": done, "open": open_tasks,
-            "missed_habits": [], "projekt_bilanz": []}
+            "missed_habits": fetch_habits_due(date_iso), "projekt_bilanz": projekt_bilanz}
 
 
 def fetch_sport_challenges() -> list:

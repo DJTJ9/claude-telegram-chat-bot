@@ -16,7 +16,7 @@ from core.nocodb_direct import (
     mark_done, reschedule, add_idea, mark_sport_done,
     _habit_due_today, fetch_habits_due,
     fetch_project_features, set_focus_project, get_focus_project,
-    fetch_project_bilanz,
+    fetch_project_bilanz, fetch_abend_data,
 )
 
 
@@ -225,6 +225,66 @@ class TestFetchProjectBilanz(unittest.TestCase):
 
     def test_returns_zero_counts_without_table_id(self):
         self.assertEqual(fetch_project_bilanz(""), {"done": 0, "open": 0})
+
+
+class TestFetchAbendDataBilanzHabits(unittest.TestCase):
+    @patch("core.nocodb_direct.fetch_project_bilanz")
+    @patch("core.nocodb_direct.load_registry")
+    @patch("core.nocodb_direct.get_focus_project")
+    @patch("core.nocodb_direct.fetch_habits_due")
+    @patch("core.nocodb_direct.requests.get")
+    def test_populates_missed_habits_and_projekt_bilanz(
+        self, mock_get, mock_habits_due, mock_focus, mock_registry, mock_bilanz
+    ):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": []}
+        mock_habits_due.return_value = [{"name": "Laufen", "id": "3"}]
+        mock_focus.return_value = "shopping-navigator"
+        mock_registry.return_value = [
+            {"slug": "shopping-navigator", "name": "Shopping Navigator", "nocodb_table_id": "tbl_proj"}
+        ]
+        mock_bilanz.return_value = {"done": 2, "open": 1}
+
+        result = fetch_abend_data("2026-07-06")
+
+        self.assertEqual(result["missed_habits"], [{"name": "Laufen", "id": "3"}])
+        self.assertEqual(result["projekt_bilanz"],
+                         [{"name": "Shopping Navigator", "done": 2, "open": 1}])
+        mock_bilanz.assert_called_once_with("tbl_proj")
+
+    @patch("core.nocodb_direct.load_registry")
+    @patch("core.nocodb_direct.get_focus_project")
+    @patch("core.nocodb_direct.fetch_habits_due")
+    @patch("core.nocodb_direct.requests.get")
+    def test_empty_projekt_bilanz_when_no_focus_project(
+        self, mock_get, mock_habits_due, mock_focus, mock_registry
+    ):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": []}
+        mock_habits_due.return_value = []
+        mock_focus.return_value = None
+
+        result = fetch_abend_data("2026-07-06")
+
+        self.assertEqual(result["projekt_bilanz"], [])
+        mock_registry.assert_not_called()
+
+    @patch("core.nocodb_direct.load_registry")
+    @patch("core.nocodb_direct.get_focus_project")
+    @patch("core.nocodb_direct.fetch_habits_due")
+    @patch("core.nocodb_direct.requests.get")
+    def test_empty_projekt_bilanz_when_focus_project_has_no_table_id(
+        self, mock_get, mock_habits_due, mock_focus, mock_registry
+    ):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": []}
+        mock_habits_due.return_value = []
+        mock_focus.return_value = "dart-app"
+        mock_registry.return_value = [{"slug": "dart-app", "name": "DartApp"}]
+
+        result = fetch_abend_data("2026-07-06")
+
+        self.assertEqual(result["projekt_bilanz"], [])
 
 
 if __name__ == "__main__":
