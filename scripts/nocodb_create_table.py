@@ -94,6 +94,23 @@ def create_habits_table() -> str:
     return table_id
 
 
+def create_focus_table() -> str:
+    url = f"{NOCODB_API_URL}/api/v1/db/meta/projects/{NOCODB_BASE_ID}/tables"
+    payload = {
+        "title": "focus",
+        "columns": [
+            {"title": "Slug", "uidt": "SingleLineText"},
+            {"title": "Updated", "uidt": "Date"},
+        ],
+    }
+    r = requests.post(url, headers=_headers(), json=payload)
+    table_id = r.json().get("id", "")
+    if not table_id:
+        print(f"⚠️  Focus table creation failed: {r.json()}", file=sys.stderr)
+        sys.exit(1)
+    return table_id
+
+
 def create_wochenplanung_view() -> str:
     # NocoDB 2026.06.2: view creation API (feature_api_view_v3) is disabled on free plan.
     # Try the API; on failure print manual setup instructions.
@@ -139,6 +156,7 @@ def main() -> None:
     parser.add_argument("--name")
     parser.add_argument("--all", dest="all_projects", action="store_true")
     parser.add_argument("--habits", action="store_true", help="Create habits table")
+    parser.add_argument("--focus", action="store_true", help="Create focus table")
     parser.add_argument("--wochenplanung", action="store_true", help="Create Wochenplanung view on Tasks table")
     args = parser.parse_args()
 
@@ -153,6 +171,11 @@ def main() -> None:
     if args.habits:
         table_id = create_habits_table()
         print(f"habits table_id: {table_id}")
+        return
+
+    if args.focus:
+        table_id = create_focus_table()
+        print(f"focus table_id: {table_id}")
         return
 
     if args.wochenplanung:
