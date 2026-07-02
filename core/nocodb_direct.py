@@ -237,6 +237,16 @@ def fetch_project_features(table_id: str, limit: int = 5) -> list:
     return features[:limit]
 
 
+def fetch_project_bilanz(table_id: str) -> dict:
+    if not table_id:
+        return {"done": 0, "open": 0}
+    r = requests.get(_url(table_id), headers=_headers(), params={"limit": 200})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+    done = sum(1 for row in rows if row.get("Status") == "done")
+    open_count = sum(1 for row in rows if row.get("Status") != "done")
+    return {"done": done, "open": open_count}
+
+
 def set_focus_project(slug: str) -> bool:
     r = requests.get(_url(FOCUS_TABLE_ID), headers=_headers(), params={"limit": 1})
     rows = r.json().get("list", []) if r.status_code == 200 else []

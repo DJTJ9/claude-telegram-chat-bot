@@ -16,6 +16,7 @@ from core.nocodb_direct import (
     mark_done, reschedule, add_idea, mark_sport_done,
     _habit_due_today, fetch_habits_due,
     fetch_project_features, set_focus_project, get_focus_project,
+    fetch_project_bilanz,
 )
 
 
@@ -207,6 +208,23 @@ class TestFocusProject(unittest.TestCase):
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {"list": []}
         self.assertIsNone(get_focus_project())
+
+
+class TestFetchProjectBilanz(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.get")
+    def test_counts_done_and_open_rows(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [
+            {"Id": 1, "Name": "Feature A", "Status": "done"},
+            {"Id": 2, "Name": "Feature B", "Status": "idea"},
+            {"Id": 3, "Name": "Feature C", "Status": "planned"},
+            {"Id": 4, "Name": "Feature D", "Status": "done"},
+        ]}
+        result = fetch_project_bilanz("tbl_proj")
+        self.assertEqual(result, {"done": 2, "open": 2})
+
+    def test_returns_zero_counts_without_table_id(self):
+        self.assertEqual(fetch_project_bilanz(""), {"done": 0, "open": 0})
 
 
 if __name__ == "__main__":
