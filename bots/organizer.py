@@ -1296,7 +1296,10 @@ def _handle_callback(cq: dict) -> None:
         answer_callback_query(TOKEN, cq["id"])
         items = nocodb_direct.fetch_backlog_items()
         item = next((i for i in items if i["id"] == pid), None)
-        name = item["name"] if item else "?"
+        if item is None:
+            send_message(TOKEN, chat_id, "❌ Backlog-Item nicht mehr gefunden.", reply_markup=REPLY_KEYBOARD)
+            return
+        name = item["name"]
         ok = nocodb_direct.create_task(name, today, "Hoch")
         if ok:
             send_message(TOKEN, chat_id, f"✅ Eingeplant: {name}", reply_markup=REPLY_KEYBOARD)
