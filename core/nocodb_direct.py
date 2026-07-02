@@ -199,6 +199,18 @@ def create_task(title: str, datum: str, prio: str = "Niedrig") -> bool:
     return r.status_code in (200, 201)
 
 
+def promote_backlog_item(row_id: int, datum: str) -> bool:
+    r = requests.get(_url(BACKLOG_TABLE_ID, row_id), headers=_headers())
+    if r.status_code != 200:
+        return False
+    row = r.json()
+    name = row.get("Name", "")
+    prio = row.get("Priorität") or "Niedrig"
+    if not create_task(name, datum, prio):
+        return False
+    return archive_backlog_item(row_id)
+
+
 def fetch_backlog_items() -> list:
     r = requests.get(_url(BACKLOG_TABLE_ID), headers=_headers(),
                      params={"where": "(Status,eq,Offen)", "limit": 200})

@@ -17,7 +17,7 @@ from core.nocodb_direct import (
     _habit_due_today, fetch_habits_due,
     fetch_project_features, set_focus_project, get_focus_project,
     fetch_project_bilanz, fetch_abend_data,
-    instantiate_recurring_tasks,
+    instantiate_recurring_tasks, promote_backlog_item,
 )
 
 
@@ -331,6 +331,48 @@ class TestInstantiateRecurringTasks(unittest.TestCase):
             {"Id": 1, "Title": "Einkaufen", "Zyklus": None, "Priorität": "Niedrig", "Datum": "2026-07-06", "Status": "Not started"},
         ]}
         self.assertEqual(instantiate_recurring_tasks("2026-07-06"), [])
+
+
+class TestPromoteBacklogItem(unittest.TestCase):
+    @patch("core.nocodb_direct.archive_backlog_item")
+    @patch("core.nocodb_direct.create_task")
+    @patch("core.nocodb_direct.requests.get")
+    def test_creates_task_and_archives_on_success(self, mock_get, mock_create, mock_archive):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"Id": 7, "Name": "Umzugskartons besorgen", "Priorität": "Mittel"}
+        mock_create.return_value = True
+        mock_archive.return_value = True
+        result = promote_backlog_item(7, "2026-07-06")
+        self.assertTrue(result)
+        mock_create.assert_called_once_with("Umzugskartons besorgen", "2026-07-06", "Mittel")
+        mock_archive.assert_called_once_with(7)
+
+    @patch("core.nocodb_direct.archive_backlog_item")
+    @patch("core.nocodb_direct.create_task")
+    @patch("core.nocodb_direct.requests.get")
+    def test_defaults_to_niedrig_when_prio_missing(self, mock_get, mock_create, mock_archive):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"Id": 8, "Name": "Ohne Prio"}
+        mock_create.return_value = True
+        mock_archive.return_value = True
+        promote_backlog_item(8, "2026-07-06")
+        mock_create.assert_called_once_with("Ohne Prio", "2026-07-06", "Niedrig")
+
+    @patch("core.nocodb_direct.requests.get")
+    def test_returns_false_when_row_not_found(self, mock_get):
+        mock_get.return_value.status_code = 404
+        self.assertFalse(promote_backlog_item(999, "2026-07-06"))
+
+    @patch("core.nocodb_direct.archive_backlog_item")
+    @patch("core.nocodb_direct.create_task")
+    @patch("core.nocodb_direct.requests.get")
+    def test_returns_false_when_create_task_fails(self, mock_get, mock_create, mock_archive):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"Id": 7, "Name": "X", "Priorität": "Hoch"}
+        mock_create.return_value = False
+        result = promote_backlog_item(7, "2026-07-06")
+        self.assertFalse(result)
+        mock_archive.assert_not_called()
 
 
 if __name__ == "__main__":
