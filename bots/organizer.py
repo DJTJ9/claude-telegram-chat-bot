@@ -1413,6 +1413,26 @@ def _handle_message(msg: dict) -> None:
     elif t.lower() == "/plans":
         response = _format_plans()
 
+    elif t.lower() == "/monat":
+        now = datetime.now()
+        data = nocodb_direct.fetch_tasks_month(now.year, now.month)
+        monat_name = now.strftime("%B %Y")
+        lines = [f"Termine {monat_name}:"]
+        if data["termine"]:
+            for termin in data["termine"]:
+                d = termin["datum"][:10]
+                day = d[8:10] + "." + d[5:7]
+                lines.append(f"  {day} {termin['time']} {termin['name']}")
+        else:
+            lines.append("  (keine Termine)")
+        done = data["tasks_done"]
+        total = data["tasks_total"]
+        lines.append(f"\nTasks: {done} erledigt / {total} gesamt")
+        habits = nocodb_direct.fetch_habits()
+        habits_done = sum(1 for h in habits if h["status"] == "Done")
+        lines.append(f"Habits heute: {habits_done} von {len(habits)} erledigt")
+        response = "\n".join(lines)
+
     elif t in ("/energie",):
         start_workflow("energie", chat_id)
         return
@@ -1453,6 +1473,7 @@ def main():
 
     set_my_commands(TOKEN, [
         {"command": "plans",   "description": "Geplante Implementierungen anzeigen"},
+        {"command": "monat",   "description": "Monatsübersicht: Termine + Task-Bilanz"},
         {"command": "energie", "description": "Energie-Level für heute setzen"},
         {"command": "zyklen",  "description": "Zyklische Tasks verwalten"},
     ])

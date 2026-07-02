@@ -120,5 +120,32 @@ class TestTerminWorkflowSavesToNocoDB(unittest.TestCase):
         self.assertIn("_parse_termin_datum", snippet)
 
 
+class TestMonatCommand(unittest.TestCase):
+    def setUp(self):
+        self._src = open(os.path.join(os.path.dirname(__file__), "..", "bots", "organizer.py"),
+                         encoding="utf-8").read()
+
+    def test_monat_command_present(self):
+        self.assertIn('"/monat"', self._src)
+
+    def test_monat_calls_fetch_tasks_month(self):
+        idx = self._src.index('"/monat"')
+        snippet = self._src[idx:idx + 600]
+        self.assertIn("fetch_tasks_month", snippet)
+
+    def test_monat_shows_termine(self):
+        idx = self._src.index('"/monat"')
+        snippet = self._src[idx:idx + 800]
+        self.assertIn("Termine", snippet)
+
+    def test_monat_shows_tasks_bilanz(self):
+        idx = self._src.index('"/monat"')
+        snippet = self._src[idx:idx + 800]
+        self.assertIn("Tasks", snippet)
+
+    def test_monat_in_set_my_commands(self):
+        self.assertIn('"monat"', self._src)
+
+
 if __name__ == "__main__":
     unittest.main()
