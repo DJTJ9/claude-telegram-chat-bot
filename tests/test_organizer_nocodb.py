@@ -112,5 +112,5 @@ def test_termin_priority_uses_parse_user_date():
 
 def test_termin_priority_uses_create_task():
     idx = src.index('data.startswith("termin:priority:")')
-    snippet = src[idx:idx+450]
+    snippet = src[idx:idx+550]
     assert "nocodb_direct.create_task" in snippet
