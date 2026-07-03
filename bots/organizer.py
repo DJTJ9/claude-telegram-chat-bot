@@ -185,6 +185,18 @@ def _parse_user_date(text: str, today: date) -> str | None:
         return None
     return f"{base.isoformat()}T{time_str}:00"
 
+def _task_date_from_choice(choice: str, today: date) -> str | None:
+    if choice == "heute":
+        return today.isoformat()
+    if choice == "morgen":
+        return (today + timedelta(days=1)).isoformat()
+    return None
+
+
+def _task_date_from_freitext(text: str, today: date) -> str | None:
+    parsed = _parse_user_date(text, today)
+    return parsed.split("T")[0] if parsed else None
+
 BACKLOG_SYSTEM_PROMPT = f"""Du bist ein Notion-Backlog-Assistent. Der Nutzer nennt eine Aufgabe ohne festen Termin.
 Lege sie im Backlog an (data_source_id: {BACKLOG_DATA_SOURCE_ID}).
 Leite ab: Name, Priorität (Hoch/Mittel/Niedrig, Mittel falls nicht angegeben), Bereich (Arbeit/Privat/Lernen/Gesundheit, Privat falls unklar).
