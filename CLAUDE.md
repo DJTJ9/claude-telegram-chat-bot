@@ -6,18 +6,18 @@
 # Notion Organizer Struktur (seit 2026-06-27)
 
 Sub-Seiten unter Organizer-Hauptseite (`37a4bba29c55807493bdf21e2ef34a9e`):
-- 📅 Tagesplanung    — page_id: `38b4bba29c5581ce80c5f28256b38986` — Tasks DB: `38b4bba29c5581a7bd94cef1b0cc6c58`
+- 📅 Tagesplanung    — page_id: `38b4bba29c5581ce80c5f28256b38986` — Tasks DB: `38b4bba2-9c55-8177-a404-fcfb97c00b3a`
 - 📆 Wochenplanung   — page_id: `38b4bba29c5581c58ebcd27d07cd9f9a` — Tasks gefiltert + Habits DB: `6a4d7e7d-dcde-44e3-b7a0-c46330a6261c`
 - 🗓 Monatsübersicht — page_id: `38b4bba29c5581d6a443eca8a9917375` — Tasks gefiltert
 - 🗂 Projekte         — Projekte DB: `38b4bba29c5581e8868efe4e2fad255a`
 - 🏋 Sport Challenges — Sport DB: `38b4bba29c5581c88f49c67bb85f78c0`
 - 💡 Ideensammlung    — Ideensammlung DB: `38b4bba29c55814f836ed9a05d3ec9a5`
-- 🗃 Archiv           — Archiv DB: `38b4bba29c558102b9aecb790594aff6`
+- 🗃 Archiv           — Archiv DB: `fd650177-1df5-446c-9fe1-751da5102ce0`
 
 # Notion Datenbanken
 
 ## Tasks (Tagesplanung)
-- data_source_id: `38b4bba29c5581a7bd94cef1b0cc6c58`
+- data_source_id: `38b4bba2-9c55-8177-a404-fcfb97c00b3a`
 - Properties: Name (title), Status (`Not started`|`In progress`|`Done`), Priorität (select: `Hoch`|`Mittel`|`Niedrig`), Datum (date), Bereich (select: `Arbeit`|`Privat`|`Lernen`|`Gesundheit`), Notiz (rich_text), Zyklus (rich_text)
 - Regel: Immer Datum setzen. Priorität Hoch = heute erledigen.
 
@@ -25,6 +25,7 @@ Sub-Seiten unter Organizer-Hauptseite (`37a4bba29c55807493bdf21e2ef34a9e`):
 - Datum mit Uhrzeit (datetime) = Termin → Morgen-View unter "📅 Termine" sortiert nach Zeit
 - Datum ohne Uhrzeit / kein Datum = Task → sortiert nach Priorität
 - Default-Uhrzeit falls nicht angegeben: `09:00`
+- **NocoDB:** `Datum`-Spalte (Typ Date) und `Uhrzeit`-Spalte (Typ Time, Format `HH:MM`) sind getrennte Felder — beide beim Anlegen eines Termins befüllen (`nocodb_direct.create_task(..., uhrzeit=...)`)
 
 ### Zyklus-Format (rich_text)
 | Wert | Bedeutung |
@@ -48,11 +49,11 @@ Bot-Parsing: LLM interpretiert Freitext, erstellt nächste Instanz. Kein Enum.
 - Properties: Name (title), Typ (select), Genre (multi_select), Plattform (select), Status (select), Beschreibung (rich_text)
 
 ## Backlog
-- data_source_id: `0cb18d17-cf70-413d-b29d-adb4675db614`
+- data_source_id: `fad94811-608c-41ba-b728-d1338e21a01d`
 - Properties: Name (title), Status (`Offen`|`Erledigt`), Priorität (select), Bereich (select), Notiz (rich_text)
 
 ## Task-Archiv
-- data_source_id: `38b4bba29c558102b9aecb790594aff6`
+- data_source_id: `fd650177-1df5-446c-9fe1-751da5102ce0`
 - Properties: Name (title), Status (kopiert), Priorität (select), Datum (date), Bereich (select), Notiz (rich_text), Archiviert am (date)
 
 ## Arbeitsprojekte
