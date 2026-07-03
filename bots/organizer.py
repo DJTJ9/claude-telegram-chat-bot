@@ -1173,8 +1173,7 @@ def _handle_callback(cq: dict) -> None:
         p=data.split(":")[-1].capitalize()
         d=_workflow.pop(chat_id,{}).get("data",{});n=d.get("name","?");dt=d.get("datum",today)
         answer_callback_query(TOKEN,cq["id"])
-        if dt:
-            nocodb_direct.create_task(n,dt,p);msg=f"✅ Task angelegt: {n} · {p}"
+        if dt: nocodb_direct.create_task(n,dt,p);msg=f"✅ Task angelegt: {n} · {p}"
         else:
             ok=nocodb_direct.create_backlog_item(n,p)
             msg=f"✅ Backlog: {n} · {p}" if ok else "❌ Backlog-Eintrag konnte nicht angelegt werden."
