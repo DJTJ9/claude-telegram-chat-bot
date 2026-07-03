@@ -18,6 +18,7 @@ from core.nocodb_direct import (
     fetch_project_features, set_focus_project, get_focus_project,
     fetch_project_bilanz, fetch_abend_data,
     instantiate_recurring_tasks, promote_backlog_item,
+    fetch_open_tasks, update_task,
 )
 
 
@@ -373,6 +374,55 @@ class TestPromoteBacklogItem(unittest.TestCase):
         result = promote_backlog_item(7, "2026-07-06")
         self.assertFalse(result)
         mock_archive.assert_not_called()
+
+
+class TestFetchOpenTasks(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.get")
+    def test_returns_open_tasks_mapped(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": [
+            {"Id": 1, "Title": "Task A", "Datum": "2026-07-05", "Priorität": "Hoch"},
+            {"Id": 2, "Title": "Task B", "Datum": None, "Priorität": "Niedrig"},
+        ]}
+        result = fetch_open_tasks()
+        self.assertEqual(result, [
+            {"id": "1", "name": "Task A", "datum": "2026-07-05", "prio": "Hoch"},
+            {"id": "2", "name": "Task B", "datum": None, "prio": "Niedrig"},
+        ])
+
+    @patch("core.nocodb_direct.requests.get")
+    def test_filters_status_not_done(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": []}
+        fetch_open_tasks()
+        params = mock_get.call_args[1]["params"]
+        self.assertIn("neq", params["where"])
+        self.assertIn("Done", params["where"])
+
+    @patch("core.nocodb_direct.requests.get")
+    def test_error_status_returns_empty_list(self, mock_get):
+        mock_get.return_value.status_code = 500
+        self.assertEqual(fetch_open_tasks(), [])
+
+
+class TestUpdateTask(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.patch")
+    def test_patches_only_given_field(self, mock_patch):
+        mock_patch.return_value.status_code = 200
+        result = update_task(9, title="Neuer Name")
+        self.assertTrue(result)
+        payload = mock_patch.call_args[1]["json"]
+        self.assertEqual(payload[0], {"Id": 9, "Title": "Neuer Name"})
+
+    @patch("core.nocodb_direct.requests.patch")
+    def test_patches_all_fields(self, mock_patch):
+        mock_patch.return_value.status_code = 200
+        update_task(9, title="X", datum="2026-07-10", prio="Hoch")
+        payload = mock_patch.call_args[1]["json"]
+        self.assertEqual(payload[0], {"Id": 9, "Title": "X", "Datum": "2026-07-10", "Priorität": "Hoch"})
+
+    def test_no_fields_returns_true_without_request(self):
+        self.assertTrue(update_task(9))
 
 
 if __name__ == "__main__":

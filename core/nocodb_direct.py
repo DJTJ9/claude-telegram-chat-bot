@@ -229,6 +229,32 @@ def create_backlog_item(name: str, prio: str = "Niedrig", bereich: str = "Privat
     return r.status_code in (200, 201)
 
 
+def fetch_open_tasks() -> list:
+    r = requests.get(_url(TASKS_TABLE_ID), headers=_headers(),
+                     params={"where": "(Status,neq,Done)", "limit": 200})
+    rows = r.json().get("list", []) if r.status_code == 200 else []
+    return [{"id": str(row["Id"]), "name": row.get("Title", ""),
+              "datum": row.get("Datum") or None,
+              "prio": row.get("Priorität") or "Niedrig"}
+             for row in rows]
+
+
+def update_task(row_id: int, title: str | None = None,
+                 datum: str | None = None, prio: str | None = None) -> bool:
+    fields = {}
+    if title is not None:
+        fields["Title"] = title
+    if datum is not None:
+        fields["Datum"] = datum
+    if prio is not None:
+        fields["Priorität"] = prio
+    if not fields:
+        return True
+    r = requests.patch(_url(TASKS_TABLE_ID), headers=_headers(),
+                       json=[{"Id": row_id, **fields}])
+    return r.status_code == 200
+
+
 def fetch_tasks_month(year: int, month: int) -> dict:
     prefix = f"{year:04d}-{month:02d}"
     r = requests.get(_url(TASKS_TABLE_ID), headers=_headers(),
