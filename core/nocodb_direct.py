@@ -192,10 +192,11 @@ def archive_backlog_item(row_id: int) -> bool:
     return r3.status_code == 200
 
 
-def create_task(title: str, datum: str, prio: str = "Niedrig") -> bool:
-    r = requests.post(_url(TASKS_TABLE_ID), headers=_headers(),
-                      json={"Title": title, "Datum": datum, "Priorität": prio,
-                            "Status": "Not started"})
+def create_task(title: str, datum: str, prio: str = "Niedrig", uhrzeit: str | None = None) -> bool:
+    payload = {"Title": title, "Datum": datum, "Priorität": prio, "Status": "Not started"}
+    if uhrzeit:
+        payload["Uhrzeit"] = uhrzeit
+    r = requests.post(_url(TASKS_TABLE_ID), headers=_headers(), json=payload)
     return r.status_code in (200, 201)
 
 

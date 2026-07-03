@@ -18,7 +18,7 @@ from core.nocodb_direct import (
     fetch_project_features, set_focus_project, get_focus_project,
     fetch_project_bilanz, fetch_abend_data,
     instantiate_recurring_tasks, promote_backlog_item,
-    fetch_open_tasks, update_task,
+    fetch_open_tasks, update_task, create_task,
 )
 
 
@@ -432,6 +432,23 @@ class TestUpdateTask(unittest.TestCase):
 
     def test_no_fields_returns_true_without_request(self):
         self.assertTrue(update_task(9))
+
+
+class TestCreateTaskUhrzeit(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.post")
+    def test_uhrzeit_included_when_given(self, mock_post):
+        mock_post.return_value.status_code = 200
+        create_task("Zahnarzt", "2026-07-04", "Mittel", uhrzeit="14:30")
+        payload = mock_post.call_args[1]["json"]
+        self.assertEqual(payload["Uhrzeit"], "14:30")
+        self.assertEqual(payload["Datum"], "2026-07-04")
+
+    @patch("core.nocodb_direct.requests.post")
+    def test_uhrzeit_omitted_when_not_given(self, mock_post):
+        mock_post.return_value.status_code = 200
+        create_task("Wäsche", "2026-07-04", "Niedrig")
+        payload = mock_post.call_args[1]["json"]
+        self.assertNotIn("Uhrzeit", payload)
 
 
 if __name__ == "__main__":
