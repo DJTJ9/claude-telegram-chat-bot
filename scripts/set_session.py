@@ -54,6 +54,9 @@ if __name__ == "__main__":
             "active_dev_slug": args[1],
             "implementation_mode": False,
             "implementation_mode_until": None,
+            "worktree_path": None,
+            "branch": None,
+            "worktree_base_dir": None,
         }, indent=2))
     else:
         print(f"Unknown command: {args[0]}", file=sys.stderr)

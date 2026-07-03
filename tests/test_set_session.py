@@ -27,6 +27,19 @@ def test_set_dev_session_writes_session_file(tmp_path):
     assert data["implementation_mode_until"] is None
 
 
+def test_set_dev_session_includes_worktree_fields(tmp_path):
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps({"notifications_enabled": True}))
+    result = _run(["dev", "my-proj"],
+                  env_override={"WORK_DIR": str(tmp_path), "CLAUDE_CODE_SESSION_ID": "test-sid-wt"})
+    assert result.returncode == 0
+    session_file = tmp_path / "dev_sessions" / "test-sid-wt.json"
+    data = json.loads(session_file.read_text())
+    assert data["worktree_path"] is None
+    assert data["branch"] is None
+    assert data["worktree_base_dir"] is None
+
+
 def test_clear_session_deletes_session_file(tmp_path):
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps({"active_session": "dev"}))
