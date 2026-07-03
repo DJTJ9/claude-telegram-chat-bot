@@ -180,6 +180,7 @@ def sync_rebuild(slug: str) -> None:
     data = parse_status_md(hub_dir / "topics" / slug / "STATUS.md")
     items = [(s, n) for s, n in data["items"]
              if s in ("idea", "discussed", "planned", "done")]
+    items.sort(key=lambda item: item[0] == "done")
     rebuild_nocodb_table(table_id, items)
     print(f"Rebuilt {slug}: {len(items)} entries")
 

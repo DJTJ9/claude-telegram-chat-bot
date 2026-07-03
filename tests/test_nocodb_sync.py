@@ -171,14 +171,50 @@ Updated: 2026-06-30
 
         items_arg = mock_rebuild.call_args[0][1]
         self.assertEqual(len(items_arg), 3)
-        self.assertEqual(items_arg[0], ("idea", "Feature A"))
-        self.assertEqual(items_arg[1], ("done", "Feature B"))
+        self.assertEqual(items_arg[-1], ("done", "Feature B"))
 
     @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="")
     @patch("scripts.nocodb_sync.rebuild_nocodb_table")
     def test_skips_when_no_table_id(self, mock_rebuild, mock_load):
         sync_rebuild("unknown-slug")
         mock_rebuild.assert_not_called()
+
+    @patch("scripts.nocodb_sync.rebuild_nocodb_table")
+    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
+    def test_done_items_always_sorted_to_end_regardless_of_status_md_order(self, mock_load, mock_rebuild):
+        # Reproduces the bug: finish.md's manual STATUS.md reorder step didn't
+        # move the finished [done] feature to the end of the Roadmap section.
+        status_content = """# Project Status — test-proj
+Active: Feature C
+Phase: plan
+Spec:
+Plan:
+Updated: 2026-06-30
+## Roadmap
+- [idea]      Feature A
+- [done]      Feature B
+- [idea]      Feature C
+- [done]      Feature D
+- [planned]   Feature E
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hub_dir = Path(tmpdir)
+            topic_dir = hub_dir / "topics" / "test-proj"
+            topic_dir.mkdir(parents=True)
+            (topic_dir / "STATUS.md").write_text(status_content)
+            with patch.dict(os.environ, {"HUB_DIR": str(hub_dir)}):
+                sync_rebuild("test-proj")
+
+        items_arg = mock_rebuild.call_args[0][1]
+        statuses = [status for status, _ in items_arg]
+        done_indices = [i for i, s in enumerate(statuses) if s == "done"]
+        non_done_indices = [i for i, s in enumerate(statuses) if s != "done"]
+        self.assertTrue(all(d > n for d in done_indices for n in non_done_indices))
+        # relative order among done items is preserved (stable sort)
+        self.assertEqual(
+            [name for status, name in items_arg if status == "done"],
+            ["Feature B", "Feature D"],
+        )
 
 
 class TestCreateNocobdTable(unittest.TestCase):
