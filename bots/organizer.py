@@ -1273,11 +1273,12 @@ def _handle_callback(cq: dict) -> None:
         answer_callback_query(TOKEN,cq["id"])
         datum_iso=_parse_user_date(dr,date.today())
         if datum_iso:
-            nocodb_direct.create_task(name,datum_iso,prio)
-            d=datum_iso[:10]
-            d_display=f"{d[8:]}.{d[5:7]}.{d[:4]}"
+            datum,uhrzeit=datum_iso.split("T")
+            uhrzeit=uhrzeit[:5]
+            nocodb_direct.create_task(name,datum,prio,uhrzeit=uhrzeit)
+            d_display=f"{datum[8:]}.{datum[5:7]}.{datum[:4]}"
             send_message(TOKEN,chat_id,
-                         f"📅 Termin angelegt: {name} · {d_display} um {datum_iso[11:16]}",
+                         f"📅 Termin angelegt: {name} · {d_display} um {uhrzeit}",
                          reply_markup=REPLY_KEYBOARD)
         else:
             send_message(TOKEN,chat_id,
