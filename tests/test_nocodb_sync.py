@@ -114,7 +114,7 @@ class TestSyncDevToNocodb(unittest.TestCase):
 
 
 import tempfile
-from scripts.nocodb_sync import rebuild_nocodb_table, sync_rebuild
+from scripts.nocodb_sync import rebuild_nocodb_table, sync_rebuild, _reorder_status_roadmap
 from scripts.nocodb_create_table import create_nocodb_table, write_table_id_to_registry
 
 
@@ -419,6 +419,49 @@ class TestMoveRowToEnd(unittest.TestCase):
         _move_row_to_end("tbl_abc123", "Missing")
         mock_delete.assert_not_called()
         mock_post.assert_not_called()
+
+
+class TestReorderImportsNocodbOnlyRows(unittest.TestCase):
+    STATUS = """# Project Status — test-proj
+Active: Feature A
+Phase: plan
+Updated: 2026-06-30
+## Roadmap
+- [idea]      Feature A
+- [done]      Feature B
+"""
+
+    def _run(self, entries):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "STATUS.md"
+            p.write_text(self.STATUS)
+            _reorder_status_roadmap(p, entries)
+            return p.read_text()
+
+    def test_nocodb_only_row_is_added(self):
+        text = self._run([
+            {"name": "Feature A", "status": "idea"},
+            {"name": "testi test", "status": "idea"},
+        ])
+        lines = [l for l in text.splitlines() if l.startswith("- [")]
+        self.assertEqual(lines[1], "- [idea]      testi test")
+
+    def test_new_row_position_follows_nocodb_order(self):
+        text = self._run([
+            {"name": "testi test", "status": "idea"},
+            {"name": "Feature A", "status": "idea"},
+        ])
+        lines = [l for l in text.splitlines() if l.startswith("- [")]
+        self.assertEqual(lines[0], "- [idea]      testi test")
+        self.assertIn("Feature A", lines[1])
+
+    def test_empty_name_still_skipped(self):
+        text = self._run([
+            {"name": "", "status": "idea"},
+            {"name": "Feature A", "status": "idea"},
+        ])
+        lines = [l for l in text.splitlines() if l.startswith("- [")]
+        self.assertEqual(len(lines), 2)
 
 
 if __name__ == "__main__":

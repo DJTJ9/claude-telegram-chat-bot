@@ -257,10 +257,14 @@ def _reorder_status_roadmap(path: Path, entries: list[dict]) -> None:
     for entry in entries:
         name = entry.get("name", "").strip()
         key = name.lower()
-        if not name or key not in existing:
+        if not name:
             continue
-        spacing, name_part = existing[key]
-        reordered.append(f"- [{entry.get('status', 'idea')}]{spacing}{name_part}")
+        status = entry.get("status", "idea")
+        if key in existing:
+            spacing, name_part = existing[key]
+            reordered.append(f"- [{status}]{spacing}{name_part}")
+        else:
+            reordered.append(f"- [{status}]".ljust(14) + name)
         seen.add(key)
     for key, line in existing_lines.items():
         if key not in seen:
