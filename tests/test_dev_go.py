@@ -114,3 +114,34 @@ def test_done_features_excluded(tmp_path):
     hub = _make_hub(tmp_path)
     r = _go(hub, "shop setup")
     assert "error" in r
+
+
+def test_feature_miss_returns_project_matches(tmp_path):
+    hub = _make_hub(tmp_path)
+    r = _go(hub, "shop zzz")
+    assert "error" in r
+    assert r["project_matches"] == ["shopping-navigator"]
+
+
+def test_no_project_match_has_no_project_matches(tmp_path):
+    hub = _make_hub(tmp_path)
+    r = _go(hub, "zzz")
+    assert "error" in r
+    assert "project_matches" not in r
+
+
+def test_project_matches_skips_missing_status_md(tmp_path):
+    registry = REGISTRY + [{"slug": "ghost", "name": "Ghost", "path": "",
+                            "path_windows": "", "repo": "", "description": ""}]
+    (tmp_path / "projects-registry.json").write_text(json.dumps(registry))
+    for slug, status in [
+        ("shopping-navigator", STATUS_SHOPPING),
+        ("dart-app", STATUS_DART),
+        ("dev-skill", STATUS_DEVSKILL),
+    ]:
+        d = tmp_path / "topics" / slug
+        d.mkdir(parents=True)
+        (d / "STATUS.md").write_text(status)
+    r = _go(tmp_path, "ghost zzz")
+    assert "error" in r
+    assert "project_matches" not in r
