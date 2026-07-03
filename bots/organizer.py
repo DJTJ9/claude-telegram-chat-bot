@@ -766,10 +766,17 @@ def start_workflow(kind: str, chat_id: int) -> None:
     _abort = [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]
 
     if kind == "task":
-        _workflow[chat_id]["step"] = "task:name"
+        _workflow[chat_id]["step"] = "task:mode"
+        buttons = [
+            [
+                {"text": "➕ Neue Task", "callback_data": "task:mode:new"},
+                {"text": "✏️ Task bearbeiten", "callback_data": "task:mode:edit"},
+            ],
+            [{"text": "✗ Abbrechen", "callback_data": "wf:abort"}],
+        ]
         send_message(TOKEN, chat_id,
-            "📋 Neuer Task\n\n1 / 2 · Name?",
-            reply_markup={"inline_keyboard": _abort})
+            "📋 Task\n\nNeue Task anlegen oder bestehende bearbeiten?",
+            reply_markup={"inline_keyboard": buttons})
 
     elif kind == "lern":
         _workflow[chat_id]["step"] = "lern:name"
@@ -906,14 +913,38 @@ def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
 
     if step == "task:name":
         state["data"]["name"] = text
+        state["step"] = "task:date"
+        buttons = [[
+            {"text": "Heute",  "callback_data": "task:date:heute"},
+            {"text": "Morgen", "callback_data": "task:date:morgen"},
+            {"text": "Später", "callback_data": "task:date:spaeter"},
+        ], [{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]
+        send_message(TOKEN, chat_id,
+            f'📋 "{text}"\n\n2 / 3 · Wann? (oder Datum als Text/Sprachnachricht)',
+            reply_markup={"inline_keyboard": buttons})
+        return True
+
+    if step == "task:date":
+        datum_iso = _task_date_from_freitext(text, date.today())
+        if not datum_iso:
+            send_message(TOKEN, chat_id,
+                f'❌ Datum nicht erkannt: "{text}". Bitte erneut versuchen.',
+                reply_markup={"inline_keyboard": [[
+                    {"text": "Heute", "callback_data": "task:date:heute"},
+                    {"text": "Morgen", "callback_data": "task:date:morgen"},
+                    {"text": "Später", "callback_data": "task:date:spaeter"},
+                ], [{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]})
+            return True
+        state["data"]["datum"] = datum_iso
         state["step"] = "task:priority"
+        name = state["data"].get("name", "?")
         buttons = [[
             {"text": "🔴 Hoch",    "callback_data": "task:priority:hoch"},
             {"text": "🟡 Mittel",  "callback_data": "task:priority:mittel"},
             {"text": "🟢 Niedrig", "callback_data": "task:priority:niedrig"},
         ]]
         send_message(TOKEN, chat_id,
-            f'📋 "{text}"\n\n2 / 2 · Priorität?',
+            f'📋 "{name}"\n\n3 / 3 · Priorität?',
             reply_markup={"inline_keyboard": buttons})
         return True
 
@@ -1037,13 +1068,44 @@ def _handle_callback(cq: dict) -> None:
             reply_markup=REPLY_KEYBOARD)
         return
 
+    # Task: mode selection → new task or edit existing
+    if data.startswith("task:mode:"):
+        mode = data.split(":")[-1]
+        answer_callback_query(TOKEN, cq["id"])
+        if mode == "edit":
+            start_workflow("task_edit_list", chat_id)
+            return
+        _workflow[chat_id] = {"step": "task:name", "data": {}}
+        send_message(TOKEN, chat_id,
+            "📋 Neue Task\n\n1 / 3 · Name?",
+            reply_markup={"inline_keyboard": [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]})
+        return
+
+    # Task: date selection (Heute/Morgen/Später) → priority step
+    if data.startswith("task:date:"):
+        choice = data.split(":")[-1]
+        state = _workflow.get(chat_id, {})
+        state.setdefault("data", {})["datum"] = _task_date_from_choice(choice, date.today())
+        state["step"] = "task:priority"
+        answer_callback_query(TOKEN, cq["id"])
+        name = state.get("data", {}).get("name", "?")
+        buttons = [[
+            {"text": "🔴 Hoch",    "callback_data": "task:priority:hoch"},
+            {"text": "🟡 Mittel",  "callback_data": "task:priority:mittel"},
+            {"text": "🟢 Niedrig", "callback_data": "task:priority:niedrig"},
+        ]]
+        send_message(TOKEN, chat_id,
+            f'📋 "{name}"\n\n3 / 3 · Priorität?',
+            reply_markup={"inline_keyboard": buttons})
+        return
+
     # Task: final priority step
     if data.startswith("task:priority:"):
-        prio={"hoch":"Hoch","mittel":"Mittel","niedrig":"Niedrig"}.get(data.split(":")[-1],"Mittel")
-        name=_workflow.pop(chat_id,{}).get("data",{}).get("name","?")
-        msg=f"✅ Task angelegt: {name} · {prio}"
-        nocodb_direct.create_task(name,today,prio)
+        p=data.split(":")[-1].capitalize()
+        d=_workflow.pop(chat_id,{}).get("data",{});n=d.get("name","?");dt=d.get("datum",today)
         answer_callback_query(TOKEN,cq["id"])
+        if dt: nocodb_direct.create_task(n,dt,p);msg=f"✅ Task angelegt: {n} · {p}"
+        else: nocodb_direct.create_backlog_item(n,p);msg=f"✅ Backlog: {n} · {p}"
         send_message(TOKEN,chat_id,msg,reply_markup=REPLY_KEYBOARD)
         return
 
