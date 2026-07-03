@@ -215,7 +215,7 @@ def fetch_backlog_items() -> list:
     r = requests.get(_url(BACKLOG_TABLE_ID), headers=_headers(),
                      params={"where": "(Status,eq,Open)", "limit": 200})
     rows = r.json().get("list", []) if r.status_code == 200 else []
-    items = [{"id": str(row["Id"]), "name": row.get("Name", ""),
+    items = [{"id": str(row["Id"]), "name": row.get("Title", ""),
               "prio": row.get("Priorität") or "Niedrig"}
              for row in rows]
     items.sort(key=lambda x: _PRIO_ORDER.get(x["prio"], 1))
@@ -224,7 +224,7 @@ def fetch_backlog_items() -> list:
 
 def create_backlog_item(name: str, prio: str = "Niedrig", bereich: str = "Privat") -> bool:
     r = requests.post(_url(BACKLOG_TABLE_ID), headers=_headers(),
-                      json={"Name": name, "Priorität": prio, "Bereich": bereich,
+                      json={"Title": name, "Priorität": prio, "Bereich": bereich,
                             "Status": "Open"})
     return r.status_code in (200, 201)
 

@@ -76,8 +76,8 @@ class TestFetchBacklogItems(unittest.TestCase):
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {
             "list": [
-                {"Id": 1, "Name": "Task A", "Priorität": "Niedrig"},
-                {"Id": 2, "Name": "Task B", "Priorität": "Hoch"},
+                {"Id": 1, "Title": "Task A", "Priorität": "Niedrig"},
+                {"Id": 2, "Title": "Task B", "Priorität": "Hoch"},
             ]
         }
         from core.nocodb_direct import fetch_backlog_items
@@ -111,7 +111,7 @@ class TestCreateBacklogItem(unittest.TestCase):
         url = mock_post.call_args[0][0]
         self.assertIn("tbl_backlog", url)
         payload = mock_post.call_args[1]["json"]
-        self.assertEqual(payload["Name"], "Neue Aufgabe")
+        self.assertEqual(payload["Title"], "Neue Aufgabe")
         self.assertEqual(payload["Status"], "Open")
         self.assertEqual(payload["Priorität"], "Mittel")
 
