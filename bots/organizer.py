@@ -197,6 +197,38 @@ def _task_date_from_freitext(text: str, today: date) -> str | None:
     parsed = _parse_user_date(text, today)
     return parsed.split("T")[0] if parsed else None
 
+
+def _send_task_edit_date_step(chat_id: int, state: dict) -> None:
+    state["step"] = "task_edit:date"
+    display = state["data"].get("datum") or "Noch kein Datum festgelegt"
+    buttons = [[
+        {"text": "Heute",  "callback_data": "task_edit:date:heute"},
+        {"text": "Morgen", "callback_data": "task_edit:date:morgen"},
+        {"text": "Später", "callback_data": "task_edit:date:spaeter"},
+    ], [
+        {"text": "↷ Beibehalten", "callback_data": "task_edit:date:keep"},
+        {"text": "✗ Abbrechen", "callback_data": "wf:abort"},
+    ]]
+    send_message(TOKEN, chat_id,
+        f'✏️ 2 / 3 · Wann? Aktuell: "{display}"',
+        reply_markup={"inline_keyboard": buttons})
+
+
+def _send_task_edit_priority_step(chat_id: int, state: dict) -> None:
+    state["step"] = "task_edit:priority"
+    prio = state["data"].get("prio", "Mittel")
+    buttons = [[
+        {"text": "🔴 Hoch",    "callback_data": "task_edit:priority:hoch"},
+        {"text": "🟡 Mittel",  "callback_data": "task_edit:priority:mittel"},
+        {"text": "🟢 Niedrig", "callback_data": "task_edit:priority:niedrig"},
+    ], [
+        {"text": "↷ Beibehalten", "callback_data": "task_edit:priority:keep"},
+        {"text": "✗ Abbrechen", "callback_data": "wf:abort"},
+    ]]
+    send_message(TOKEN, chat_id,
+        f'✏️ 3 / 3 · Priorität? Aktuell: "{prio}"',
+        reply_markup={"inline_keyboard": buttons})
+
 BACKLOG_SYSTEM_PROMPT = f"""Du bist ein Notion-Backlog-Assistent. Der Nutzer nennt eine Aufgabe ohne festen Termin.
 Lege sie im Backlog an (data_source_id: {BACKLOG_DATA_SOURCE_ID}).
 Leite ab: Name, Priorität (Hoch/Mittel/Niedrig, Mittel falls nicht angegeben), Bereich (Arbeit/Privat/Lernen/Gesundheit, Privat falls unklar).
@@ -853,6 +885,18 @@ def start_workflow(kind: str, chat_id: int) -> None:
             "📌 Neuer Backlog-Eintrag\n\n1 / 2 · Name?",
             reply_markup={"inline_keyboard": [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]})
 
+    elif kind == "task_edit_list":
+        tasks = nocodb_direct.fetch_open_tasks()
+        if not tasks:
+            send_message(TOKEN, chat_id, "📋 Keine offenen Tasks.", reply_markup=REPLY_KEYBOARD)
+        else:
+            buttons = [[{"text": t["name"], "callback_data": f"task_edit:pick:{t['id']}"}]
+                       for t in tasks]
+            buttons.append([{"text": "✗ Abbrechen", "callback_data": "wf:abort"}])
+            send_message(TOKEN, chat_id, "✏️ Welche Task bearbeiten?",
+                         reply_markup={"inline_keyboard": buttons})
+        _workflow.pop(chat_id, None)
+
     elif kind == "projekte":
         msg, buttons = _build_projekte_message()
         send_message(TOKEN, chat_id, msg,
@@ -946,6 +990,27 @@ def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
         send_message(TOKEN, chat_id,
             f'📋 "{name}"\n\n3 / 3 · Priorität?',
             reply_markup={"inline_keyboard": buttons})
+        return True
+
+    if step == "task_edit:name":
+        state["data"]["name"] = text
+        _send_task_edit_date_step(chat_id, state)
+        return True
+
+    if step == "task_edit:date":
+        datum_iso = _task_date_from_freitext(text, date.today())
+        if not datum_iso:
+            send_message(TOKEN, chat_id,
+                f'❌ Datum nicht erkannt: "{text}". Bitte erneut versuchen.',
+                reply_markup={"inline_keyboard": [[
+                    {"text": "Heute", "callback_data": "task_edit:date:heute"},
+                    {"text": "Morgen", "callback_data": "task_edit:date:morgen"},
+                    {"text": "Später", "callback_data": "task_edit:date:spaeter"},
+                ], [{"text": "↷ Beibehalten", "callback_data": "task_edit:date:keep"},
+                    {"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]})
+            return True
+        state["data"]["datum"] = datum_iso
+        _send_task_edit_priority_step(chat_id, state)
         return True
 
     if step == "lern:name":
@@ -1107,6 +1172,55 @@ def _handle_callback(cq: dict) -> None:
         if dt: nocodb_direct.create_task(n,dt,p);msg=f"✅ Task angelegt: {n} · {p}"
         else: nocodb_direct.create_backlog_item(n,p);msg=f"✅ Backlog: {n} · {p}"
         send_message(TOKEN,chat_id,msg,reply_markup=REPLY_KEYBOARD)
+        return
+
+    # Task bearbeiten: Task ausgewählt → Name-Schritt mit Aktuell-Wert
+    if data.startswith("task_edit:pick:"):
+        task_id = data.split(":")[-1]
+        tasks = {t["id"]: t for t in nocodb_direct.fetch_open_tasks()}
+        task = tasks.get(task_id)
+        answer_callback_query(TOKEN, cq["id"])
+        if not task:
+            send_message(TOKEN, chat_id, "❌ Task nicht mehr gefunden.", reply_markup=REPLY_KEYBOARD)
+            return
+        _workflow[chat_id] = {"step": "task_edit:name",
+                               "data": {"id": task_id, "name": task["name"],
+                                        "datum": task["datum"], "prio": task["prio"]}}
+        buttons = [[{"text": "↷ Beibehalten", "callback_data": "task_edit:name:keep"}],
+                   [{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]
+        send_message(TOKEN, chat_id,
+            f'✏️ 1 / 3 · Name? Aktuell: "{task["name"]}"',
+            reply_markup={"inline_keyboard": buttons})
+        return
+
+    if data == "task_edit:name:keep":
+        state = _workflow.get(chat_id, {})
+        answer_callback_query(TOKEN, cq["id"])
+        _send_task_edit_date_step(chat_id, state)
+        return
+
+    if data.startswith("task_edit:date:"):
+        choice = data.split(":")[-1]
+        state = _workflow.get(chat_id, {})
+        answer_callback_query(TOKEN, cq["id"])
+        if choice != "keep":
+            state["data"]["datum"] = _task_date_from_choice(choice, date.today())
+        _send_task_edit_priority_step(chat_id, state)
+        return
+
+    if data.startswith("task_edit:priority:"):
+        choice = data.split(":")[-1]
+        state = _workflow.pop(chat_id, {})
+        d = state.get("data", {})
+        answer_callback_query(TOKEN, cq["id"])
+        if choice != "keep":
+            d["prio"] = {"hoch": "Hoch", "mittel": "Mittel",
+                          "niedrig": "Niedrig"}.get(choice, d.get("prio", "Mittel"))
+        nocodb_direct.update_task(int(d["id"]), title=d.get("name"),
+                                    datum=d.get("datum"), prio=d.get("prio"))
+        send_message(TOKEN, chat_id,
+            f'✅ Task aktualisiert: {d.get("name")} · {d.get("datum") or "kein Datum"} · {d.get("prio")}',
+            reply_markup=REPLY_KEYBOARD)
         return
 
     # Lern: kategorie step
