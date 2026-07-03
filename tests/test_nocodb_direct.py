@@ -91,6 +91,15 @@ class TestFetchBacklogItems(unittest.TestCase):
         from core.nocodb_direct import fetch_backlog_items
         self.assertEqual(fetch_backlog_items(), [])
 
+    @patch("core.nocodb_direct.requests.get")
+    def test_uses_open_status_filter(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": []}
+        from core.nocodb_direct import fetch_backlog_items
+        fetch_backlog_items()
+        params = mock_get.call_args[1]["params"]
+        self.assertEqual(params["where"], "(Status,eq,Open)")
+
 
 class TestCreateBacklogItem(unittest.TestCase):
     @patch("core.nocodb_direct.requests.post")
@@ -103,7 +112,7 @@ class TestCreateBacklogItem(unittest.TestCase):
         self.assertIn("tbl_backlog", url)
         payload = mock_post.call_args[1]["json"]
         self.assertEqual(payload["Name"], "Neue Aufgabe")
-        self.assertEqual(payload["Status"], "Offen")
+        self.assertEqual(payload["Status"], "Open")
         self.assertEqual(payload["Priorität"], "Mittel")
 
 
