@@ -886,7 +886,9 @@ def start_workflow(kind: str, chat_id: int) -> None:
             reply_markup={"inline_keyboard": [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]})
 
     elif kind == "task_edit_list":
+        print(f"[LAT] before_fetch_open_tasks t={time.time():.3f}")
         tasks = nocodb_direct.fetch_open_tasks()
+        print(f"[LAT] after_fetch_open_tasks t={time.time():.3f}")
         if not tasks:
             send_message(TOKEN, chat_id, "📋 Keine offenen Tasks.", reply_markup=REPLY_KEYBOARD)
         else:
@@ -1141,9 +1143,11 @@ def _handle_callback(cq: dict) -> None:
             start_workflow("task_edit_list", chat_id)
             return
         _workflow[chat_id] = {"step": "task:name", "data": {}}
+        print(f"[LAT] before_send_task_mode_msg t={time.time():.3f}")
         send_message(TOKEN, chat_id,
             "📋 Neue Task\n\n1 / 3 · Name?",
             reply_markup={"inline_keyboard": [[{"text": "✗ Abbrechen", "callback_data": "wf:abort"}]]})
+        print(f"[LAT] after_send_task_mode_msg t={time.time():.3f}")
         return
 
     # Task: date selection (Heute/Morgen/Später) → priority step
@@ -1783,6 +1787,7 @@ class _WebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(n)
+        print(f"[LAT] webhook_recv t={time.time():.3f}")
         self.send_response(200)
         self.end_headers()
         try:
@@ -1800,7 +1805,9 @@ def _dispatch_update(upd: dict) -> None:
         cq = upd["callback_query"]
         if cq["from"]["id"] != CHAT_ID:
             return
+        print(f"[LAT] before_answer_cbq t={time.time():.3f}")
         answer_callback_query(TOKEN, cq["id"])
+        print(f"[LAT] after_answer_cbq t={time.time():.3f}")
         if cq.get("data") == "__freitext__":
             send_message(TOKEN, CHAT_ID, "Bitte Antwort eintippen:")
         else:
