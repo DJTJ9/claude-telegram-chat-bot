@@ -43,3 +43,54 @@ def chapter_lines(chapters: list[dict]) -> list[str]:
         s = int(c["start_time"])
         lines.append(f"{s // 60:02d}:{s % 60:02d} {c['title']}")
     return lines
+
+
+def probe(url: str) -> dict:
+    r = subprocess.run(
+        ["yt-dlp", "--dump-json", "--no-download", "--no-playlist", url],
+        capture_output=True, text=True, timeout=60,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(f"yt-dlp probe fehlgeschlagen: {r.stderr[:200]}")
+    info = json.loads(r.stdout)
+    return {"duration": float(info.get("duration") or 0), "chapters": info.get("chapters") or []}
+
+
+def download_video(url: str, workdir: Path) -> Path:
+    r = subprocess.run(
+        ["yt-dlp", "-f", "worst[height>=360]/worst", "--no-playlist",
+         "-o", str(workdir / "video.%(ext)s"), url],
+        capture_output=True, text=True, timeout=DOWNLOAD_TIMEOUT,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(f"yt-dlp download fehlgeschlagen: {r.stderr[:200]}")
+    videos = [p for p in workdir.iterdir() if p.stem == "video"]
+    if not videos:
+        raise RuntimeError("yt-dlp: kein Video-File nach Download")
+    return videos[0]
+
+
+def extract_frames(video: Path, timestamps: list[float], workdir: Path) -> list[Path]:
+    frames = []
+    for i, ts in enumerate(timestamps, 1):
+        frame = workdir / f"uebung_{i:02d}.jpg"
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-ss", f"{ts:.2f}", "-i", str(video),
+             "-frames:v", "1", "-q:v", "3", str(frame)],
+            capture_output=True, timeout=60,
+        )
+        if r.returncode == 0 and frame.exists():
+            frames.append(frame)
+    if not frames:
+        raise RuntimeError("ffmpeg: keine Frames extrahiert")
+    return frames
+
+
+def download_thumbnail(video_id: str, workdir: Path) -> Path:
+    for variant in ("maxresdefault", "hqdefault"):
+        r = requests.get(f"https://img.youtube.com/vi/{video_id}/{variant}.jpg", timeout=30)
+        if r.status_code == 200 and r.content:
+            p = workdir / "thumbnail.jpg"
+            p.write_bytes(r.content)
+            return p
+    raise RuntimeError(f"kein Thumbnail für {video_id}")
