@@ -22,9 +22,9 @@ if _env.exists():
             _k, _, _v = _line.partition("=")
             os.environ.setdefault(_k.strip(), _v.strip())
 
-# Daten-API (records) läuft MIT dem Workspace/Base-Pfad-Präfix aus NOCODB_API_URL
-# (gleiche Konvention wie core/nocodb_direct._url()); die Storage-API läuft nur
-# auf dem nackten Host ohne Präfix (live verifiziert: bare 400, präfixiert 404).
+# Records- UND Storage-API laufen beide nur auf dem nackten Host ohne
+# Workspace/Base-Pfad-Präfix (live verifiziert: präfixiert 404 "Cannot POST",
+# bare 200). Ein evtl. Präfix in NOCODB_API_URL wird deshalb hier abgestreift.
 NOCODB_API_URL = os.environ.get("NOCODB_API_URL", "http://localhost:8090")
 _parts = urlsplit(NOCODB_API_URL)
 NOCODB_HOST_URL = f"{_parts.scheme}://{_parts.netloc}"
@@ -120,7 +120,7 @@ def import_note(path: Path, vault: Path) -> int | None:
     if media:
         payload["Medium"] = upload_attachment(media)
     r = requests.post(
-        f"{NOCODB_API_URL}/api/v2/tables/{SPORT_TABLE_ID}/records",
+        f"{NOCODB_HOST_URL}/api/v2/tables/{SPORT_TABLE_ID}/records",
         headers={"xc-token": NOCODB_API_TOKEN, "Content-Type": "application/json"},
         json=payload,
     )
