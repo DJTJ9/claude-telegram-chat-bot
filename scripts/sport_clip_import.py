@@ -69,14 +69,17 @@ def find_media(body: str, note_path: Path, vault: Path) -> Path | None:
 
 
 def find_pending(vault: Path) -> list[Path]:
-    clip_dir = vault / CLIP_DIR
-    if not clip_dir.is_dir():
+    # LiveSync mit Case-insensitive-Handling spiegelt Pfade lowercase auf den
+    # Server — Ordnernamen deshalb case-insensitiv matchen
+    if not vault.is_dir():
         return []
+    clip_dirs = [d for d in vault.iterdir() if d.is_dir() and d.name.lower() == CLIP_DIR.lower()]
     pending = []
-    for note in sorted(clip_dir.glob("*.md")):
-        fm, _ = parse_frontmatter(note.read_text(encoding="utf-8"))
-        if not fm.get("nocodb_id"):
-            pending.append(note)
+    for clip_dir in sorted(clip_dirs):
+        for note in sorted(clip_dir.glob("*.md")):
+            fm, _ = parse_frontmatter(note.read_text(encoding="utf-8"))
+            if not fm.get("nocodb_id"):
+                pending.append(note)
     return pending
 
 

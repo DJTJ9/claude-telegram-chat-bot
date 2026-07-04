@@ -77,6 +77,23 @@ class TestFindPending:
     def test_missing_clip_dir_returns_empty(self, tmp_path):
         assert sci.find_pending(tmp_path / "leer") == []
 
+    def test_finds_note_in_lowercase_clip_dir(self, tmp_path):
+        # LiveSync (case-insensitive Handling) legt Pfade lowercase im Spiegel ab
+        vault = tmp_path / "vault"
+        (vault / "sport challenges").mkdir(parents=True)
+        (vault / "sport challenges" / "2026-07-04-stretch.md").write_text(
+            "---\ntitle: Stretch\nnocodb_id:\n---\nText.\n", encoding="utf-8"
+        )
+        assert len(sci.find_pending(vault)) == 1
+
+    def test_both_case_variants_scanned(self, tmp_path):
+        vault = _make_vault(tmp_path)
+        (vault / "sport challenges").mkdir()
+        (vault / "sport challenges" / "2026-07-04-stretch.md").write_text(
+            "---\ntitle: Stretch\nnocodb_id:\n---\nText.\n", encoding="utf-8"
+        )
+        assert len(sci.find_pending(vault)) == 2
+
 
 class TestImportNote:
     @patch.object(sci, "requests")
