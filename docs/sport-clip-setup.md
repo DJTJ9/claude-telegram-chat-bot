@@ -42,6 +42,9 @@ Server-Spiegel `/root/obsidian-vault/` → `sport_clip_import.py` (Timer, 5 min)
 - Vault-Spiegel: `filesystem-livesync.service` (Repo `/root/filesystem-livesync`)
 - Import: `sport-clip-import.timer` + `.service` → `scripts/sport_clip_import.py`
 - NocoDB-Felder via `scripts/setup_sport_clip_fields.py`: Medium/Quelle/Notiz
+- Media-Enrichment: `yt-dlp` (pip, global) + `ffmpeg` (apt) — Frames pro Übung
+  beim Import. yt-dlp bricht bei YouTube-Änderungen gelegentlich → Update mit
+  `python3 -m pip install --break-system-packages -U yt-dlp`.
 
 ### NocoDB-URL-Konvention
 
