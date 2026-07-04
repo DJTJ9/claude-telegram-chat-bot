@@ -44,3 +44,20 @@ def test_notify_bot_override_code_present():
     src = (PROJECT_DIR / "scripts" / "telegram_notify.py").read_text()
     assert "bot_override" in src
     assert 'f"TOKEN_{' in src
+
+
+def test_notify_checks_notifications_enabled():
+    src = (PROJECT_DIR / "scripts" / "telegram_notify.py").read_text()
+    assert "notifications_enabled" in src
+
+
+def test_notify_skips_send_when_notifications_disabled(tmp_path):
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps({"notifications_enabled": False, "active_session": None}))
+    result = subprocess.run(
+        [sys.executable, str(NOTIFY_SCRIPT), "Test message"],
+        capture_output=True, text=True, timeout=5,
+        env={**os.environ, "WORK_DIR": str(tmp_path),
+             "TOKEN_PERMISSIONS": "should-not-be-used", "TOKEN_BRAIN": "", "TOKEN_TEACH": "", "TOKEN_ORGANIZER": ""}
+    )
+    assert result.returncode == 0
