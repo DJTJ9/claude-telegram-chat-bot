@@ -89,6 +89,15 @@ API — Caddy proxied 1:1 und NocoDB kennt diesen Pfad serverseitig nicht.
   (siehe erlaubte Optionen oben) — Wert korrigieren oder leeren, nächster Timer-Lauf
   importiert neu.
 - Note re-importieren: `nocodb_id:`-Zeile im Frontmatter leeren
+- Medium leer trotz YouTube-Quelle: `journalctl -u sport-clip-import -n 20` —
+  Zeile "Enrichment fehlgeschlagen" nennt den Grund. Häufigster Fix:
+  `python3 -m pip install --break-system-packages -U yt-dlp` (YouTube-Änderung).
+  Nur Thumbnail statt Frames = Enrichment-Fallback hat gegriffen; Frames kommen
+  nach yt-dlp-Update + Re-Import (`nocodb_id:` leeren).
+- Frames scheitern aktuell serverseitig: YouTube-Bot-Check blockt die
+  Datacenter-IP ("Sign in to confirm you're not a bot") — Thumbnail-Fallback
+  ist das erwartete Verhalten, bis Cookies provisioniert sind. Zusätzlich
+  braucht yt-dlp 2026.x eine JS-Runtime (node vorhanden: `--js-runtimes node`).
 - **Bekannter offener Bug** (Stand 2026-07-04, separates Follow-up):
   `core/nocodb_direct.py:161` — `fetch_sport_challenges()` filtert mit
   `(Status,eq,Not started)`. Falsches Casing (Option heißt `Not Started`), matcht
