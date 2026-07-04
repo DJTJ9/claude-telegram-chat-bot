@@ -108,9 +108,12 @@ def import_note(path: Path, vault: Path) -> int | None:
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     payload = {
         "Title": fm.get("title") or path.stem,
-        "Kategorie": fm.get("kategorie") or "Sport",
         "Status": "Not Started",
     }
+    # Kategorie ist strikte SingleSelect (Ausdauer/Kraft/Entspannung/Flexibility) —
+    # ohne Frontmatter-Wert Feld weglassen statt ungültige Default-Option senden (400)
+    if fm.get("kategorie"):
+        payload["Kategorie"] = fm["kategorie"]
     if fm.get("source"):
         payload["Quelle"] = fm["source"]
     notiz = body.strip()

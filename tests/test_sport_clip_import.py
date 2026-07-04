@@ -124,4 +124,5 @@ class TestImportNote:
         assert sci.import_note(note, vault) == 78
         row_payload = mock_requests.post.call_args_list[0].kwargs["json"]
         assert "Medium" not in row_payload
-        assert row_payload["Kategorie"] == "Sport"  # Default
+        # Kategorie ist strikte SingleSelect — ohne Frontmatter-Wert wird das Feld weggelassen
+        assert "Kategorie" not in row_payload
