@@ -109,7 +109,7 @@ def import_note(path: Path, vault: Path) -> int | None:
     payload = {
         "Title": fm.get("title") or path.stem,
         "Kategorie": fm.get("kategorie") or "Sport",
-        "Status": "Not started",
+        "Status": "Not Started",
     }
     if fm.get("source"):
         payload["Quelle"] = fm["source"]

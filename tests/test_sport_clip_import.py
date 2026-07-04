@@ -95,7 +95,7 @@ class TestImportNote:
         row_payload = mock_requests.post.call_args_list[1].kwargs["json"]
         assert row_payload["Title"] == "100 Burpees Challenge"
         assert row_payload["Kategorie"] == "Kraft"
-        assert row_payload["Status"] == "Not started"
+        assert row_payload["Status"] == "Not Started"
         assert row_payload["Quelle"] == "https://example.com/burpees"
         assert "nocodb_id: 77" in note.read_text(encoding="utf-8")
 
