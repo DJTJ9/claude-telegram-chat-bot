@@ -143,3 +143,114 @@ class TestImportNote:
         assert "Medium" not in row_payload
         # Kategorie ist strikte SingleSelect — ohne Frontmatter-Wert wird das Feld weggelassen
         assert "Kategorie" not in row_payload
+
+
+YT_NOTE = """---
+title: Stretching Routine
+kategorie: Flexibility
+source: https://www.youtube.com/watch?v=nm-fxV-bwWg
+nocodb_id:
+---
+Follow-along Routine.
+"""
+
+
+def _make_yt_vault(tmp_path):
+    vault = tmp_path / "vault"
+    clips = vault / "Sport Challenges"
+    clips.mkdir(parents=True)
+    note = clips / "2026-07-04-stretch.md"
+    note.write_text(YT_NOTE, encoding="utf-8")
+    return vault, note
+
+
+class TestEnrichMedia:
+    @patch.object(sci, "youtube_enrich")
+    @patch.object(sci, "requests")
+    def test_frames_uploaded_and_chapters_prefixed(self, mock_requests, mock_ye, tmp_path):
+        vault, note = _make_yt_vault(tmp_path)
+        mock_ye.youtube_video_id.return_value = "nm-fxV-bwWg"
+        mock_ye.probe.return_value = {"duration": 380.0, "chapters": [{"start_time": 90, "end_time": 150, "title": "Knee to Chest"}]}
+        mock_ye.frame_timestamps.return_value = [120.0]
+        mock_ye.chapter_lines.return_value = ["01:30 Knee to Chest"]
+
+        def fake_download(url, workdir):
+            return workdir / "video.mp4"
+        def fake_extract(video, timestamps, workdir):
+            f = workdir / "uebung_01.jpg"
+            f.write_bytes(b"\xff\xd8jpg")
+            return [f]
+        mock_ye.download_video.side_effect = fake_download
+        mock_ye.extract_frames.side_effect = fake_extract
+
+        upload_resp = MagicMock(status_code=200)
+        upload_resp.json.return_value = [{"url": "download/uebung_01.jpg", "title": "uebung_01.jpg"}]
+        create_resp = MagicMock(status_code=200)
+        create_resp.json.return_value = {"Id": 9}
+        mock_requests.post.side_effect = [upload_resp, create_resp]
+
+        row_id = sci.import_note(note, vault)
+
+        assert row_id == 9
+        payload = mock_requests.post.call_args_list[1].kwargs["json"]
+        assert payload["Medium"] == [{"url": "download/uebung_01.jpg", "title": "uebung_01.jpg"}]
+        assert payload["Notiz"].startswith("01:30 Knee to Chest")
+        assert "Follow-along Routine." in payload["Notiz"]
+
+    @patch.object(sci, "youtube_enrich")
+    @patch.object(sci, "requests")
+    def test_enrich_failure_falls_back_to_thumbnail(self, mock_requests, mock_ye, tmp_path):
+        vault, note = _make_yt_vault(tmp_path)
+        mock_ye.youtube_video_id.return_value = "nm-fxV-bwWg"
+        mock_ye.probe.side_effect = RuntimeError("geo blocked")
+
+        def fake_thumb(video_id, workdir):
+            p = workdir / "thumbnail.jpg"
+            p.write_bytes(b"\xff\xd8jpg")
+            return p
+        mock_ye.download_thumbnail.side_effect = fake_thumb
+
+        upload_resp = MagicMock(status_code=200)
+        upload_resp.json.return_value = [{"url": "download/thumbnail.jpg", "title": "thumbnail.jpg"}]
+        create_resp = MagicMock(status_code=200)
+        create_resp.json.return_value = {"Id": 10}
+        mock_requests.post.side_effect = [upload_resp, create_resp]
+
+        assert sci.import_note(note, vault) == 10
+        payload = mock_requests.post.call_args_list[1].kwargs["json"]
+        assert payload["Medium"][0]["title"] == "thumbnail.jpg"
+        assert payload["Notiz"].startswith("Follow-along")  # kein Kapitel-Präfix
+
+    @patch.object(sci, "youtube_enrich")
+    @patch.object(sci, "requests")
+    def test_all_enrichment_fails_row_without_medium(self, mock_requests, mock_ye, tmp_path):
+        vault, note = _make_yt_vault(tmp_path)
+        mock_ye.youtube_video_id.return_value = "nm-fxV-bwWg"
+        mock_ye.probe.side_effect = RuntimeError("down")
+        mock_ye.download_thumbnail.side_effect = RuntimeError("404")
+
+        create_resp = MagicMock(status_code=200)
+        create_resp.json.return_value = {"Id": 11}
+        mock_requests.post.return_value = create_resp
+
+        assert sci.import_note(note, vault) == 11
+        payload = mock_requests.post.call_args_list[0].kwargs["json"]
+        assert "Medium" not in payload
+
+    @patch.object(sci, "youtube_enrich")
+    @patch.object(sci, "requests")
+    def test_non_youtube_source_skips_enrichment(self, mock_requests, mock_ye, tmp_path):
+        vault = tmp_path / "vault"
+        clips = vault / "Sport Challenges"
+        clips.mkdir(parents=True)
+        note = clips / "no-yt.md"
+        note.write_text("---\ntitle: Plank\nsource: https://example.com/x\nnocodb_id:\n---\nPlank.\n", encoding="utf-8")
+        mock_ye.youtube_video_id.return_value = None
+
+        create_resp = MagicMock(status_code=200)
+        create_resp.json.return_value = {"Id": 12}
+        mock_requests.post.return_value = create_resp
+
+        assert sci.import_note(note, vault) == 12
+        mock_ye.probe.assert_not_called()
+        mock_ye.download_thumbnail.assert_not_called()

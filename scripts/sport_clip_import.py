@@ -9,10 +9,16 @@ import mimetypes
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import requests
+
+try:
+    from scripts import youtube_enrich  # Test-Kontext (Repo-Root auf sys.path)
+except ImportError:
+    import youtube_enrich  # Script-Kontext (scripts/ ist sys.path[0])
 
 _env = Path(__file__).parent.parent / ".env"
 if _env.exists():
@@ -107,6 +113,32 @@ def write_back_id(path: Path, row_id: int) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def enrich_media(source: str) -> tuple[list[dict], list[str]]:
+    """Kaskade: Übungs-Frames -> Thumbnail -> nichts. Blockiert den Import nie."""
+    video_id = youtube_enrich.youtube_video_id(source)
+    if not video_id:
+        return [], []
+    with tempfile.TemporaryDirectory() as td:
+        workdir = Path(td)
+        try:
+            info = youtube_enrich.probe(source)
+            timestamps = youtube_enrich.frame_timestamps(info["duration"], info["chapters"])
+            video = youtube_enrich.download_video(source, workdir)
+            frames = youtube_enrich.extract_frames(video, timestamps, workdir)
+            attachments = []
+            for frame in frames:
+                attachments.extend(upload_attachment(frame))
+            return attachments, youtube_enrich.chapter_lines(info["chapters"])
+        except Exception as exc:
+            print(f"Enrichment fehlgeschlagen ({video_id}), Fallback Thumbnail: {exc}")
+        try:
+            thumb = youtube_enrich.download_thumbnail(video_id, workdir)
+            return upload_attachment(thumb), []
+        except Exception as exc:
+            print(f"Thumbnail-Fallback fehlgeschlagen ({video_id}): {exc}")
+            return [], []
+
+
 def import_note(path: Path, vault: Path) -> int | None:
     fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
     payload = {
@@ -120,11 +152,17 @@ def import_note(path: Path, vault: Path) -> int | None:
     if fm.get("source"):
         payload["Quelle"] = fm["source"]
     notiz = body.strip()
-    if notiz:
-        payload["Notiz"] = notiz[:2000]
     media = find_media(body, path, vault)
     if media:
         payload["Medium"] = upload_attachment(media)
+    else:
+        attachments, kapitel = enrich_media(fm.get("source", ""))
+        if attachments:
+            payload["Medium"] = attachments
+        if kapitel:
+            notiz = "\n".join(kapitel) + "\n\n" + notiz
+    if notiz:
+        payload["Notiz"] = notiz[:2000]
     r = requests.post(
         f"{NOCODB_HOST_URL}/api/v2/tables/{SPORT_TABLE_ID}/records",
         headers={"xc-token": NOCODB_API_TOKEN, "Content-Type": "application/json"},
