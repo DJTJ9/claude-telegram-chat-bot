@@ -257,7 +257,10 @@ def _run_teach(topic):
         f"Do NOT run git commands. Do NOT call telegram_notify.py. "
         f"The calling process handles git commit, push, and user notification."
     )
-    cmd = ["claude", "--allowedTools", "Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,Skill", "-p", prompt]
+    mcp_cfg = TEACH_DIR.parent / ".teach_mcp_empty.json"
+    mcp_cfg.write_text('{"mcpServers": {}}', encoding="utf-8")
+    cmd = ["claude", "--strict-mcp-config", "--mcp-config", str(mcp_cfg),
+           "--allowedTools", "Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,Skill", "-p", prompt]
     env = {**os.environ, "CLAUDE_AUTOMATED": "1"}
 
     kb = [[{"text": "🛑 Abbrechen", "callback_data": "teach_abort"}]]
