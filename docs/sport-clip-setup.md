@@ -10,7 +10,10 @@ Server-Spiegel `/root/obsidian-vault/` → `sport_clip_import.py` (Timer, 5 min)
 ## Einmalig pro Gerät (iPad / Android / Windows)
 
 2. **Obsidian LiveSync Plugin** (Community Plugins → "Self-hosted LiveSync"):
-   - Remote Database URI: `https://sync.thinkshark.de/obsidian`
+   - Remote Database URI: `https://sync.thinkshark.de` — **ohne `/obsidian`-Pfad!**
+     Das Plugin hat ein separates Feld "Database name": dort `obsidian` eintragen.
+     (URI mit Pfad + Database name führt zu doppeltem Pfad `/obsidian/obsidian/` →
+     404/400, Plugin meldet "Could not connect".)
    - Username: `obsidian_sync`, Password: siehe `/root/nocodb-data/.env`
    - Sync-Modus: LiveSync. Bei Cloudflare-Timeouts: Batch size/Batch limit reduzieren.
 3. **Obsidian Web Clipper**:
