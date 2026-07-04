@@ -30,6 +30,24 @@ def _notify_failure(slug: str) -> None:
     )
 
 
+def _notify_start(slug: str) -> None:
+    notify = WORK_DIR / "scripts" / "telegram_notify.py"
+    subprocess.run(
+        [sys.executable, str(notify), "--bot", "brain", f"🚀 Starte Implementierung: {slug}"],
+        timeout=10,
+        capture_output=True,
+    )
+
+
+def _notify_success(slug: str) -> None:
+    notify = WORK_DIR / "scripts" / "telegram_notify.py"
+    subprocess.run(
+        [sys.executable, str(notify), "--bot", "brain", f"✅ Implementierung abgeschlossen: {slug}"],
+        timeout=10,
+        capture_output=True,
+    )
+
+
 def main() -> None:
     try:
         plans: list = json.loads(PLANS_FILE.read_text())
@@ -49,6 +67,8 @@ def main() -> None:
         PLANS_FILE.write_text(json.dumps(plans, indent=2))
 
         plan_path = HUB_DIR / entry.get("plan_path", "")
+        slug = entry.get("slug", str(plan_path))
+        _notify_start(slug)
         try:
             result = subprocess.run(
                 [
@@ -60,7 +80,9 @@ def main() -> None:
                 timeout=3600,
             )
             entry["status"] = "done" if result.returncode == 0 else "failed"
-            if entry["status"] == "failed":
+            if entry["status"] == "done":
+                _notify_success(slug)
+            else:
                 _notify_failure(entry.get("slug", str(plan_path)))
         except Exception:
             entry["status"] = "failed"

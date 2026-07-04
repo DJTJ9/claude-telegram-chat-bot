@@ -1672,54 +1672,6 @@ def _run_archive_once():
         print(f"archive error: {e}")
 
 
-def _run_plan(plan_path, slug=None):
-    if plan_path.startswith("topics/"):
-        base_dir = str(HUB_DIR)
-        resolved = (HUB_DIR / plan_path).resolve()
-        allowed = (HUB_DIR / "topics").resolve()
-    else:
-        base_dir = str(WORK_DIR)
-        resolved = (WORK_DIR / plan_path).resolve()
-        allowed = (WORK_DIR / "docs" / "superpowers" / "plans").resolve()
-    try:
-        resolved.relative_to(allowed)
-    except ValueError:
-        send_message(TOKEN, CHAT_ID, f"❌ Ungültiger Plan-Pfad: {plan_path}")
-        return
-    prompt = (
-        "Follow the implementation plan exactly. "
-        f"Plan file: {plan_path}\n"
-        "Read the plan file and implement every task step by step. Commit all changes when done."
-    )
-    cmd = ["claude", "--dangerously-skip-permissions", "-p", prompt]
-    s = load_settings()
-    s["active_session"] = "organizer"
-    save_settings(s)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=3600, cwd=base_dir)
-        if result.returncode != 0:
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=3600, cwd=base_dir)
-    finally:
-        s = load_settings()
-        s["active_session"] = None
-        save_settings(s)
-    success = result.returncode == 0
-    if slug:
-        plans = load_plans()
-        for p in plans:
-            if p["slug"] == slug:
-                p["status"] = "done" if success else "failed"
-                break
-        save_plans(plans)
-        subprocess.run(["git", "-C", str(HUB_DIR), "add", "scheduled_plans.json"], capture_output=True)
-        subprocess.run(["git", "-C", str(HUB_DIR), "commit", "-m", f"chore: plan {slug} -> {'done' if success else 'failed'}"], capture_output=True)
-    label = slug or plan_path
-    if success:
-        send_message(TOKEN, CHAT_ID, f"✅ Implementierung abgeschlossen: {label}")
-    else:
-        send_message(TOKEN, CHAT_ID, f"❌ Implementierung fehlgeschlagen: {label}\n{(result.stderr or '')[-500:]}")
-
-
 def _schedule_plan(slug, scheduled_time):
     plans = load_plans()
     for plan in plans:
@@ -1762,24 +1714,6 @@ def _format_plans():
         for p in waiting:
             lines.append(f"• {p['slug']}")
     return "\n".join(lines)
-
-
-def _plan_loop():
-    while True:
-        time.sleep(60)
-        try:
-            now = datetime.now().strftime("%H:%M")
-            plans = load_plans()
-            for plan in plans:
-                if plan["status"] == "pending" and plan.get("scheduled_time") == now:
-                    plan["status"] = "running"
-                    save_plans(plans)
-                    subprocess.run(["git", "-C", str(HUB_DIR), "add", "scheduled_plans.json"], capture_output=True)
-                    subprocess.run(["git", "-C", str(HUB_DIR), "commit", "-m", f"chore: plan {plan['slug']} -> running"], capture_output=True)
-                    send_message(TOKEN, CHAT_ID, f"🚀 Starte Implementierung: {plan['slug']}")
-                    threading.Thread(target=_run_plan, args=(plan["plan_path"], plan["slug"]), daemon=True).start()
-        except Exception as e:
-            print(f"plan loop error: {e}")
 
 
 def _get_projects():
@@ -2057,14 +1991,6 @@ def _handle_message(msg: dict) -> None:
 
 
 def main():
-    plans = load_plans()
-    for p in plans:
-        if p["status"] == "running":
-            p["status"] = "pending"
-    save_plans(plans)
-
-    threading.Thread(target=_plan_loop, daemon=True).start()
-
     def _reminder_loop():
         while True:
             _check_and_send_reminders()
