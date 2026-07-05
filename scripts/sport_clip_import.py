@@ -38,6 +38,8 @@ NOCODB_API_TOKEN = os.environ.get("NOCODB_API_TOKEN", "")
 SPORT_TABLE_ID = os.environ.get("NOCODB_SPORT_TABLE_ID", "")
 VAULT_PATH = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/root/obsidian-vault"))
 CLIP_DIR = "Sport Challenges"
+TOKEN_ORGANIZER = os.environ.get("TOKEN_ORGANIZER", "")
+CHAT_ID = os.environ.get("CHAT_ID", "")
 
 MEDIA_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".webm", ".mov"}
 _EMBED_RE = re.compile(r"!\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]")
@@ -113,30 +115,59 @@ def write_back_id(path: Path, row_id: int) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def notify_import(title: str, media_count: int) -> None:
+    """Produkt-Notification direkt an den Organizer-Chat — bewusst NICHT über
+    telegram_notify.py, dessen notifications_enabled-Dev-Gate den
+    Import-Feedback unterdrücken würde (User-Entscheidung 2026-07-05)."""
+    if not TOKEN_ORGANIZER or not CHAT_ID:
+        return
+    try:
+        r = requests.post(
+            f"https://api.telegram.org/bot{TOKEN_ORGANIZER}/sendMessage",
+            json={"chat_id": int(CHAT_ID),
+                  "text": f"🏃 Sport-Challenge importiert: {title} ({media_count} Medien)"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            print(f"Import-Notify HTTP {r.status_code}")
+    except Exception as exc:
+        print(f"Import-Notify fehlgeschlagen: {exc}")
+
+
 def enrich_media(source: str) -> tuple[list[dict], list[str]]:
-    """Kaskade: Übungs-Frames -> Thumbnail -> nichts. Blockiert den Import nie."""
+    """Kaskade: Cookies-Frames -> Watch-Page-Kapitel+Thumbnail -> Thumbnail -> nichts.
+    Blockiert den Import nie."""
     video_id = youtube_enrich.youtube_video_id(source)
     if not video_id:
         return [], []
     with tempfile.TemporaryDirectory() as td:
         workdir = Path(td)
+        if youtube_enrich.has_cookies():
+            try:
+                info = youtube_enrich.probe(source)
+                timestamps = youtube_enrich.frame_timestamps(info["duration"], info["chapters"])
+                video = youtube_enrich.download_video(source, workdir)
+                frames = youtube_enrich.extract_frames(video, timestamps, workdir)
+                attachments = []
+                for frame in frames:
+                    attachments.extend(upload_attachment(frame))
+                return attachments, youtube_enrich.chapter_lines(info["chapters"])
+            except Exception as exc:
+                print(f"Cookies-Frames fehlgeschlagen ({video_id}), Fallback Watch-Page: {exc}")
+        else:
+            print(f"kein Cookies-File ({youtube_enrich.COOKIES_FILE}) — Frames-Tier übersprungen")
+        kapitel: list[str] = []
         try:
-            info = youtube_enrich.probe(source)
-            timestamps = youtube_enrich.frame_timestamps(info["duration"], info["chapters"])
-            video = youtube_enrich.download_video(source, workdir)
-            frames = youtube_enrich.extract_frames(video, timestamps, workdir)
-            attachments = []
-            for frame in frames:
-                attachments.extend(upload_attachment(frame))
-            return attachments, youtube_enrich.chapter_lines(info["chapters"])
+            kapitel = youtube_enrich.chapter_lines(
+                youtube_enrich.scrape_watch_chapters(video_id))
         except Exception as exc:
-            print(f"Enrichment fehlgeschlagen ({video_id}), Fallback Thumbnail: {exc}")
+            print(f"Watch-Page-Kapitel fehlgeschlagen ({video_id}): {exc}")
         try:
             thumb = youtube_enrich.download_thumbnail(video_id, workdir)
-            return upload_attachment(thumb), []
+            return upload_attachment(thumb), kapitel
         except Exception as exc:
             print(f"Thumbnail-Fallback fehlgeschlagen ({video_id}): {exc}")
-            return [], []
+            return [], kapitel
 
 
 def import_note(path: Path, vault: Path) -> int | None:
@@ -173,6 +204,7 @@ def import_note(path: Path, vault: Path) -> int | None:
         return None
     row_id = r.json()["Id"]
     write_back_id(path, row_id)
+    notify_import(payload["Title"], len(payload.get("Medium") or []))
     return row_id
 
 

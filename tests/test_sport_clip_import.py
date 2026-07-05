@@ -203,6 +203,9 @@ class TestEnrichMedia:
         vault, note = _make_yt_vault(tmp_path)
         mock_ye.youtube_video_id.return_value = "nm-fxV-bwWg"
         mock_ye.probe.side_effect = RuntimeError("geo blocked")
+        # Watch-Page-Tier liefert keine Kapitel — reiner Thumbnail-Fallback
+        mock_ye.scrape_watch_chapters.return_value = []
+        mock_ye.chapter_lines.return_value = []
 
         def fake_thumb(video_id, workdir):
             p = workdir / "thumbnail.jpg"
@@ -254,3 +257,93 @@ class TestEnrichMedia:
         assert sci.import_note(note, vault) == 12
         mock_ye.probe.assert_not_called()
         mock_ye.download_thumbnail.assert_not_called()
+
+
+def _fake_thumb(workdir):
+    p = workdir / "thumbnail.jpg"
+    p.write_bytes(b"jpg")
+    return p
+
+
+def test_enrich_media_ohne_cookies_ueberspringt_frames_tier(monkeypatch):
+    monkeypatch.setattr(sci.youtube_enrich, "has_cookies", lambda: False)
+    probe_called = []
+    monkeypatch.setattr(sci.youtube_enrich, "probe",
+                        lambda url: probe_called.append(url))
+    monkeypatch.setattr(sci.youtube_enrich, "scrape_watch_chapters",
+                        lambda vid: [{"title": "EINLEITUNG", "start_time": 0}])
+    monkeypatch.setattr(sci.youtube_enrich, "download_thumbnail",
+                        lambda vid, wd: _fake_thumb(wd))
+    monkeypatch.setattr(sci, "upload_attachment",
+                        lambda p: [{"title": p.name}])
+    attachments, kapitel = sci.enrich_media(
+        "https://www.youtube.com/watch?v=abcdefghijk")
+    assert probe_called == []                      # Frames-Tier übersprungen
+    assert attachments == [{"title": "thumbnail.jpg"}]
+    assert kapitel == ["00:00 EINLEITUNG"]         # Kapitel trotzdem gerettet
+
+
+def test_enrich_media_mit_cookies_laeuft_frames_tier(monkeypatch):
+    monkeypatch.setattr(sci.youtube_enrich, "has_cookies", lambda: True)
+    monkeypatch.setattr(sci.youtube_enrich, "probe",
+                        lambda url: {"duration": 60.0,
+                                     "chapters": [{"title": "A", "start_time": 0, "end_time": 30}]})
+    monkeypatch.setattr(sci.youtube_enrich, "frame_timestamps",
+                        lambda d, c: [15.0])
+    monkeypatch.setattr(sci.youtube_enrich, "download_video",
+                        lambda url, wd: wd / "video.mp4")
+    def fake_frames(video, ts, wd):
+        f = wd / "uebung_01.jpg"
+        f.write_bytes(b"jpg")
+        return [f]
+    monkeypatch.setattr(sci.youtube_enrich, "extract_frames", fake_frames)
+    monkeypatch.setattr(sci.youtube_enrich, "chapter_lines",
+                        lambda c: ["00:00 A"])
+    monkeypatch.setattr(sci, "upload_attachment",
+                        lambda p: [{"title": p.name}])
+    attachments, kapitel = sci.enrich_media(
+        "https://www.youtube.com/watch?v=abcdefghijk")
+    assert attachments == [{"title": "uebung_01.jpg"}]
+    assert kapitel == ["00:00 A"]
+
+
+def test_enrich_media_frames_fehler_faellt_auf_watch_page_tier(monkeypatch):
+    monkeypatch.setattr(sci.youtube_enrich, "has_cookies", lambda: True)
+    def boom(url):
+        raise RuntimeError("LOGIN_REQUIRED")
+    monkeypatch.setattr(sci.youtube_enrich, "probe", boom)
+    monkeypatch.setattr(sci.youtube_enrich, "scrape_watch_chapters",
+                        lambda vid: [{"title": "B", "start_time": 73}])
+    monkeypatch.setattr(sci.youtube_enrich, "download_thumbnail",
+                        lambda vid, wd: _fake_thumb(wd))
+    monkeypatch.setattr(sci, "upload_attachment",
+                        lambda p: [{"title": p.name}])
+    attachments, kapitel = sci.enrich_media(
+        "https://www.youtube.com/watch?v=abcdefghijk")
+    assert attachments == [{"title": "thumbnail.jpg"}]
+    assert kapitel == ["01:13 B"]
+
+
+def test_notify_import_fehler_blockiert_nicht(monkeypatch):
+    monkeypatch.setattr(sci, "TOKEN_ORGANIZER", "t0k3n")
+    monkeypatch.setattr(sci, "CHAT_ID", "12345")
+    def boom(*a, **kw):
+        raise RuntimeError("Telegram down")
+    monkeypatch.setattr(sci.requests, "post", boom)
+    sci.notify_import("Titel", 3)  # darf nicht raisen
+
+
+def test_notify_import_sendet_an_organizer(monkeypatch):
+    monkeypatch.setattr(sci, "TOKEN_ORGANIZER", "t0k3n")
+    monkeypatch.setattr(sci, "CHAT_ID", "12345")
+    sent = {}
+    def fake_post(url, json=None, timeout=None):
+        sent["url"], sent["json"] = url, json
+        class R:
+            status_code = 200
+        return R()
+    monkeypatch.setattr(sci.requests, "post", fake_post)
+    sci.notify_import("6 Minute Stretching", 4)
+    assert "bott0k3n/sendMessage" in sent["url"]
+    assert sent["json"]["chat_id"] == 12345
+    assert sent["json"]["text"] == "🏃 Sport-Challenge importiert: 6 Minute Stretching (4 Medien)"
