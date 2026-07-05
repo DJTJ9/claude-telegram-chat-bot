@@ -1,11 +1,14 @@
 """Tests für scripts/youtube_enrich.py — URL-Parsing, Timestamp-Berechnung,
 Kapitelliste, subprocess-Wrapper. Netzwerk + Subprocesses komplett gemockt."""
+import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts import youtube_enrich as ye
+from scripts import youtube_enrich
 
 
 class TestYoutubeVideoId:
@@ -153,3 +156,94 @@ class TestDownloadThumbnail:
             assert False, "RuntimeError erwartet"
         except RuntimeError:
             pass
+
+
+def test_has_cookies_false_wenn_file_fehlt(monkeypatch, tmp_path):
+    monkeypatch.setattr(youtube_enrich, "COOKIES_FILE", str(tmp_path / "nope.txt"))
+    assert youtube_enrich.has_cookies() is False
+
+
+def test_probe_und_download_geben_cookies_flag_weiter(monkeypatch, tmp_path):
+    cookies = tmp_path / "youtube_cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n")
+    monkeypatch.setattr(youtube_enrich, "COOKIES_FILE", str(cookies))
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        class R:
+            returncode = 0
+            stdout = json.dumps({"duration": 60, "chapters": []})
+            stderr = ""
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    youtube_enrich.probe("https://www.youtube.com/watch?v=abcdefghijk")
+    (tmp_path / "video.mp4").write_bytes(b"x")
+    # download_video sucht video.* im workdir — fake_run lädt nichts, Datei liegt schon da
+    youtube_enrich.download_video("https://www.youtube.com/watch?v=abcdefghijk", tmp_path)
+    for cmd in calls:
+        i = cmd.index("--cookies")
+        assert cmd[i + 1] == str(cookies)
+
+
+def test_probe_ohne_cookies_file_kein_flag(monkeypatch, tmp_path):
+    monkeypatch.setattr(youtube_enrich, "COOKIES_FILE", str(tmp_path / "nope.txt"))
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        class R:
+            returncode = 0
+            stdout = json.dumps({"duration": 60, "chapters": []})
+            stderr = ""
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    youtube_enrich.probe("https://www.youtube.com/watch?v=abcdefghijk")
+    assert "--cookies" not in calls[0]
+
+
+WATCH_HTML_FIXTURE = (
+    'irrelevant{"macroMarkersListItemRenderer":{"title":{"simpleText":"EINLEITUNG"},'
+    '"timeDescription":{"accessibility":{"accessibilityData":{"label":"0 Sekunden"}},'
+    '"simpleText":"0:00"},"thumbnail":{"thumbnails":[]},"onTap":{}}}mehr'
+    '{"macroMarkersListItemRenderer":{"title":{"simpleText":"KNIE ZUR BRUST"},'
+    '"timeDescription":{"accessibility":{"accessibilityData":{"label":"73 Sekunden"}},'
+    '"simpleText":"1:13"},"thumbnail":{"thumbnails":[]},"onTap":{}}}'
+    # Duplikat (Engagement-Panel listet Kapitel doppelt) — muss dedupliziert werden
+    '{"macroMarkersListItemRenderer":{"title":{"simpleText":"EINLEITUNG"},'
+    '"timeDescription":{"accessibility":{"accessibilityData":{"label":"0 Sekunden"}},'
+    '"simpleText":"0:00"},"thumbnail":{"thumbnails":[]},"onTap":{}}}'
+    # Marker ohne Titel (z.B. Heatmap) — muss ignoriert werden
+    '{"macroMarkersListItemRenderer":{"timeDescription":{"simpleText":"0:30"},"onTap":{}}}'
+)
+
+
+def test_scrape_watch_chapters_parst_dedupliziert_und_sortiert(monkeypatch):
+    def fake_get(url, headers=None, timeout=None):
+        assert "watch?v=abcdefghijk" in url
+        class R:
+            status_code = 200
+            text = WATCH_HTML_FIXTURE
+        return R()
+
+    monkeypatch.setattr(youtube_enrich.requests, "get", fake_get)
+    chapters = youtube_enrich.scrape_watch_chapters("abcdefghijk")
+    assert chapters == [
+        {"title": "EINLEITUNG", "start_time": 0},
+        {"title": "KNIE ZUR BRUST", "start_time": 73},
+    ]
+    # kompatibel zu chapter_lines()
+    assert youtube_enrich.chapter_lines(chapters) == ["00:00 EINLEITUNG", "01:13 KNIE ZUR BRUST"]
+
+
+def test_scrape_watch_chapters_leere_liste_bei_http_fehler(monkeypatch):
+    def fake_get(url, headers=None, timeout=None):
+        class R:
+            status_code = 429
+            text = ""
+        return R()
+
+    monkeypatch.setattr(youtube_enrich.requests, "get", fake_get)
+    assert youtube_enrich.scrape_watch_chapters("abcdefghijk") == []
