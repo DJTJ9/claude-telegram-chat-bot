@@ -4,6 +4,7 @@ Frame-Timestamp-Berechnung (Kapitel-Mitte — Übungen werden erst erklärt,
 dann ausgeführt), yt-dlp-Probe/-Download, ffmpeg-Frame-Extraktion,
 Thumbnail-Fallback. Kein NocoDB-Wissen — reine Medien-Beschaffung."""
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -17,6 +18,18 @@ _YT_ID_RE = re.compile(
 MAX_FRAMES = 10
 FALLBACK_FRAMES = 6
 DOWNLOAD_TIMEOUT = 180  # Sekunden — hängender Download darf den Timer-Lauf nicht halten
+
+COOKIES_FILE = os.environ.get("YOUTUBE_COOKIES_FILE", "/root/secrets/youtube_cookies.txt")
+WATCH_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+
+
+def has_cookies() -> bool:
+    return Path(COOKIES_FILE).is_file()
+
+
+def _cookie_args() -> list[str]:
+    return ["--cookies", COOKIES_FILE] if has_cookies() else []
 
 
 def youtube_video_id(url: str) -> str | None:
@@ -47,7 +60,7 @@ def chapter_lines(chapters: list[dict]) -> list[str]:
 
 def probe(url: str) -> dict:
     r = subprocess.run(
-        ["yt-dlp", "--dump-json", "--no-download", "--no-playlist", url],
+        ["yt-dlp", "--dump-json", "--no-download", "--no-playlist", *_cookie_args(), url],
         capture_output=True, text=True, timeout=60,
     )
     if r.returncode != 0:
@@ -58,7 +71,7 @@ def probe(url: str) -> dict:
 
 def download_video(url: str, workdir: Path) -> Path:
     r = subprocess.run(
-        ["yt-dlp", "-f", "worst[height>=360]/worst", "--no-playlist",
+        ["yt-dlp", "-f", "worst[height>=360]/worst", "--no-playlist", *_cookie_args(),
          "-o", str(workdir / "video.%(ext)s"), url],
         capture_output=True, text=True, timeout=DOWNLOAD_TIMEOUT,
     )
@@ -94,3 +107,62 @@ def download_thumbnail(video_id: str, workdir: Path) -> Path:
             p.write_bytes(r.content)
             return p
     raise RuntimeError(f"kein Thumbnail für {video_id}")
+
+
+def _parse_clock(ts: str) -> int:
+    seconds = 0
+    for part in ts.split(":"):
+        seconds = seconds * 60 + int(part)
+    return seconds
+
+
+def _balanced_json(text: str, start: int) -> dict | None:
+    """JSON-Objekt ab text[start]=='{' per Klammer-Zählung ausschneiden."""
+    depth, in_str, esc = 0, False, False
+    for i in range(start, len(text)):
+        c = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start:i + 1])
+                except json.JSONDecodeError:
+                    return None
+    return None
+
+
+def scrape_watch_chapters(video_id: str) -> list[dict]:
+    """Kapitel aus der Watch-Page (macroMarkersListItemRenderer). Funktioniert auch
+    bei LOGIN_REQUIRED-IP-Block, wo yt-dlp keine Player-Daten bekommt — die
+    Storyboard-Spec fehlt dort, die Kapitel-Marker werden aber ausgeliefert
+    (live verifiziert 2026-07-05)."""
+    r = requests.get(
+        f"https://www.youtube.com/watch?v={video_id}",
+        headers={"User-Agent": WATCH_UA, "Accept-Language": "de,en;q=0.8"},
+        timeout=30,
+    )
+    if r.status_code != 200:
+        return []
+    by_start: dict[int, dict] = {}
+    for m in re.finditer(r'"macroMarkersListItemRenderer":\{', r.text):
+        obj = _balanced_json(r.text, m.end() - 1)
+        if not obj:
+            continue
+        title = (obj.get("title") or {}).get("simpleText")
+        ts = (obj.get("timeDescription") or {}).get("simpleText")
+        if not title or not ts or not re.fullmatch(r"[\d:]+", ts):
+            continue
+        start = _parse_clock(ts)
+        by_start.setdefault(start, {"title": title, "start_time": start})
+    return [by_start[k] for k in sorted(by_start)]

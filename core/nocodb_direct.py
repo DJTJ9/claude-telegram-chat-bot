@@ -159,7 +159,7 @@ def fetch_abend_data(date_iso: str) -> dict:
 
 def fetch_sport_challenges() -> list:
     r = requests.get(_url(SPORT_TABLE_ID), headers=_headers(),
-                     params={"where": "(Status,eq,Not started)", "limit": 200})
+                     params={"where": "(Status,eq,Not Started)", "limit": 200})
     rows = r.json().get("list", []) if r.status_code == 200 else []
     by_cat: dict = {}
     for row in rows:

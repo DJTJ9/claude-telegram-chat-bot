@@ -70,6 +70,18 @@ class TestMarkSportDone(unittest.TestCase):
         self.assertEqual(payload[0]["Status"], "Done")
 
 
+class TestFetchSportChallenges(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.get")
+    def test_filtert_not_started_korrektes_casing(self, mock_get):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"list": []}
+        from core.nocodb_direct import fetch_sport_challenges
+        fetch_sport_challenges()
+        params = mock_get.call_args[1]["params"]
+        # NocoDB-SingleSelect-Option heißt exakt "Not Started" (so schreibt sie sport_clip_import.py)
+        self.assertEqual(params["where"], "(Status,eq,Not Started)")
+
+
 class TestFetchBacklogItems(unittest.TestCase):
     @patch("core.nocodb_direct.requests.get")
     def test_returns_sorted_list(self, mock_get):

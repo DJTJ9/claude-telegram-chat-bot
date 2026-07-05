@@ -94,15 +94,39 @@ API — Caddy proxied 1:1 und NocoDB kennt diesen Pfad serverseitig nicht.
   `python3 -m pip install --break-system-packages -U yt-dlp` (YouTube-Änderung).
   Nur Thumbnail statt Frames = Enrichment-Fallback hat gegriffen; Frames kommen
   nach yt-dlp-Update + Re-Import (`nocodb_id:` leeren).
-- Frames scheitern aktuell serverseitig: YouTube-Bot-Check blockt die
-  Datacenter-IP ("Sign in to confirm you're not a bot") — Thumbnail-Fallback
-  ist das erwartete Verhalten, bis Cookies provisioniert sind. Zusätzlich
-  braucht yt-dlp 2026.x eine JS-Runtime (node vorhanden: `--js-runtimes node`).
-- **Bekannter offener Bug** (Stand 2026-07-04, separates Follow-up):
-  `core/nocodb_direct.py:161` — `fetch_sport_challenges()` filtert mit
-  `(Status,eq,Not started)`. Falsches Casing (Option heißt `Not Started`), matcht
-  daher 0 Rows → der Sport-Random-Pool der Bots ist leer. Das Modul war für dieses
-  Feature tabu; Fix erfolgt separat.
+- Frames scheitern ohne Cookies serverseitig: YouTube-Bot-Check blockt die
+  Datacenter-IP ("Sign in to confirm you're not a bot" / `LOGIN_REQUIRED`).
+  Ohne `/root/secrets/youtube_cookies.txt` wird das Frames-Tier übersprungen
+  (Log: "kein Cookies-File … Frames-Tier übersprungen") und die Kaskade liefert
+  Thumbnail + Kapitelliste aus der Watch-Page — erwartetes Verhalten.
+  Echte Frames: Cookies provisionieren (siehe Abschnitt unten).
+
+## YouTube-Cookies für Frames-Extraktion
+
+Die Enrichment-Kaskade (seit 2026-07-05): **Cookies-Frames → Watch-Page-Kapitel
++ Thumbnail → Thumbnail → leer**. Das erste Tier läuft nur, wenn ein
+Cookies-File existiert:
+
+1. Browser-Extension „Get cookies.txt LOCALLY" (o.ä., Netscape-Format)
+   installieren, bei YouTube einloggen — **Empfehlung: Zweit-Account**, die
+   yt-dlp-Doku warnt vor Account-Sperr-Risiko bei automatisiertem Zugriff.
+2. Cookies für `youtube.com` exportieren.
+3. Auf den Server legen: `/root/secrets/youtube_cookies.txt` (`chmod 600`).
+   Pfad konfigurierbar via `YOUTUBE_COOKIES_FILE` in der systemd-Unit.
+4. Re-Import zum Testen: `nocodb_id:`-Zeile einer Note leeren (Row vorher in
+   NocoDB löschen, sonst Duplikat), nächster Timer-Lauf liefert Übungs-Frames.
+
+Fehlt das File oder ist es abgelaufen, degradiert die Kaskade automatisch auf
+Watch-Page-Tier (Thumbnail + Kapitelliste in der Notiz) — kein Eingriff nötig.
+
+## LiveSync-Verhalten (Handy)
+
+Obsidian-LiveSync pusht auf Mobilgeräten **nur bei geöffneter App**. Nach dem
+Clippen (oder nach `nocodb_id`-Reset auf dem Gerät) die Obsidian-App öffnen,
+sonst erreicht die Note den Server nie (CouchDB-Befund 2026-07-05: geclippte
+Note hing >12h auf dem Gerät fest). Erfolgreicher Import bestätigt sich per
+🏃-Telegram-Nachricht vom Organizer-Bot — kommt keine, ist die Note noch nicht
+angekommen: `journalctl -u filesystem-livesync -n 50` zeigt den Sync-Eingang.
 
 ## Appendix: Konfigurationsdateien (as-built)
 
@@ -115,6 +139,7 @@ Description=Sport-Challenge Clips aus Obsidian-Vault nach NocoDB importieren
 [Service]
 Type=oneshot
 WorkingDirectory=/root/projekte/telegram-bot-army
+Environment=YOUTUBE_COOKIES_FILE=/root/secrets/youtube_cookies.txt
 ExecStart=/usr/bin/python3 -u scripts/sport_clip_import.py
 ```
 
