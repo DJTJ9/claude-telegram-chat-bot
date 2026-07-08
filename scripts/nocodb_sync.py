@@ -151,6 +151,8 @@ def upsert_feature(table_id: str, name: str, status: str,
     if row:
         requests.patch(_table_url(table_id),
                        headers=_headers(), json=[{**payload, "Id": row["Id"]}])
+        if status == "done":
+            _move_row_to_end(table_id, name)
     else:
         if after_name:
             _insert_row_after(table_id, after_name, payload)
