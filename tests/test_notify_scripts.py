@@ -3,6 +3,7 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
 NOTIFY_SCRIPT = PROJECT_DIR / "scripts" / "telegram_notify.py"
+DEV_NOTIFY_SCRIPT = PROJECT_DIR / "scripts" / "dev_notify.py"
 
 
 def test_notify_exits_silently_without_token(tmp_path):
@@ -59,5 +60,43 @@ def test_notify_skips_send_when_notifications_disabled(tmp_path):
         capture_output=True, text=True, timeout=5,
         env={**os.environ, "WORK_DIR": str(tmp_path),
              "TOKEN_PERMISSIONS": "should-not-be-used", "TOKEN_BRAIN": "", "TOKEN_TEACH": "", "TOKEN_ORGANIZER": ""}
+    )
+    assert result.returncode == 0
+
+
+def test_dev_notify_ignores_notifications_disabled_gate(tmp_path):
+    """dev_notify.py ist der Pflicht-Notify-Pfad für /dev finish — muss unabhängig
+    von notifications_enabled feuern (Bug: Brain-Notify kam nicht an, weil
+    telegram_notify.py das Gate respektiert)."""
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps({"notifications_enabled": False, "active_session": None}))
+    result = subprocess.run(
+        [sys.executable, str(DEV_NOTIFY_SCRIPT), "--bot", "brain", "Test message"],
+        capture_output=True, text=True, timeout=5,
+        env={**os.environ, "WORK_DIR": str(tmp_path), "TOKEN_BRAIN": ""}
+    )
+    assert result.returncode == 0
+
+
+def test_dev_notify_does_not_check_notifications_enabled():
+    src = DEV_NOTIFY_SCRIPT.read_text()
+    assert "load_settings" not in src
+    assert '.get("notifications_enabled"' not in src
+
+
+def test_dev_notify_exits_silently_without_bot_flag(tmp_path):
+    result = subprocess.run(
+        [sys.executable, str(DEV_NOTIFY_SCRIPT), "Test message"],
+        capture_output=True, text=True, timeout=5,
+        env={**os.environ, "WORK_DIR": str(tmp_path)}
+    )
+    assert result.returncode == 0
+
+
+def test_dev_notify_exits_silently_without_token(tmp_path):
+    result = subprocess.run(
+        [sys.executable, str(DEV_NOTIFY_SCRIPT), "--bot", "brain", "Test message"],
+        capture_output=True, text=True, timeout=5,
+        env={**os.environ, "WORK_DIR": str(tmp_path), "TOKEN_BRAIN": ""}
     )
     assert result.returncode == 0
