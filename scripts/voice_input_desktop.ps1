@@ -15,6 +15,6 @@ if (Test-Path $lockFile) {
     Write-Host "`e[0m"
 } else {
     Write-Host "`e[31m● REC`e[0m"
-    $proc = Start-Process -FilePath "ffmpeg" -ArgumentList "-f dshow -i audio=`"Microphone`" -y `"$audioFile`"" -PassThru -WindowStyle Hidden
+    $proc = Start-Process -FilePath "ffmpeg" -ArgumentList "-f dshow -i audio=`"Mikrofon (3- Razer Barracuda X)`" -y `"$audioFile`"" -PassThru -WindowStyle Hidden -RedirectStandardError "$env:TEMP\voice_ffmpeg_err.log"
     $proc.Id | Out-File $lockFile
 }
