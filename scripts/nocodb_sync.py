@@ -56,6 +56,17 @@ def _get_all_rows(table_id: str) -> list[dict]:
     return r.json().get("list", [])
 
 
+_SYSTEM_FIELDS = {"Id", "CreatedAt", "UpdatedAt", "nc_created_by", "nc_updated_by",
+                  "nc_order", "__nc_deleted"}
+
+
+def _row_payload(row: dict) -> dict:
+    """Alle User-Spalten (Name, Status, Notiz, Epic, ...) für Re-Insert kopieren."""
+    p = {k: v for k, v in row.items() if k not in _SYSTEM_FIELDS and v is not None}
+    p.setdefault("Status", "idea")
+    return p
+
+
 def _insert_row_at_top(table_id: str, payload: dict) -> None:
     rows = _get_all_rows(table_id)
     ids = [r["Id"] for r in rows]
@@ -64,10 +75,8 @@ def _insert_row_at_top(table_id: str, payload: dict) -> None:
                         json=[{"Id": i} for i in ids])
     requests.post(_table_url(table_id), headers=_headers(), json=payload)
     for row in rows:
-        old_p: dict = {"Name": row["Name"], "Status": row.get("Status", "idea")}
-        if row.get("Notiz"):
-            old_p["Notiz"] = row["Notiz"]
-        requests.post(_table_url(table_id), headers=_headers(), json=old_p)
+        requests.post(_table_url(table_id), headers=_headers(),
+                      json=_row_payload(row))
 
 
 def _insert_row_after(table_id: str, after_name: str, payload: dict) -> None:
@@ -78,10 +87,8 @@ def _insert_row_after(table_id: str, after_name: str, payload: dict) -> None:
                         json=[{"Id": i} for i in ids])
     inserted = False
     for row in rows:
-        old_p: dict = {"Name": row["Name"], "Status": row.get("Status", "idea")}
-        if row.get("Notiz"):
-            old_p["Notiz"] = row["Notiz"]
-        requests.post(_table_url(table_id), headers=_headers(), json=old_p)
+        requests.post(_table_url(table_id), headers=_headers(),
+                      json=_row_payload(row))
         if row["Name"].lower() == after_name.lower():
             requests.post(_table_url(table_id), headers=_headers(), json=payload)
             inserted = True
@@ -98,17 +105,13 @@ def _move_row_to_top(table_id: str, name: str) -> None:
     ids = [r["Id"] for r in rows]
     requests.delete(_table_url(table_id), headers=_headers(),
                     json=[{"Id": i} for i in ids])
-    t_p: dict = {"Name": target["Name"], "Status": target.get("Status", "idea")}
-    if target.get("Notiz"):
-        t_p["Notiz"] = target["Notiz"]
-    requests.post(_table_url(table_id), headers=_headers(), json=t_p)
+    requests.post(_table_url(table_id), headers=_headers(),
+                  json=_row_payload(target))
     for row in rows:
         if row["Id"] == target["Id"]:
             continue
-        p: dict = {"Name": row["Name"], "Status": row.get("Status", "idea")}
-        if row.get("Notiz"):
-            p["Notiz"] = row["Notiz"]
-        requests.post(_table_url(table_id), headers=_headers(), json=p)
+        requests.post(_table_url(table_id), headers=_headers(),
+                      json=_row_payload(row))
     print(f"Moved '{name}' to top")
 
 
@@ -124,14 +127,10 @@ def _move_row_to_end(table_id: str, name: str) -> None:
     for row in rows:
         if row["Id"] == target["Id"]:
             continue
-        p: dict = {"Name": row["Name"], "Status": row.get("Status", "idea")}
-        if row.get("Notiz"):
-            p["Notiz"] = row["Notiz"]
-        requests.post(_table_url(table_id), headers=_headers(), json=p)
-    t_p: dict = {"Name": target["Name"], "Status": target.get("Status", "idea")}
-    if target.get("Notiz"):
-        t_p["Notiz"] = target["Notiz"]
-    requests.post(_table_url(table_id), headers=_headers(), json=t_p)
+        requests.post(_table_url(table_id), headers=_headers(),
+                      json=_row_payload(row))
+    requests.post(_table_url(table_id), headers=_headers(),
+                  json=_row_payload(target))
     print(f"Moved '{name}' to end")
 
 
@@ -163,14 +162,21 @@ def upsert_feature(table_id: str, name: str, status: str,
 
 
 def rebuild_nocodb_table(table_id: str, items: list[tuple[str, str]]) -> None:
-    r = requests.get(_table_url(table_id), headers=_headers(),
-                     params={"limit": 1000, "fields": "Id"})
-    ids = [row["Id"] for row in r.json().get("list", [])]
+    rows = _get_all_rows(table_id)
+    extras: dict[str, dict] = {}
+    for row in rows:
+        p = _row_payload(row)
+        p.pop("Name", None)
+        p.pop("Status", None)
+        extras[row["Name"].lower()] = p
+    ids = [row["Id"] for row in rows]
     if ids:
         requests.delete(_table_url(table_id), headers=_headers(),
                         json=[{"Id": i} for i in ids])
     for status, name in items:
-        upsert_feature(table_id, name, status)
+        payload = {"Name": name, "Status": status,
+                   **extras.get(name.lower(), {})}
+        requests.post(_table_url(table_id), headers=_headers(), json=payload)
 
 
 def sync_rebuild(slug: str) -> None:

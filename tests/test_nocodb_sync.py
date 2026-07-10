@@ -119,12 +119,14 @@ from scripts.nocodb_create_table import create_nocodb_table, write_table_id_to_r
 
 
 class TestRebuildNocobdTable(unittest.TestCase):
-    @patch("scripts.nocodb_sync.upsert_feature")
+    @patch("scripts.nocodb_sync.requests.post")
     @patch("scripts.nocodb_sync.requests.delete")
     @patch("scripts.nocodb_sync.requests.get")
-    def test_deletes_all_then_reinserts(self, mock_get, mock_delete, mock_upsert):
+    def test_deletes_all_then_reinserts(self, mock_get, mock_delete, mock_post):
         mock_get.return_value.json.return_value = {
-            "list": [{"Id": 1}, {"Id": 2}]
+            "list": [{"Id": 1, "Name": "Feature A", "Status": "idea",
+                      "Epic": "Epic X"},
+                     {"Id": 2, "Name": "Feature B", "Status": "done"}]
         }
         items = [("idea", "Feature A"), ("done", "Feature B")]
         rebuild_nocodb_table("tbl_abc123", items)
@@ -132,18 +134,22 @@ class TestRebuildNocobdTable(unittest.TestCase):
         delete_body = mock_delete.call_args[1]["json"]
         self.assertEqual(delete_body, [{"Id": 1}, {"Id": 2}])
 
-        self.assertEqual(mock_upsert.call_count, 2)
-        mock_upsert.assert_any_call("tbl_abc123", "Feature A", "idea")
-        mock_upsert.assert_any_call("tbl_abc123", "Feature B", "done")
+        payloads = [c[1]["json"] for c in mock_post.call_args_list]
+        self.assertEqual(payloads, [
+            {"Name": "Feature A", "Status": "idea", "Epic": "Epic X"},
+            {"Name": "Feature B", "Status": "done"},
+        ])
 
-    @patch("scripts.nocodb_sync.upsert_feature")
+    @patch("scripts.nocodb_sync.requests.post")
     @patch("scripts.nocodb_sync.requests.delete")
     @patch("scripts.nocodb_sync.requests.get")
-    def test_skips_delete_when_table_empty(self, mock_get, mock_delete, mock_upsert):
+    def test_skips_delete_when_table_empty(self, mock_get, mock_delete, mock_post):
         mock_get.return_value.json.return_value = {"list": []}
         rebuild_nocodb_table("tbl_abc123", [("idea", "New Feature")])
         mock_delete.assert_not_called()
-        mock_upsert.assert_called_once_with("tbl_abc123", "New Feature", "idea")
+        mock_post.assert_called_once()
+        self.assertEqual(mock_post.call_args[1]["json"],
+                         {"Name": "New Feature", "Status": "idea"})
 
 
 class TestSyncRebuild(unittest.TestCase):
