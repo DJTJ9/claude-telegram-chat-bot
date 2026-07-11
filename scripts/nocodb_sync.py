@@ -135,9 +135,7 @@ def _move_row_to_end(table_id: str, name: str) -> None:
 
 
 def upsert_feature(table_id: str, name: str, status: str,
-                   spec: str = "", plan: str = "",
-                   insert_position: str = "bottom",
-                   after_name: str = "") -> None:
+                   spec: str = "", plan: str = "") -> None:
     notiz_parts = []
     if spec:
         notiz_parts.append(f"Spec: {spec}")
@@ -148,17 +146,20 @@ def upsert_feature(table_id: str, name: str, status: str,
         payload["Notiz"] = "\n".join(notiz_parts)
     row = find_row(table_id, name)
     if row:
-        requests.patch(_table_url(table_id),
-                       headers=_headers(), json=[{**payload, "Id": row["Id"]}])
-        if status == "done":
-            _move_row_to_end(table_id, name)
+        requests.patch(_table_url(table_id), headers=_headers(),
+                       json=[{**payload, "Id": row["Id"]}])
     else:
-        if after_name:
-            _insert_row_after(table_id, after_name, payload)
-        elif insert_position == "top":
-            _insert_row_at_top(table_id, payload)
-        else:
-            requests.post(_table_url(table_id), headers=_headers(), json=payload)
+        _create_row_at_top(table_id, payload)
+
+
+def _create_row_at_top(table_id: str, payload: dict) -> None:
+    """POST neue Row (landet unten), dann PATCH nc_order auf Kleinstwert → top.
+    Berührt keine anderen Rows, erhält deren manuelle Reihenfolge."""
+    resp = requests.post(_table_url(table_id), headers=_headers(), json=payload)
+    new_id = resp.json().get("Id")
+    if new_id is not None:
+        requests.patch(_table_url(table_id), headers=_headers(),
+                       json=[{"Id": new_id, "nc_order": "0.0001"}])
 
 
 def rebuild_nocodb_table(table_id: str, items: list[tuple[str, str]]) -> None:
@@ -194,15 +195,12 @@ def sync_rebuild(slug: str) -> None:
 
 
 def sync_dev_to_nocodb(slug: str, feature: str, status: str,
-                       spec: str = "", plan: str = "",
-                       insert_position: str = "bottom",
-                       after_name: str = "") -> None:
+                       spec: str = "", plan: str = "") -> None:
     table_id = load_nocodb_table_id(slug)
     if not table_id:
         print(f"⚠️  No nocodb_table_id for {slug} — skipping", file=sys.stderr)
         return
-    upsert_feature(table_id, feature, status, spec=spec, plan=plan,
-                   insert_position=insert_position, after_name=after_name)
+    upsert_feature(table_id, feature, status, spec=spec, plan=plan)
     print("OK")
 
 
