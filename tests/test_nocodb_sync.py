@@ -9,8 +9,7 @@ os.environ.setdefault("NOCODB_BASE_ID", "test_base")
 
 from scripts.nocodb_sync import (
     _headers, _table_url, load_nocodb_table_id, find_row, upsert_feature,
-    sync_dev_to_nocodb, sync_nocodb_to_dev,
-    _get_all_rows, _insert_row_at_top, _insert_row_after, _move_row_to_top, _move_row_to_end,
+    sync_dev_to_nocodb, sync_nocodb_to_dev, _get_all_rows,
 )
 
 FAKE_REGISTRY = [
@@ -103,113 +102,8 @@ class TestSyncDevToNocodb(unittest.TestCase):
 
 
 import tempfile
-from scripts.nocodb_sync import rebuild_nocodb_table, sync_rebuild, regenerate_status_roadmap
+from scripts.nocodb_sync import regenerate_status_roadmap
 from scripts.nocodb_create_table import create_nocodb_table, write_table_id_to_registry
-
-
-class TestRebuildNocobdTable(unittest.TestCase):
-    @patch("scripts.nocodb_sync.requests.post")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.get")
-    def test_deletes_all_then_reinserts(self, mock_get, mock_delete, mock_post):
-        mock_get.return_value.json.return_value = {
-            "list": [{"Id": 1, "Name": "Feature A", "Status": "idea",
-                      "Epic": "Epic X"},
-                     {"Id": 2, "Name": "Feature B", "Status": "done"}]
-        }
-        items = [("idea", "Feature A"), ("done", "Feature B")]
-        rebuild_nocodb_table("tbl_abc123", items)
-
-        delete_body = mock_delete.call_args[1]["json"]
-        self.assertEqual(delete_body, [{"Id": 1}, {"Id": 2}])
-
-        payloads = [c[1]["json"] for c in mock_post.call_args_list]
-        self.assertEqual(payloads, [
-            {"Name": "Feature A", "Status": "idea", "Epic": "Epic X"},
-            {"Name": "Feature B", "Status": "done"},
-        ])
-
-    @patch("scripts.nocodb_sync.requests.post")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.get")
-    def test_skips_delete_when_table_empty(self, mock_get, mock_delete, mock_post):
-        mock_get.return_value.json.return_value = {"list": []}
-        rebuild_nocodb_table("tbl_abc123", [("idea", "New Feature")])
-        mock_delete.assert_not_called()
-        mock_post.assert_called_once()
-        self.assertEqual(mock_post.call_args[1]["json"],
-                         {"Name": "New Feature", "Status": "idea"})
-
-
-class TestSyncRebuild(unittest.TestCase):
-    @patch("scripts.nocodb_sync.rebuild_nocodb_table")
-    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
-    def test_reads_status_md_and_rebuilds(self, mock_load, mock_rebuild):
-        status_content = """# Project Status — test-proj
-Active: Feature A
-Phase: plan
-Spec:
-Plan:
-Updated: 2026-06-30
-## Roadmap
-- [idea]      Feature A
-- [done]      Feature B
-- [idea]      Feature C
-"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            hub_dir = Path(tmpdir)
-            topic_dir = hub_dir / "topics" / "test-proj"
-            topic_dir.mkdir(parents=True)
-            (topic_dir / "STATUS.md").write_text(status_content)
-            with patch.dict(os.environ, {"HUB_DIR": str(hub_dir)}):
-                sync_rebuild("test-proj")
-
-        items_arg = mock_rebuild.call_args[0][1]
-        self.assertEqual(len(items_arg), 3)
-        self.assertEqual(items_arg[-1], ("done", "Feature B"))
-
-    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="")
-    @patch("scripts.nocodb_sync.rebuild_nocodb_table")
-    def test_skips_when_no_table_id(self, mock_rebuild, mock_load):
-        sync_rebuild("unknown-slug")
-        mock_rebuild.assert_not_called()
-
-    @patch("scripts.nocodb_sync.rebuild_nocodb_table")
-    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
-    def test_done_items_always_sorted_to_end_regardless_of_status_md_order(self, mock_load, mock_rebuild):
-        # Reproduces the bug: finish.md's manual STATUS.md reorder step didn't
-        # move the finished [done] feature to the end of the Roadmap section.
-        status_content = """# Project Status — test-proj
-Active: Feature C
-Phase: plan
-Spec:
-Plan:
-Updated: 2026-06-30
-## Roadmap
-- [idea]      Feature A
-- [done]      Feature B
-- [idea]      Feature C
-- [done]      Feature D
-- [planned]   Feature E
-"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            hub_dir = Path(tmpdir)
-            topic_dir = hub_dir / "topics" / "test-proj"
-            topic_dir.mkdir(parents=True)
-            (topic_dir / "STATUS.md").write_text(status_content)
-            with patch.dict(os.environ, {"HUB_DIR": str(hub_dir)}):
-                sync_rebuild("test-proj")
-
-        items_arg = mock_rebuild.call_args[0][1]
-        statuses = [status for status, _ in items_arg]
-        done_indices = [i for i, s in enumerate(statuses) if s == "done"]
-        non_done_indices = [i for i, s in enumerate(statuses) if s != "done"]
-        self.assertTrue(all(d > n for d in done_indices for n in non_done_indices))
-        # relative order among done items is preserved (stable sort)
-        self.assertEqual(
-            [name for status, name in items_arg if status == "done"],
-            ["Feature B", "Feature D"],
-        )
 
 
 class TestCreateNocobdTable(unittest.TestCase):
@@ -276,105 +170,6 @@ class TestGetAllRows(unittest.TestCase):
         self.assertNotIn("sort", params)
 
 
-class TestInsertRowAtTop(unittest.TestCase):
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_new_row_is_posted_first(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [
-            {"Id": 1, "Name": "Old A", "Status": "idea", "Notiz": ""},
-            {"Id": 2, "Name": "Old B", "Status": "done", "Notiz": ""},
-        ]
-        _insert_row_at_top("tbl_abc123", {"Name": "New", "Status": "discussed"})
-        first_post = mock_post.call_args_list[0][1]["json"]
-        self.assertEqual(first_post["Name"], "New")
-
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_old_rows_reinserted_in_order(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [
-            {"Id": 1, "Name": "Old A", "Status": "idea", "Notiz": ""},
-            {"Id": 2, "Name": "Old B", "Status": "done", "Notiz": ""},
-        ]
-        _insert_row_at_top("tbl_abc123", {"Name": "New", "Status": "discussed"})
-        names = [c[1]["json"]["Name"] for c in mock_post.call_args_list]
-        self.assertEqual(names, ["New", "Old A", "Old B"])
-
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_deletes_existing_rows_before_reinsert(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [
-            {"Id": 1, "Name": "X", "Status": "idea", "Notiz": ""},
-            {"Id": 2, "Name": "Y", "Status": "idea", "Notiz": ""},
-        ]
-        _insert_row_at_top("tbl_abc123", {"Name": "Z", "Status": "idea"})
-        delete_ids = {d["Id"] for d in mock_delete.call_args[1]["json"]}
-        self.assertEqual(delete_ids, {1, 2})
-
-
-class TestInsertRowAfter(unittest.TestCase):
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_inserts_after_named_row(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [
-            {"Id": 1, "Name": "Feature A", "Status": "idea", "Notiz": ""},
-            {"Id": 2, "Name": "Feature B", "Status": "idea", "Notiz": ""},
-        ]
-        _insert_row_after("tbl_abc123", "Feature A", {"Name": "New", "Status": "discussed"})
-        names = [c[1]["json"]["Name"] for c in mock_post.call_args_list]
-        self.assertEqual(names, ["Feature A", "New", "Feature B"])
-
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_appends_at_bottom_when_after_not_found(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [
-            {"Id": 1, "Name": "Feature A", "Status": "idea", "Notiz": ""},
-        ]
-        _insert_row_after("tbl_abc123", "NonExistent", {"Name": "New", "Status": "idea"})
-        names = [c[1]["json"]["Name"] for c in mock_post.call_args_list]
-        self.assertEqual(names[-1], "New")
-
-
-class TestMoveRowToTop(unittest.TestCase):
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_named_row_is_first_after_move(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [
-            {"Id": 1, "Name": "Feature A", "Status": "idea", "Notiz": ""},
-            {"Id": 2, "Name": "Feature B", "Status": "planned", "Notiz": ""},
-            {"Id": 3, "Name": "Feature C", "Status": "done", "Notiz": ""},
-        ]
-        _move_row_to_top("tbl_abc123", "Feature B")
-        names = [c[1]["json"]["Name"] for c in mock_post.call_args_list]
-        self.assertEqual(names[0], "Feature B")
-
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_all_rows_preserved_after_move(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [
-            {"Id": 1, "Name": "A", "Status": "idea", "Notiz": ""},
-            {"Id": 2, "Name": "B", "Status": "done", "Notiz": ""},
-        ]
-        _move_row_to_top("tbl_abc123", "B")
-        names = [c[1]["json"]["Name"] for c in mock_post.call_args_list]
-        self.assertEqual(set(names), {"A", "B"})
-
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_no_op_when_name_not_found(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [{"Id": 1, "Name": "A", "Status": "idea", "Notiz": ""}]
-        _move_row_to_top("tbl_abc123", "Missing")
-        mock_delete.assert_not_called()
-        mock_post.assert_not_called()
-
-
 class TestUpsertFeatureInPlace(unittest.TestCase):
     @patch("scripts.nocodb_sync.requests.delete")
     @patch("scripts.nocodb_sync.requests.post")
@@ -410,42 +205,6 @@ class TestSyncDevToNocodbInPlace(unittest.TestCase):
         sync_dev_to_nocodb("test-proj", "My Feature", "planned", spec="specs/foo.md")
         mock_upsert.assert_called_once_with(
             "tbl_abc123", "My Feature", "planned", spec="specs/foo.md", plan="")
-
-
-class TestMoveRowToEnd(unittest.TestCase):
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_named_row_is_last_after_move(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [
-            {"Id": 1, "Name": "Feature A", "Status": "idea", "Notiz": ""},
-            {"Id": 2, "Name": "Feature B", "Status": "planned", "Notiz": ""},
-            {"Id": 3, "Name": "Feature C", "Status": "done", "Notiz": ""},
-        ]
-        _move_row_to_end("tbl_abc123", "Feature A")
-        names = [c[1]["json"]["Name"] for c in mock_post.call_args_list]
-        self.assertEqual(names[-1], "Feature A")
-
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_all_rows_preserved_after_move(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [
-            {"Id": 1, "Name": "A", "Status": "idea", "Notiz": ""},
-            {"Id": 2, "Name": "B", "Status": "done", "Notiz": ""},
-        ]
-        _move_row_to_end("tbl_abc123", "A")
-        names = [c[1]["json"]["Name"] for c in mock_post.call_args_list]
-        self.assertEqual(set(names), {"A", "B"})
-
-    @patch("scripts.nocodb_sync._get_all_rows")
-    @patch("scripts.nocodb_sync.requests.delete")
-    @patch("scripts.nocodb_sync.requests.post")
-    def test_no_op_when_name_not_found(self, mock_post, mock_delete, mock_rows):
-        mock_rows.return_value = [{"Id": 1, "Name": "A", "Status": "idea", "Notiz": ""}]
-        _move_row_to_end("tbl_abc123", "Missing")
-        mock_delete.assert_not_called()
-        mock_post.assert_not_called()
 
 
 class TestRegenerateStatusRoadmap(unittest.TestCase):
@@ -500,6 +259,24 @@ Updated: 2026-06-30
             out = p.read_text()
         self.assertIn("## Notes", out)
         self.assertIn("keep me", out)
+
+
+import subprocess
+
+class TestRemovedFlagsAndFunctions(unittest.TestCase):
+    def test_removed_functions_not_importable(self):
+        import scripts.nocodb_sync as m
+        for fn in ("_insert_row_at_top", "_insert_row_after", "_move_row_to_top",
+                   "_move_row_to_end", "rebuild_nocodb_table", "sync_rebuild",
+                   "_reorder_status_roadmap"):
+            self.assertFalse(hasattr(m, fn), f"{fn} should be removed")
+
+    def test_help_has_no_removed_flags(self):
+        out = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "scripts" / "nocodb_sync.py"), "--help"],
+            capture_output=True, text=True).stdout
+        for flag in ("--insert-position", "--after", "--move-to-top", "--move-to-end", "--rebuild"):
+            self.assertNotIn(flag, out, f"{flag} should be gone")
 
 
 if __name__ == "__main__":
