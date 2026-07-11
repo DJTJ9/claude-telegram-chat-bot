@@ -114,7 +114,7 @@ class TestSyncDevToNocodb(unittest.TestCase):
 
 
 import tempfile
-from scripts.nocodb_sync import rebuild_nocodb_table, sync_rebuild, _reorder_status_roadmap
+from scripts.nocodb_sync import rebuild_nocodb_table, sync_rebuild, regenerate_status_roadmap
 from scripts.nocodb_create_table import create_nocodb_table, write_table_id_to_registry
 
 
@@ -463,7 +463,7 @@ class TestMoveRowToEnd(unittest.TestCase):
         mock_post.assert_not_called()
 
 
-class TestReorderImportsNocodbOnlyRows(unittest.TestCase):
+class TestRegenerateStatusRoadmap(unittest.TestCase):
     STATUS = """# Project Status — test-proj
 Active: Feature A
 Phase: plan
@@ -471,39 +471,50 @@ Updated: 2026-06-30
 ## Roadmap
 - [idea]      Feature A
 - [done]      Feature B
+- [planned]   Stale Only In Status
 """
 
     def _run(self, entries):
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "STATUS.md"
             p.write_text(self.STATUS)
-            _reorder_status_roadmap(p, entries)
+            regenerate_status_roadmap(p, entries)
             return p.read_text()
 
-    def test_nocodb_only_row_is_added(self):
-        text = self._run([
-            {"name": "Feature A", "status": "idea"},
-            {"name": "testi test", "status": "idea"},
-        ])
-        lines = [l for l in text.splitlines() if l.startswith("- [")]
-        self.assertEqual(lines[1], "- [idea]      testi test")
-
-    def test_new_row_position_follows_nocodb_order(self):
+    def test_full_projection_matches_nocodb_order_including_done(self):
         text = self._run([
             {"name": "testi test", "status": "idea"},
-            {"name": "Feature A", "status": "idea"},
+            {"name": "Feature A", "status": "discussed"},
+            {"name": "Feature B", "status": "done"},
         ])
         lines = [l for l in text.splitlines() if l.startswith("- [")]
-        self.assertEqual(lines[0], "- [idea]      testi test")
-        self.assertIn("Feature A", lines[1])
+        self.assertEqual(lines, [
+            "- [idea]      testi test",
+            "- [discussed] Feature A",
+            "- [done]      Feature B",
+        ])
 
-    def test_empty_name_still_skipped(self):
+    def test_status_only_row_is_dropped(self):
+        text = self._run([{"name": "Feature A", "status": "idea"}])
+        self.assertNotIn("Stale Only In Status", text)
+
+    def test_empty_name_skipped(self):
         text = self._run([
             {"name": "", "status": "idea"},
             {"name": "Feature A", "status": "idea"},
         ])
         lines = [l for l in text.splitlines() if l.startswith("- [")]
-        self.assertEqual(len(lines), 2)
+        self.assertEqual(len(lines), 1)
+
+    def test_preserves_trailing_section(self):
+        status = self.STATUS + "\n## Notes\nkeep me\n"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "STATUS.md"
+            p.write_text(status)
+            regenerate_status_roadmap(p, [{"name": "Feature A", "status": "idea"}])
+            out = p.read_text()
+        self.assertIn("## Notes", out)
+        self.assertIn("keep me", out)
 
 
 if __name__ == "__main__":

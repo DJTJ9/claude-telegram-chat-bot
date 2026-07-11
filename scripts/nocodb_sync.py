@@ -240,7 +240,9 @@ def _update_status_active(path: Path, active: str, conditional: bool = False) ->
     path.write_text(text, encoding="utf-8")
 
 
-def _reorder_status_roadmap(path: Path, entries: list[dict]) -> None:
+def regenerate_status_roadmap(path: Path, entries: list[dict]) -> None:
+    """Erzeugt den ## Roadmap-Block komplett neu aus `entries` (Reihenfolge =
+    NocoDB nc_order). Keine STATUS-only-Zeilen überleben."""
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8")
@@ -249,38 +251,16 @@ def _reorder_status_roadmap(path: Path, entries: list[dict]) -> None:
         return
     after_header = roadmap_idx + len("## Roadmap")
     next_sec = text.find("\n## ", after_header)
-    roadmap_text = text[after_header:next_sec] if next_sec != -1 else text[after_header:]
     tail = text[next_sec:] if next_sec != -1 else ""
-
-    existing: dict = {}
-    existing_lines: dict = {}
-    for line in roadmap_text.splitlines():
-        m = re.match(r'^- \[\w+\](\s+)(.+)$', line)
-        if m:
-            key = m.group(2).strip().lower()
-            existing[key] = (m.group(1), m.group(2).strip())
-            existing_lines[key] = line
-
-    seen: set = set()
-    reordered: list = []
+    lines = []
     for entry in entries:
         name = entry.get("name", "").strip()
-        key = name.lower()
         if not name:
             continue
         status = entry.get("status", "idea")
-        if key in existing:
-            spacing, name_part = existing[key]
-            reordered.append(f"- [{status}]{spacing}{name_part}")
-        else:
-            reordered.append(f"- [{status}]".ljust(14) + name)
-        seen.add(key)
-    for key, line in existing_lines.items():
-        if key not in seen:
-            reordered.append(line)
-
-    text = text[:after_header] + "\n" + "\n".join(reordered) + "\n" + tail
-    path.write_text(text, encoding="utf-8")
+        lines.append(f"- [{status}]".ljust(14) + name)
+    body = "\n" + "\n".join(lines) + "\n" if lines else "\n"
+    path.write_text(text[:after_header] + body + tail, encoding="utf-8")
 
 
 def sync_nocodb_to_dev(slug: str) -> None:
@@ -298,10 +278,10 @@ def sync_nocodb_to_dev(slug: str) -> None:
     non_done = [e for e in entries if e.get("Status") != "done"]
     auto_active = non_done[0]["Name"] if non_done else ""
     _update_status_active(hub_dir / "topics" / slug / "STATUS.md", auto_active, conditional=True)
-    _reorder_status_roadmap(hub_dir / "topics" / slug / "STATUS.md",
-                            [{"name": e["Name"], "status": e.get("Status", "idea")}
-                             for e in non_done])
-    print(f"nocodb-to-dev: {slug} — {len(non_done)} Features, aktiv: {auto_active or '(keines)'}")
+    regenerate_status_roadmap(hub_dir / "topics" / slug / "STATUS.md",
+                              [{"name": e.get("Name", ""), "status": e.get("Status", "idea")}
+                               for e in entries])
+    print(f"nocodb-to-dev: {slug} — {len(entries)} Features, aktiv: {auto_active or '(keines)'}")
 
 
 def sync_all_to_nocodb(hub_dir: Path) -> None:
