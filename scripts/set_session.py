@@ -50,14 +50,23 @@ if __name__ == "__main__":
         s["active_session"] = "dev"
         save_settings(s)
         SESSIONS_DIR.mkdir(exist_ok=True)
-        session_path.write_text(json.dumps({
-            "active_dev_slug": args[1],
-            "implementation_mode": False,
-            "implementation_mode_until": None,
-            "worktree_path": None,
-            "branch": None,
-            "worktree_base_dir": None,
-        }, indent=2))
+        # Read-merge: preserve worktree bookkeeping + implementation_mode that
+        # implement.md wrote via Edit tool. Overwriting them here wiped the
+        # worktree fields finish.md's merge/cleanup relies on and silently
+        # killed implementation_mode mid-run (LEARNINGS 2026-07-07).
+        data = {}
+        if session_path.exists():
+            try:
+                data = json.loads(session_path.read_text())
+            except Exception:
+                data = {}
+        data["active_dev_slug"] = args[1]
+        data.setdefault("implementation_mode", False)
+        data.setdefault("implementation_mode_until", None)
+        data.setdefault("worktree_path", None)
+        data.setdefault("branch", None)
+        data.setdefault("worktree_base_dir", None)
+        session_path.write_text(json.dumps(data, indent=2))
     else:
         print(f"Unknown command: {args[0]}", file=sys.stderr)
         sys.exit(1)

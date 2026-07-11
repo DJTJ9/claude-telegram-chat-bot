@@ -40,6 +40,32 @@ def test_set_dev_session_includes_worktree_fields(tmp_path):
     assert data["worktree_base_dir"] is None
 
 
+def test_set_dev_session_preserves_worktree_and_impl_mode(tmp_path):
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps({"notifications_enabled": True}))
+    sessions_dir = tmp_path / "dev_sessions"
+    sessions_dir.mkdir()
+    session_file = sessions_dir / "test-sid-merge.json"
+    session_file.write_text(json.dumps({
+        "active_dev_slug": "my-proj",
+        "implementation_mode": True,
+        "implementation_mode_until": "2026-07-11T18:00:00",
+        "worktree_path": "/root/.claude/worktrees/foo",
+        "branch": "worktree-foo",
+        "worktree_base_dir": "/root/.claude",
+    }))
+    result = _run(["dev", "my-proj"],
+                  env_override={"WORK_DIR": str(tmp_path), "CLAUDE_CODE_SESSION_ID": "test-sid-merge"})
+    assert result.returncode == 0
+    data = json.loads(session_file.read_text())
+    assert data["active_dev_slug"] == "my-proj"
+    assert data["implementation_mode"] is True
+    assert data["implementation_mode_until"] == "2026-07-11T18:00:00"
+    assert data["worktree_path"] == "/root/.claude/worktrees/foo"
+    assert data["branch"] == "worktree-foo"
+    assert data["worktree_base_dir"] == "/root/.claude"
+
+
 def test_clear_session_deletes_session_file(tmp_path):
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps({"active_session": "dev"}))
