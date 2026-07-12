@@ -175,13 +175,26 @@ class TestUpsertFeatureInPlace(unittest.TestCase):
     @patch("scripts.nocodb_sync.requests.post")
     @patch("scripts.nocodb_sync.requests.patch")
     @patch("scripts.nocodb_sync.find_row", return_value={"Id": 5})
-    def test_status_change_patches_in_place_no_delete_no_order(self, mock_find, mock_patch, mock_post, mock_delete):
+    def test_done_patches_in_place_and_moves_to_end(self, mock_find, mock_patch, mock_post, mock_delete):
         upsert_feature("tbl_abc123", "Feature A", "done")
         mock_delete.assert_not_called()
         mock_post.assert_not_called()
         body = mock_patch.call_args[1]["json"]
         self.assertEqual(body[0]["Id"], 5)
         self.assertEqual(body[0]["Status"], "done")
+        # done → nc_order groß (Basis + Id) → Tabellenende
+        self.assertEqual(body[0]["nc_order"], "1000005")
+
+    @patch("scripts.nocodb_sync.requests.delete")
+    @patch("scripts.nocodb_sync.requests.post")
+    @patch("scripts.nocodb_sync.requests.patch")
+    @patch("scripts.nocodb_sync.find_row", return_value={"Id": 5})
+    def test_non_done_status_change_does_not_reorder(self, mock_find, mock_patch, mock_post, mock_delete):
+        upsert_feature("tbl_abc123", "Feature A", "planned")
+        mock_delete.assert_not_called()
+        mock_post.assert_not_called()
+        body = mock_patch.call_args[1]["json"]
+        self.assertEqual(body[0]["Status"], "planned")
         self.assertNotIn("nc_order", body[0])
 
     @patch("scripts.nocodb_sync.requests.patch")

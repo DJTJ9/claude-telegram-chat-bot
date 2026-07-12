@@ -56,6 +56,11 @@ def _get_all_rows(table_id: str) -> list[dict]:
     return r.json().get("list", [])
 
 
+# nc_order-Basis für done-Features: garantiert größer als jeder Auto-/Top-Wert
+# (neue Rows landen bei "0.0001") → done-Block sortiert stabil ans Tabellenende.
+_DONE_ORDER_BASE = 1_000_000
+
+
 def upsert_feature(table_id: str, name: str, status: str,
                    spec: str = "", plan: str = "") -> None:
     notiz_parts = []
@@ -68,8 +73,12 @@ def upsert_feature(table_id: str, name: str, status: str,
         payload["Notiz"] = "\n".join(notiz_parts)
     row = find_row(table_id, name)
     if row:
-        requests.patch(_table_url(table_id), headers=_headers(),
-                       json=[{**payload, "Id": row["Id"]}])
+        patch = {**payload, "Id": row["Id"]}
+        if status == "done":
+            patch["nc_order"] = str(_DONE_ORDER_BASE + row["Id"])
+        requests.patch(_table_url(table_id), headers=_headers(), json=[patch])
+    elif status == "done":
+        _create_row_at_end(table_id, payload)
     else:
         _create_row_at_top(table_id, payload)
 
@@ -82,6 +91,15 @@ def _create_row_at_top(table_id: str, payload: dict) -> None:
     if new_id is not None:
         requests.patch(_table_url(table_id), headers=_headers(),
                        json=[{"Id": new_id, "nc_order": "0.0001"}])
+
+
+def _create_row_at_end(table_id: str, payload: dict) -> None:
+    """POST neue Row, dann nc_order auf großen Wert → Tabellenende (done-Block)."""
+    resp = requests.post(_table_url(table_id), headers=_headers(), json=payload)
+    new_id = resp.json().get("Id")
+    if new_id is not None:
+        requests.patch(_table_url(table_id), headers=_headers(),
+                       json=[{"Id": new_id, "nc_order": str(_DONE_ORDER_BASE + new_id)}])
 
 
 def sync_dev_to_nocodb(slug: str, feature: str, status: str,
