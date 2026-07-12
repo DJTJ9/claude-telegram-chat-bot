@@ -94,3 +94,27 @@ def test_unparseable_stdin_exits_zero(tmp_path):
     r = _run(tmp_path, "not json")
     assert r.returncode == 0
     assert not list(tmp_path.glob("pending_wait_*.json"))
+
+
+ON_STOP = PROJECT_DIR / "scripts" / "on_stop.py"
+
+
+def test_on_stop_deletes_pending_wait(tmp_path):
+    _pending(tmp_path).write_text("{}")
+    env = {**os.environ, "WORK_DIR": str(tmp_path), "CLAUDE_AUTOMATED": "1"}
+    r = subprocess.run(
+        [sys.executable, str(ON_STOP)],
+        input=json.dumps({"session_id": "s1"}),
+        capture_output=True, text=True, env=env, timeout=15,
+    )
+    assert r.returncode == 0
+    assert not _pending(tmp_path).exists()
+
+
+def test_on_stop_survives_empty_stdin(tmp_path):
+    env = {**os.environ, "WORK_DIR": str(tmp_path), "CLAUDE_AUTOMATED": "1"}
+    r = subprocess.run(
+        [sys.executable, str(ON_STOP)],
+        input="", capture_output=True, text=True, env=env, timeout=15,
+    )
+    assert r.returncode == 0
