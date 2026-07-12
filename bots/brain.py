@@ -120,6 +120,70 @@ def _handle_relay_callback(callback_query_id: str, answer: str) -> None:
     send_message(TOKEN, CHAT_ID, f"✅ Antwort gesendet: {answer}")
 
 
+# ── Wait-Notify (Session wartet auf Terminal-Input) ──────────────────────────
+
+_wait_notified: dict[str, float] = {}
+_wait_state: dict | None = None
+
+
+def _check_wait_notify() -> None:
+    global _wait_state
+    for path in sorted(WORK_DIR.glob("pending_wait_*.json")):
+        try:
+            data = json.loads(path.read_text())
+        except Exception:
+            continue
+        session_id = path.stem[len("pending_wait_"):]
+        ts = data.get("timestamp", 0)
+        if _wait_notified.get(session_id) == ts:
+            continue
+        _wait_notified[session_id] = ts
+        _wait_state = {
+            "session_id": session_id,
+            "pane": data.get("pane", ""),
+            "question": data.get("question", ""),
+        }
+        send_message(
+            TOKEN, CHAT_ID,
+            f"⏳ dev-Session {data.get('slug', '?')} wartet seit 1 min:\n\n"
+            f"{data.get('question', '')}",
+        )
+
+
+def _wait_prompt_still_open(state: dict) -> bool:
+    lines = [l.strip() for l in state.get("question", "").splitlines() if l.strip()]
+    if not lines:
+        return True
+    fingerprint = max(lines, key=len)
+    try:
+        capture = subprocess.run(
+            ["tmux", "capture-pane", "-p", "-t", state["pane"]],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+    except Exception:
+        return False
+    return fingerprint in capture
+
+
+def _handle_wait_reply(text: str) -> bool:
+    global _wait_state
+    if _wait_state is None or not text:
+        return False
+    state = _wait_state
+    pending = WORK_DIR / f"pending_wait_{state['session_id']}.json"
+    if not pending.exists() or not _wait_prompt_still_open(state):
+        _wait_state = None
+        pending.unlink(missing_ok=True)
+        send_message(TOKEN, CHAT_ID, "✅ bereits im Terminal beantwortet")
+        return True
+    subprocess.run(["tmux", "send-keys", "-t", state["pane"], "-l", text], timeout=5)
+    subprocess.run(["tmux", "send-keys", "-t", state["pane"], "Enter"], timeout=5)
+    pending.unlink(missing_ok=True)
+    _wait_state = None
+    send_message(TOKEN, CHAT_ID, f"✅ Antwort ins Terminal getippt: {text[:80]}")
+    return True
+
+
 # ── Accordion UI ──────────────────────────────────────────────────────────────
 
 def _load_projects() -> list[dict]:
@@ -537,6 +601,9 @@ def _handle_message(msg: dict) -> None:
         _show_main_menu()
         return
 
+    if _wait_state is not None and text and _handle_wait_reply(text):
+        return
+
     if _impl_state and _impl_state.get("step") == "await_time":
         _handle_impl_time_input(text)
         return
@@ -607,6 +674,7 @@ def main():
     while True:
         try:
             _check_relay_question()
+            _check_wait_notify()
         except Exception as e:
             print(f"relay error: {e}", file=sys.stderr)
         time.sleep(0.1)
