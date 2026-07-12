@@ -11,6 +11,14 @@ if env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
+WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
+try:
+    _sid = json.loads(sys.stdin.read()).get("session_id", "")
+except Exception:
+    _sid = ""
+if _sid:
+    (WORK_DIR / f"pending_wait_{_sid}.json").unlink(missing_ok=True)
+
 TOKEN = os.environ.get("TOKEN_PERMISSIONS")
 MY_CHAT_ID = int(os.environ.get("CHAT_ID", "8896609541"))
 
