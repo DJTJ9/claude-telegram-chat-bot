@@ -67,6 +67,19 @@ def test_permission_notification_filtered(tmp_path):
     assert not _pending(tmp_path).exists()
 
 
+def _flag(tmp_path, session_id="s1"):
+    return tmp_path / f"turn_ended_{session_id}.flag"
+
+
+def test_turn_ended_flag_skips_notification(tmp_path):
+    # Stop-Hook lief bereits (Turn beendet) → generisches Idle, keine echte Frage
+    _mk_session(tmp_path)
+    _flag(tmp_path).write_text("")
+    r = _run(tmp_path, {"session_id": "s1", "message": "Claude is waiting for your input"})
+    assert r.returncode == 0
+    assert not _pending(tmp_path).exists()
+
+
 def test_implementation_mode_active_skips(tmp_path):
     _mk_session(tmp_path, implementation_mode=True,
                 implementation_mode_until="2099-01-01T00:00:00")
@@ -115,6 +128,41 @@ def test_on_stop_survives_empty_stdin(tmp_path):
     env = {**os.environ, "WORK_DIR": str(tmp_path), "CLAUDE_AUTOMATED": "1"}
     r = subprocess.run(
         [sys.executable, str(ON_STOP)],
+        input="", capture_output=True, text=True, env=env, timeout=15,
+    )
+    assert r.returncode == 0
+
+
+def test_on_stop_writes_turn_ended_flag(tmp_path):
+    env = {**os.environ, "WORK_DIR": str(tmp_path), "CLAUDE_AUTOMATED": "1"}
+    r = subprocess.run(
+        [sys.executable, str(ON_STOP)],
+        input=json.dumps({"session_id": "s1"}),
+        capture_output=True, text=True, env=env, timeout=15,
+    )
+    assert r.returncode == 0
+    assert _flag(tmp_path).exists()
+
+
+ON_USER_PROMPT = PROJECT_DIR / "scripts" / "on_user_prompt.py"
+
+
+def test_on_user_prompt_clears_turn_ended_flag(tmp_path):
+    _flag(tmp_path).write_text("")
+    env = {**os.environ, "WORK_DIR": str(tmp_path)}
+    r = subprocess.run(
+        [sys.executable, str(ON_USER_PROMPT)],
+        input=json.dumps({"session_id": "s1"}),
+        capture_output=True, text=True, env=env, timeout=15,
+    )
+    assert r.returncode == 0
+    assert not _flag(tmp_path).exists()
+
+
+def test_on_user_prompt_survives_empty_stdin(tmp_path):
+    env = {**os.environ, "WORK_DIR": str(tmp_path)}
+    r = subprocess.run(
+        [sys.executable, str(ON_USER_PROMPT)],
         input="", capture_output=True, text=True, env=env, timeout=15,
     )
     assert r.returncode == 0

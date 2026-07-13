@@ -24,6 +24,12 @@ def main() -> int:
     if "permission" in message.lower():
         return 0
 
+    # Turn bereits beendet (Stop-Hook lief) → generisches Idle-Warten am
+    # Prompt-Ende, keine echte blockierende Frage. Nur benachrichtigen, wenn der
+    # Agent mitten im Turn wartet (UserPromptSubmit löscht das Flag beim Turn-Start).
+    if (WORK_DIR / f"turn_ended_{session_id}.flag").exists():
+        return 0
+
     session_path = WORK_DIR / "dev_sessions" / f"{session_id}.json"
     if not session_path.exists():
         return 0
