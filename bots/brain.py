@@ -143,10 +143,12 @@ def _check_wait_notify() -> None:
             "pane": data.get("pane", ""),
             "question": data.get("question", ""),
         }
+        slug = data.get("slug", "?")
+        _, phase = _get_dev_status(slug)
+        suffix = f" ({phase})" if phase else ""
         send_message(
             TOKEN, CHAT_ID,
-            f"⏳ dev-Session {data.get('slug', '?')} wartet seit 1 min:\n\n"
-            f"{data.get('question', '')}",
+            f"⏳ dev-Session {slug}{suffix} wartet auf Antwort",
         )
 
 

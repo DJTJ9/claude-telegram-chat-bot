@@ -25,14 +25,30 @@ def test_check_wait_notify_sends_message(tmp_path):
     _reset(brain)
     _write_wait(tmp_path)
     with patch.object(brain, "WORK_DIR", tmp_path), \
-         patch("bots.brain.send_message") as ms:
+         patch("bots.brain.send_message") as ms, \
+         patch("bots.brain._get_dev_status", return_value=("Bug: X", "implement")):
         brain._check_wait_notify()
     ms.assert_called_once()
     text = ms.call_args[0][2]
     assert "dev-skill" in text
-    assert "Frage?" in text
+    assert "implement" in text
+    assert "Frage?" not in text
     assert brain._wait_state == {"session_id": "s1", "pane": "%5",
                                  "question": "Frage? A) Ja B) Nein"}
+    _reset(brain)
+
+
+def test_check_wait_notify_omits_phase_when_status_missing(tmp_path):
+    import bots.brain as brain
+    _reset(brain)
+    _write_wait(tmp_path)
+    with patch.object(brain, "WORK_DIR", tmp_path), \
+         patch("bots.brain.send_message") as ms, \
+         patch("bots.brain._get_dev_status", return_value=("", "")):
+        brain._check_wait_notify()
+    text = ms.call_args[0][2]
+    assert "dev-skill" in text
+    assert "()" not in text
     _reset(brain)
 
 
