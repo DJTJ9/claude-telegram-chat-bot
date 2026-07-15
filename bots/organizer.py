@@ -52,7 +52,7 @@ REPLY_KEYBOARD = {
 def _main_reply_kb() -> dict:
     return {
         "keyboard": [
-            ["🔔 Notify AN", "🔕 Notify AUS", "📁 Projekte"],
+            ["📁 Projekte"],
             ["📋 Task", "📅 Termin", "💡 Ideen"],
             ["📚 Lern", "🌅 Morgen", "🌙 Abend"],
             ["📆 Woche", "📥 Backlog"],
@@ -1818,20 +1818,6 @@ def _handle_message(msg: dict) -> None:
 
     t = text.strip()
     response = None
-
-    if t == "🔔 Notify AN":
-        settings = load_settings()
-        settings["notifications_enabled"] = True
-        (WORK_DIR / "settings.json").write_text(json.dumps(settings, indent=2))
-        send_message(TOKEN, chat_id, "🔔 Benachrichtigungen AN", reply_markup=_main_reply_kb())
-        return
-
-    if t == "🔕 Notify AUS":
-        settings = load_settings()
-        settings["notifications_enabled"] = False
-        (WORK_DIR / "settings.json").write_text(json.dumps(settings, indent=2))
-        send_message(TOKEN, chat_id, "🔕 Benachrichtigungen AUS", reply_markup=_main_reply_kb())
-        return
 
     if t in ("📁 Projekte", "🗂️ Projekte"):
         result = subprocess.run(

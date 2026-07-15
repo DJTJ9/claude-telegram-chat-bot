@@ -35,6 +35,15 @@ class TestKbState(unittest.TestCase):
     def test_projekte_state_zurück_sets_main(self):
         self.assertIn('_kb_state[chat_id] = "main"', ORG_SRC)
 
+    def test_notify_buttons_removed_from_main_kb(self):
+        idx = ORG_SRC.index("def _main_reply_kb()")
+        snippet = ORG_SRC[idx:idx+300]
+        self.assertNotIn("Notify AN", snippet)
+        self.assertNotIn("Notify AUS", snippet)
+
+    def test_notify_handler_removed(self):
+        self.assertNotIn("notifications_enabled", ORG_SRC)
+
 class TestProjectActionState(unittest.TestCase):
     def test_send_dev_status_defined(self):
         self.assertIn("def _send_dev_status(", ORG_SRC)
