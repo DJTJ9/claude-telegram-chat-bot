@@ -25,8 +25,6 @@ if not _args:
     sys.exit(0)
 
 settings = load_settings()
-if not settings.get("notifications_enabled", True):
-    sys.exit(0)
 
 token = os.environ.get(f"TOKEN_{bot_override.upper()}") if bot_override else get_notify_token(settings)
 chat_id = get_chat_id()

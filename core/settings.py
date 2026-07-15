@@ -4,7 +4,6 @@ from pathlib import Path
 WORK_DIR = os.environ.get("WORK_DIR", "/root/projekte/telegram-bot-army")
 
 _DEFAULTS = {
-    "notifications_enabled": True,
     "implementation_mode": False,
     "implementation_mode_until": None,
     "active_session": None,
