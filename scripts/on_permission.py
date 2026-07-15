@@ -1,4 +1,4 @@
-import os, sys, json, time, uuid
+import os, sys, json
 from datetime import datetime
 from pathlib import Path
 
@@ -13,7 +13,6 @@ if env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
-settings_path = PROJECT_DIR / "settings.json"
 session_id = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
 if session_id:
     session_path = PROJECT_DIR / "dev_sessions" / f"{session_id}.json"
@@ -32,15 +31,6 @@ if session_id:
         except Exception:
             pass
 
-if settings_path.exists():
-    try:
-        settings = json.loads(settings_path.read_text())
-        if not settings.get("notifications_enabled", True):
-            print(json.dumps({"decision": "approve"}))
-            sys.exit(0)
-    except Exception:
-        pass
-
 try:
     data = json.loads(sys.stdin.read())
 except Exception:
@@ -58,38 +48,7 @@ if tool_name in ("Edit", "Write"):
         print(json.dumps({"decision": "approve"}))
         sys.exit(0)
     except ValueError:
-        pass  # Outside project — fall through to Telegram relay
+        pass
 
-request_id = str(uuid.uuid4())[:8]
-
-pending_path = PROJECT_DIR / "pending_permission.json"
-pending_path.write_text(json.dumps({
-    "tool": tool_name,
-    "input": tool_input,
-    "request_id": request_id,
-}))
-
-response_path = PROJECT_DIR / f"permission_response_{request_id}.json"
-timeout = 300
-start = time.time()
-
-while time.time() - start < timeout:
-    if response_path.exists():
-        try:
-            resp = json.loads(response_path.read_text())
-            response_path.unlink()
-        except Exception:
-            time.sleep(0.1)
-            continue
-        if resp.get("approved"):
-            print(json.dumps({"decision": "approve"}))
-            sys.exit(0)
-        else:
-            print(json.dumps({"decision": "block", "reason": "Denied via Telegram"}))
-            sys.exit(2)
-    time.sleep(0.5)
-
-# Timeout — auto-approve, clean up
-pending_path.unlink(missing_ok=True)
-print(json.dumps({"decision": "approve"}))
+# Kein Auto-Approve-Treffer: keine Ausgabe → Claude Code fragt im Terminal.
 sys.exit(0)
