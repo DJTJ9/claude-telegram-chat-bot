@@ -8,61 +8,6 @@ os.environ.setdefault("GROQ_API_KEY", "x")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-# ── Task 4: relay watchdog ────────────────────────────────────────────────────
-
-def test_write_relay_response_creates_file(tmp_path):
-    import bots.brain as brain
-    with patch.object(brain, "WORK_DIR", tmp_path):
-        brain._write_relay_response("abc123", "B")
-    result = json.loads((tmp_path / "question_response_abc123.json").read_text())
-    assert result == {"answer": "B"}
-
-
-def test_check_relay_question_sends_keyboard_when_file_exists(tmp_path):
-    import bots.brain as brain
-    pq = tmp_path / "pending_question.json"
-    pq.write_text(json.dumps({
-        "question": "Test?\nA) Ja\nB) Nein",
-        "request_id": "req1",
-        "target_bot": "brain",
-    }))
-    brain._relay_request_id = None
-    with patch.object(brain, "WORK_DIR", tmp_path), \
-         patch("bots.brain.send_message", return_value=99) as mock_send, \
-         patch("bots.brain.build_inline_keyboard",
-               return_value=[[{"text": "A) Ja", "callback_data": "A"}]]):
-        brain._check_relay_question()
-    mock_send.assert_called_once()
-    assert brain._relay_request_id == "req1"
-    brain._relay_request_id = None
-
-
-def test_check_relay_question_skips_if_already_sent(tmp_path):
-    import bots.brain as brain
-    pq = tmp_path / "pending_question.json"
-    pq.write_text(json.dumps({"question": "Q", "request_id": "req1", "target_bot": "brain"}))
-    brain._relay_request_id = "req1"
-    with patch.object(brain, "WORK_DIR", tmp_path), \
-         patch("bots.brain.send_message") as mock_send:
-        brain._check_relay_question()
-    mock_send.assert_not_called()
-    brain._relay_request_id = None
-
-
-def test_handle_relay_callback_writes_response_and_clears(tmp_path):
-    import bots.brain as brain
-    brain._relay_request_id = "req42"
-    (tmp_path / "pending_question.json").write_text("{}")
-    with patch.object(brain, "WORK_DIR", tmp_path), \
-         patch("bots.brain.answer_callback_query"), \
-         patch("bots.brain.send_message"):
-        brain._handle_relay_callback("cq_id", "B")
-    result = json.loads((tmp_path / "question_response_req42.json").read_text())
-    assert result == {"answer": "B"}
-    assert brain._relay_request_id is None
-    assert not (tmp_path / "pending_question.json").exists()
-
-
 # ── Task 5: accordion UI ─────────────────────────────────────────────────────
 
 def test_load_projects_reads_registry(tmp_path):
@@ -101,21 +46,19 @@ def test_build_main_keyboard_structure():
     import bots.brain as brain
     projects = [{"slug": "proj-a", "name": "ProjA"}, {"slug": "proj-b", "name": "ProjB"}]
     kb = brain._build_main_keyboard(projects)
-    assert kb[0] == [
-        {"text": "🔔 Notify an", "callback_data": "notify:on"},
-        {"text": "🔇 Notify aus", "callback_data": "notify:off"},
+    assert kb == [
+        [{"text": "📁 ProjA", "callback_data": "proj:proj-a"}],
+        [{"text": "📁 ProjB", "callback_data": "proj:proj-b"}],
     ]
-    assert kb[1] == [{"text": "📁 ProjA", "callback_data": "proj:proj-a"}]
-    assert kb[2] == [{"text": "📁 ProjB", "callback_data": "proj:proj-b"}]
 
 
-def test_toggle_notify_updates_settings(tmp_path):
-    import bots.brain as brain
-    settings_file = tmp_path / "settings.json"
-    settings_file.write_text(json.dumps({"notifications_enabled": False}))
-    with patch.object(brain, "WORK_DIR", tmp_path):
-        brain._toggle_notify(True)
-    assert json.loads(settings_file.read_text())["notifications_enabled"] is True
+def test_relay_and_toggle_code_removed():
+    src = (Path(__file__).parent.parent / "bots" / "brain.py").read_text()
+    for token in ("_check_relay_question", "_handle_relay_callback",
+                  "_write_relay_response", "_handle_wait_reply",
+                  "_wait_prompt_still_open", "_toggle_notify",
+                  "_wait_state", "pending_question", "notify:on"):
+        assert token not in src, token
 
 
 # ── Task 6: quick-capture ────────────────────────────────────────────────────

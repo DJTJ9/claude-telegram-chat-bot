@@ -15,7 +15,7 @@ if env_file.exists():
 
 from core.telegram import (
     get_updates, send_message, answer_callback_query,
-    edit_message, transcribe_voice, build_inline_keyboard,
+    edit_message, transcribe_voice,
 )
 from core.settings import load_settings, save_settings
 from core import nocodb_direct
@@ -26,8 +26,6 @@ WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
 HUB_DIR = Path(os.environ.get("HUB_DIR", str(WORK_DIR)))
 PORT = int(os.environ.get("PORT", "8001"))
 
-_relay_request_id: str | None = None
-_relay_await_input: str | None = None
 _accordion_msg_id: int | None = None
 _capture_state: dict | None = None
 _impl_state: dict | None = None
@@ -63,71 +61,12 @@ def _dispatch_update(upd: dict) -> None:
             _handle_message(msg)
 
 
-# ── Relay watchdog ────────────────────────────────────────────────────────────
-
-def _write_relay_response(request_id: str, answer: str) -> None:
-    (WORK_DIR / f"question_response_{request_id}.json").write_text(
-        json.dumps({"answer": answer})
-    )
-
-
-def _check_relay_question() -> None:
-    global _relay_request_id
-    try:
-        settings = json.loads((WORK_DIR / "settings.json").read_text())
-        if not settings.get("notifications_enabled", False):
-            return
-    except Exception:
-        return
-    pq_path = WORK_DIR / "pending_question.json"
-    if not pq_path.exists():
-        return
-    try:
-        data = json.loads(pq_path.read_text())
-    except Exception:
-        return
-    request_id = data.get("request_id")
-    if not request_id or request_id == _relay_request_id:
-        return
-    text = data.get("text", data.get("question", ""))
-    options = data.get("options", [])
-    if options:
-        rows = []
-        for opt in options:
-            letter = opt[0] if opt and opt[0].isalpha() else opt[:1]
-            rows.append([{"text": opt[:60], "callback_data": letter}])
-        rows.append([
-            {"text": "✏️ Freitext", "callback_data": "__freitext__"},
-            {"text": "🎤 Sprache",  "callback_data": "__sprache__"},
-        ])
-    else:
-        rows = build_inline_keyboard(text)
-    send_message(TOKEN, CHAT_ID, f"🤖 CC-Session fragt:\n{text}",
-                 reply_markup={"inline_keyboard": rows})
-    _relay_request_id = request_id
-
-
-def _handle_relay_callback(callback_query_id: str, answer: str) -> None:
-    global _relay_request_id
-    if _relay_request_id is None:
-        answer_callback_query(TOKEN, callback_query_id)
-        send_message(TOKEN, CHAT_ID, "✅ Wurde bereits in CC beantwortet")
-        return
-    _write_relay_response(_relay_request_id, answer)
-    _relay_request_id = None
-    (WORK_DIR / "pending_question.json").unlink(missing_ok=True)
-    answer_callback_query(TOKEN, callback_query_id)
-    send_message(TOKEN, CHAT_ID, f"✅ Antwort gesendet: {answer}")
-
-
 # ── Wait-Notify (Session wartet auf Terminal-Input) ──────────────────────────
 
 _wait_notified: dict[str, float] = {}
-_wait_state: dict | None = None
 
 
 def _check_wait_notify() -> None:
-    global _wait_state
     for path in sorted(WORK_DIR.glob("pending_wait_*.json")):
         try:
             data = json.loads(path.read_text())
@@ -138,11 +77,6 @@ def _check_wait_notify() -> None:
         if _wait_notified.get(session_id) == ts:
             continue
         _wait_notified[session_id] = ts
-        _wait_state = {
-            "session_id": session_id,
-            "pane": data.get("pane", ""),
-            "question": data.get("question", ""),
-        }
         slug = data.get("slug", "?")
         _, phase = _get_dev_status(slug)
         suffix = f" ({phase})" if phase else ""
@@ -150,40 +84,6 @@ def _check_wait_notify() -> None:
             TOKEN, CHAT_ID,
             f"⏳ dev-Session {slug}{suffix} wartet auf Antwort",
         )
-
-
-def _wait_prompt_still_open(state: dict) -> bool:
-    lines = [l.strip() for l in state.get("question", "").splitlines() if l.strip()]
-    if not lines:
-        return True
-    fingerprint = max(lines, key=len)
-    try:
-        capture = subprocess.run(
-            ["tmux", "capture-pane", "-p", "-t", state["pane"]],
-            capture_output=True, text=True, timeout=5,
-        ).stdout
-    except Exception:
-        return False
-    return fingerprint in capture
-
-
-def _handle_wait_reply(text: str) -> bool:
-    global _wait_state
-    if _wait_state is None or not text:
-        return False
-    state = _wait_state
-    pending = WORK_DIR / f"pending_wait_{state['session_id']}.json"
-    if not pending.exists() or not _wait_prompt_still_open(state):
-        _wait_state = None
-        pending.unlink(missing_ok=True)
-        send_message(TOKEN, CHAT_ID, "✅ bereits im Terminal beantwortet")
-        return True
-    subprocess.run(["tmux", "send-keys", "-t", state["pane"], "-l", text], timeout=5)
-    subprocess.run(["tmux", "send-keys", "-t", state["pane"], "Enter"], timeout=5)
-    pending.unlink(missing_ok=True)
-    _wait_state = None
-    send_message(TOKEN, CHAT_ID, f"✅ Antwort ins Terminal getippt: {text[:80]}")
-    return True
 
 
 # ── Accordion UI ──────────────────────────────────────────────────────────────
@@ -332,10 +232,7 @@ def _handle_impl_time_input(text: str) -> None:
 
 
 def _build_main_keyboard(projects: list[dict]) -> list[list[dict]]:
-    rows: list[list[dict]] = [[
-        {"text": "🔔 Notify an", "callback_data": "notify:on"},
-        {"text": "🔇 Notify aus", "callback_data": "notify:off"},
-    ]]
+    rows: list[list[dict]] = []
     for p in projects:
         rows.append([{"text": f"📁 {p['name']}", "callback_data": f"proj:{p['slug']}"}])
     return rows
@@ -364,40 +261,10 @@ def _show_main_menu() -> None:
             _accordion_msg_id = mid
 
 
-def _toggle_notify(value: bool) -> None:
-    path = WORK_DIR / "settings.json"
-    try:
-        settings = json.loads(path.read_text())
-    except Exception:
-        settings = {}
-    settings["notifications_enabled"] = value
-    path.write_text(json.dumps(settings, indent=2))
-
-
 def _handle_callback(cq: dict) -> None:
     global _capture_state, _impl_state, _bug_state
     cq_id = cq["id"]
     data = cq.get("data", "")
-
-    if data == "__freitext__":
-        send_message(TOKEN, CHAT_ID, "Bitte Antwort eintippen:")
-        answer_callback_query(TOKEN, cq_id)
-        return
-
-    if data == "__sprache__":
-        global _relay_await_input
-        _relay_await_input = "voice"
-        send_message(TOKEN, CHAT_ID, "🎤 Schick eine Sprachnachricht:")
-        answer_callback_query(TOKEN, cq_id)
-        return
-
-    is_relay_answer = (
-        _relay_request_id is not None
-        and not data.startswith(("proj:", "notify:", "status:", "capture:", "back", "bug"))
-    )
-    if is_relay_answer:
-        _handle_relay_callback(cq_id, data)
-        return
 
     if data == "back":
         _show_main_menu()
@@ -428,14 +295,6 @@ def _handle_callback(cq: dict) -> None:
         status_text = _get_dev_status_full(slug)
         send_message(TOKEN, CHAT_ID, status_text)
         answer_callback_query(TOKEN, cq_id, text="📊 Status geladen")
-
-    elif data == "notify:on":
-        _toggle_notify(True)
-        answer_callback_query(TOKEN, cq_id, text="✅ Notify an")
-
-    elif data == "notify:off":
-        _toggle_notify(False)
-        answer_callback_query(TOKEN, cq_id, text="✅ Notify aus")
 
     elif data.startswith("capture:"):
         slug = data[8:]
@@ -585,25 +444,13 @@ def _append_bug_to_status_md(slug: str, title: str) -> None:
 
 
 def _handle_message(msg: dict) -> None:
-    global _capture_state, _impl_state, _bug_state, _accordion_msg_id, _relay_await_input, _relay_request_id
-    if _relay_request_id is not None and _relay_await_input == "voice" and "voice" in msg:
-        raw = transcribe_voice(TOKEN, msg["voice"]["file_id"])
-        if raw:
-            _write_relay_response(_relay_request_id, raw)
-            _relay_request_id = None
-            _relay_await_input = None
-            (WORK_DIR / "pending_question.json").unlink(missing_ok=True)
-            send_message(TOKEN, CHAT_ID, f"✅ Antwort gesendet: {raw[:80]}")
-        return
+    global _capture_state, _impl_state, _bug_state, _accordion_msg_id
     text = msg.get("text", "")
 
     if text in ("/start", "🤖"):
         _accordion_msg_id = None
         _setup_reply_keyboard()
         _show_main_menu()
-        return
-
-    if _wait_state is not None and text and _handle_wait_reply(text):
         return
 
     if _impl_state and _impl_state.get("step") == "await_time":
@@ -675,10 +522,9 @@ def main():
     _show_main_menu()
     while True:
         try:
-            _check_relay_question()
             _check_wait_notify()
         except Exception as e:
-            print(f"relay error: {e}", file=sys.stderr)
+            print(f"wait-notify error: {e}", file=sys.stderr)
         time.sleep(0.1)
 
 
