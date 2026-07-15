@@ -83,14 +83,28 @@ def upsert_feature(table_id: str, name: str, status: str,
         _create_row_at_top(table_id, payload)
 
 
+def _top_order(row_id: int) -> str:
+    """nc_order für Top-Inserts: streng monoton fallend über die Row-Id.
+
+    Ein fixes "0.0001" für ALLE Top-Inserts ließ sie gleichauf liegen — die
+    Reihenfolge entschied dann der Tiebreak statt der Insert, und eine neue Row
+    landete mitten im Block statt oben. Den kleinsten vorhandenen Wert lesen und
+    unterbieten geht nicht: nc_order ist schreibbar, wird aber von der v2-API nie
+    zurückgegeben (live geprüft — `fields=Id,nc_order` liefert nur Id).
+    1/(BASE+Id) liegt für jede neue, größere Id strikt unter jedem früheren Wert
+    dieser Formel und zugleich immer unter dem Alt-Fixwert 0.0001.
+    """
+    return f"{1 / (_DONE_ORDER_BASE + row_id):.12f}"
+
+
 def _create_row_at_top(table_id: str, payload: dict) -> None:
-    """POST neue Row (landet unten), dann PATCH nc_order auf Kleinstwert → top.
+    """POST neue Row (landet unten), dann PATCH nc_order → top.
     Berührt keine anderen Rows, erhält deren manuelle Reihenfolge."""
     resp = requests.post(_table_url(table_id), headers=_headers(), json=payload)
     new_id = resp.json().get("Id")
     if new_id is not None:
         requests.patch(_table_url(table_id), headers=_headers(),
-                       json=[{"Id": new_id, "nc_order": "0.0001"}])
+                       json=[{"Id": new_id, "nc_order": _top_order(new_id)}])
 
 
 def _create_row_at_end(table_id: str, payload: dict) -> None:

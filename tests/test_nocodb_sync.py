@@ -9,7 +9,7 @@ os.environ.setdefault("NOCODB_BASE_ID", "test_base")
 
 from scripts.nocodb_sync import (
     _headers, _table_url, load_nocodb_table_id, find_row, upsert_feature,
-    sync_dev_to_nocodb, sync_nocodb_to_dev, _get_all_rows,
+    sync_dev_to_nocodb, sync_nocodb_to_dev, _get_all_rows, _top_order,
 )
 
 FAKE_REGISTRY = [
@@ -208,7 +208,18 @@ class TestUpsertFeatureInPlace(unittest.TestCase):
         self.assertNotIn("nc_order", post_body)
         patch_body = mock_patch.call_args[1]["json"]
         self.assertEqual(patch_body[0]["Id"], 34)
-        self.assertEqual(patch_body[0]["nc_order"], "0.0001")
+        self.assertEqual(patch_body[0]["nc_order"], _top_order(34))
+        # Alt-Fixwert 0.0001 galt für ALLE Top-Inserts → lagen gleichauf,
+        # neue Rows landeten mitten im Block statt oben.
+        self.assertLess(float(patch_body[0]["nc_order"]), 0.0001)
+
+    def test_top_order_strictly_decreases_with_id(self):
+        # Größere Id (= neuere Row) muss strikt kleiner sortieren → weiter oben.
+        orders = [float(_top_order(i)) for i in (1, 34, 35, 41, 45, 46)]
+        self.assertEqual(orders, sorted(orders, reverse=True))
+        self.assertEqual(len(set(orders)), len(orders))
+        # Muss auch Altbestand schlagen, der noch auf dem Fixwert steht.
+        self.assertTrue(all(o < 0.0001 for o in orders))
 
 
 class TestSyncDevToNocodbInPlace(unittest.TestCase):
