@@ -47,6 +47,17 @@ def test_telegram_ask_script_removed():
     assert not (PROJECT_DIR / "scripts" / "telegram_ask.py").exists()
 
 
+def test_permissions_bot_removed():
+    assert not (PROJECT_DIR / "bots" / "permissions.py").exists()
+    assert not (PROJECT_DIR / "systemd" / "bot-permissions.service").exists()
+
+
+def test_setup_webhooks_has_no_permissions_entry():
+    src = (PROJECT_DIR / "scripts" / "setup_webhooks.py").read_text()
+    assert "TOKEN_PERMISSIONS" not in src
+    assert '"permissions"' not in src
+
+
 def test_notify_bot_override_exits_cleanly_with_empty_token(tmp_path):
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps({"notifications_enabled": True, "active_session": None}))

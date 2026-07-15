@@ -14,10 +14,9 @@ if env_file.exists():
 BASE_URL = "https://code.thinkshark.de"
 
 BOTS = [
-    ("TOKEN_BRAIN",       "brain"),
-    ("TOKEN_ORGANIZER",   "organizer"),
-    ("TOKEN_TEACH",       "teach"),
-    ("TOKEN_PERMISSIONS", "permissions"),
+    ("TOKEN_BRAIN",     "brain"),
+    ("TOKEN_ORGANIZER", "organizer"),
+    ("TOKEN_TEACH",     "teach"),
 ]
 
 for env_key, name in BOTS:
