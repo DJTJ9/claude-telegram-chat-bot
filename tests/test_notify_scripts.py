@@ -23,10 +23,28 @@ def test_notify_uses_get_notify_token():
     assert "get_notify_token" in src
 
 
-def test_on_stop_uses_permissions_token():
+def test_on_stop_no_longer_sends_telegram():
     src = (PROJECT_DIR / "scripts" / "on_stop.py").read_text()
-    assert "TELEGRAM_TOKEN" not in src
-    assert "TOKEN_PERMISSIONS" in src
+    assert "TOKEN_PERMISSIONS" not in src
+    assert "sendMessage" not in src
+    assert "notifications_enabled" not in src
+
+
+def test_on_stop_writes_turn_ended_flag_and_clears_pending_wait(tmp_path):
+    (tmp_path / "pending_wait_sid-xyz.json").write_text("{}")
+    result = subprocess.run(
+        [sys.executable, str(PROJECT_DIR / "scripts" / "on_stop.py")],
+        input=json.dumps({"session_id": "sid-xyz"}),
+        capture_output=True, text=True, timeout=5,
+        env={**os.environ, "WORK_DIR": str(tmp_path)},
+    )
+    assert result.returncode == 0
+    assert (tmp_path / "turn_ended_sid-xyz.flag").exists()
+    assert not (tmp_path / "pending_wait_sid-xyz.json").exists()
+
+
+def test_telegram_ask_script_removed():
+    assert not (PROJECT_DIR / "scripts" / "telegram_ask.py").exists()
 
 
 def test_notify_bot_override_exits_cleanly_with_empty_token(tmp_path):
