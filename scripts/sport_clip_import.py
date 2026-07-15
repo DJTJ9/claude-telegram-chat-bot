@@ -117,8 +117,8 @@ def write_back_id(path: Path, row_id: int) -> None:
 
 def notify_import(title: str, media_count: int) -> None:
     """Produkt-Notification direkt an den Organizer-Chat — bewusst NICHT über
-    telegram_notify.py, dessen notifications_enabled-Dev-Gate den
-    Import-Feedback unterdrücken würde (User-Entscheidung 2026-07-05)."""
+    telegram_notify.py, das die Meldung über active_session routen würde statt
+    fest an den Organizer (User-Entscheidung 2026-07-05)."""
     if not TOKEN_ORGANIZER or not CHAT_ID:
         return
     try:

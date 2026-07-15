@@ -1,7 +1,6 @@
 """Pflicht-Notify für /dev finish — bewusst NICHT über telegram_notify.py,
-dessen notifications_enabled-Dev-Gate diese Fertigstellungs-Meldung sonst
-stillschweigend unterdrücken würde (gleiche Begründung wie
-sport_clip_import.notify_import(), Decision 2026-07-05)."""
+da dessen --bot-Flag die Meldung fest an den brain-Bot adressiert, statt sie
+über active_session zu routen."""
 import os, sys, requests
 from pathlib import Path
 
