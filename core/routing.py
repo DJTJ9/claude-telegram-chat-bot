@@ -10,7 +10,7 @@ SESSION_BOT_MAP = {
 
 
 def _get_target_bot_name(active_session):
-    return SESSION_BOT_MAP.get(active_session, "permissions")
+    return SESSION_BOT_MAP.get(active_session, "brain")
 
 
 def get_active_token(settings):

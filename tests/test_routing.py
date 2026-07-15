@@ -9,11 +9,11 @@ def test_vision_routes_to_brain():
 def test_teach_routes_to_teach():
     assert _get_target_bot_name("teach") == "teach"
 
-def test_none_routes_to_permissions():
-    assert _get_target_bot_name(None) == "permissions"
+def test_none_routes_to_brain():
+    assert _get_target_bot_name(None) == "brain"
 
-def test_unknown_routes_to_permissions():
-    assert _get_target_bot_name("unknown") == "permissions"
+def test_unknown_routes_to_brain():
+    assert _get_target_bot_name("unknown") == "brain"
 
 
 def test_organizer_routes_to_organizer():
@@ -30,10 +30,10 @@ def test_get_notify_token_uses_active_session():
     assert get_notify_token(settings, env) == "tok-brain"
 
 
-def test_get_notify_token_falls_back_to_permissions():
-    env = {"TOKEN_PERMISSIONS": "tok-perm"}
+def test_get_notify_token_falls_back_to_brain():
+    env = {"TOKEN_BRAIN": "tok-brain"}
     settings = {"active_session": None}
-    assert get_notify_token(settings, env) == "tok-perm"
+    assert get_notify_token(settings, env) == "tok-brain"
 
 
 def test_get_notify_token_returns_none_if_no_token():
