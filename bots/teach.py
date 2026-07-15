@@ -13,7 +13,7 @@ if env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
-from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, transcribe_voice, normalize_voice
+from core.telegram import get_updates, send_message, answer_callback_query, transcribe_voice, normalize_voice
 from core.settings import load_settings, save_settings
 
 TOKEN = os.environ["TOKEN_TEACH"]
@@ -88,13 +88,6 @@ def _send_lesson_list(slug: str, teach_dir=None) -> None:
         f"📚 {label} — {len(files)} Lektionen:",
         reply_markup={"inline_keyboard": buttons},
     )
-
-
-_active_question_id = None
-
-
-def _write_question_response(request_id, answer):
-    (WORK_DIR / f"question_response_{request_id}.json").write_text(json.dumps({"answer": answer}))
 
 
 def _set_session():
@@ -236,23 +229,11 @@ def publish_new_lessons() -> tuple[int, list[str]]:
 def _run_teach(topic):
     _set_session()
     safe_topic = topic[:500]
-    telegram_ask_path = WORK_DIR / "scripts" / "telegram_ask.py"
-    settings = load_settings()
-    if settings.get("notifications_enabled"):
-        question_instruction = (
-            f'Use python "{telegram_ask_path}" for ALL questions '
-            f"(notifications_enabled is true — do not output anything to terminal)."
-        )
-    else:
-        question_instruction = (
-            "notifications_enabled is false — do NOT use telegram_ask.py. "
-            "Skip all clarifying questions. Assume beginner level. "
-            "Immediately write exactly 4 concise lessons (max 400 words each) without waiting for user input."
-        )
     prompt = (
         f"Invoke the /teach skill. "
         f"Topic and context from user: {safe_topic}. "
-        f"{question_instruction} "
+        "Skip all clarifying questions. Assume beginner level. "
+        "Immediately write exactly 4 concise lessons (max 400 words each) without waiting for user input. "
         f"IMPORTANT: After writing all lesson HTML files, STOP. "
         f"Do NOT run git commands. Do NOT call telegram_notify.py. "
         f"The calling process handles git commit, push, and user notification."
@@ -265,7 +246,7 @@ def _run_teach(topic):
 
     kb = [[{"text": "🛑 Abbrechen", "callback_data": "teach_abort"}]]
     send_message(TOKEN, CHAT_ID,
-                 "📚 Teach-Session gestartet — Fragen kommen gleich über den Chat",
+                 "📚 Teach-Session gestartet — Lektionen kommen gleich",
                  reply_markup={"inline_keyboard": kb})
 
     aborted = False
@@ -319,7 +300,6 @@ def _run_teach(topic):
 
 
 def _handle_callback(cq: dict) -> None:
-    global _active_question_id
     answer_callback_query(TOKEN, cq["id"])
     data = cq.get("data", "")
     if data.startswith("lessons__"):
@@ -327,16 +307,9 @@ def _handle_callback(cq: dict) -> None:
     elif data == "teach_abort":
         (WORK_DIR / ".teach_abort").write_text("")
         send_message(TOKEN, CHAT_ID, "⏳ Abbruch wird nach aktueller Lektion wirksam...")
-    elif data == "__freitext__":
-        send_message(TOKEN, CHAT_ID, "Bitte Antwort eintippen:")
-    elif _active_question_id:
-        _write_question_response(_active_question_id, data)
-        _active_question_id = None
-        send_message(TOKEN, CHAT_ID, f"💬 Antwort: {data}")
 
 
 def _handle_message(msg: dict) -> None:
-    global _active_question_id
     text = msg.get("text", "").strip()
     if not text and "voice" in msg:
         try:
@@ -347,12 +320,6 @@ def _handle_message(msg: dict) -> None:
             send_message(TOKEN, CHAT_ID, f"❌ Spracherkennung fehlgeschlagen: {e}")
             return
     if not text:
-        return
-
-    if _active_question_id:
-        _write_question_response(_active_question_id, text)
-        _active_question_id = None
-        send_message(TOKEN, CHAT_ID, f"💬 Antwort: {text}")
         return
 
     t = text.lower()
@@ -397,26 +364,7 @@ def _dispatch_update(upd: dict) -> None:
             _handle_message(msg)
 
 
-def _question_poll() -> None:
-    global _active_question_id
-    while True:
-        try:
-            q_path = WORK_DIR / "pending_question.json"
-            if not _active_question_id and q_path.exists():
-                data = json.loads(q_path.read_text())
-                if data.get("target_bot", "permissions") == "teach":
-                    q_path.unlink()
-                    _active_question_id = data["request_id"]
-                    kb = build_inline_keyboard(data["question"])
-                    send_message(TOKEN, CHAT_ID, f"❓ {data['question']}",
-                                 reply_markup={"inline_keyboard": kb})
-        except Exception as e:
-            print(f"question poll error: {e}")
-        time.sleep(0.5)
-
-
 def main():
-    threading.Thread(target=_question_poll, daemon=True).start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), _WebhookHandler)
     print(f"Teach Bot gestartet (webhook, port {PORT})")
     server.serve_forever()

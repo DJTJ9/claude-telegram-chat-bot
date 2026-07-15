@@ -206,3 +206,19 @@ def test_inject_nav_idempotent(tmp_path):
     _inject_lesson_navigation("my-kurs", teach_dir=tmp_path)
     second_run = (lessons / "lektion-01-intro.html").read_text(encoding="utf-8")
     assert first_run == second_run
+
+
+def test_question_relay_removed():
+    src = (Path(__file__).parent.parent / "bots" / "teach.py").read_text()
+    for token in ("notifications_enabled", "telegram_ask", "_question_poll",
+                  "_active_question_id", "_write_question_response",
+                  "pending_question", "__freitext__"):
+        assert token not in src, token
+
+
+def test_run_teach_prompt_has_no_question_instruction():
+    src = (Path(__file__).parent.parent / "bots" / "teach.py").read_text()
+    idx = src.index("def _run_teach(")
+    snippet = src[idx:idx + 900]
+    assert "question_instruction" not in snippet
+    assert "Skip all clarifying questions" in snippet
