@@ -76,6 +76,23 @@ def test_nothing_to_commit_is_success(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
 
 
+def test_pathspec_noop_with_other_dirty_tracked_file_is_success(tmp_path):
+    """Named path has no changes, but a DIFFERENT tracked file is dirty elsewhere
+    in the shared index — git then reports "no changes added to commit", not
+    "nothing to commit", and must still be treated as success (regression for
+    the finish.md `&&`-chain race: this exact message broke a later `&&`-chained
+    NocoDB sync step, LEARNINGS dev-skill 2026-07-16)."""
+    repo = _init_repo(tmp_path / "hub")
+    (repo / "target").write_text("x")
+    (repo / "other").write_text("y")
+    _git(repo, "add", "target", "other"); _git(repo, "commit", "-qm", "seed")
+    (repo / "other").write_text("changed")    # dirty, but NOT in this call's paths
+    r = _run(repo, "target", "-m", "noop for target")
+    assert r.returncode == 0, r.stdout + r.stderr
+    status = _git(repo, "status", "--short").stdout
+    assert "other" in status                  # stays dirty, un-bled, un-committed
+
+
 def test_push_to_bare_remote(tmp_path):
     bare = tmp_path / "remote.git"
     subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)

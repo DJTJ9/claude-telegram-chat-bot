@@ -35,8 +35,10 @@ def main():
     try:
         _git(hub, "add", "--", *a.paths)
         r = _git(hub, "commit", "-m", a.message, "--", *a.paths)
-        if r.returncode != 0 and "nothing to commit" not in (r.stdout + r.stderr):
-            sys.stderr.write(r.stdout + r.stderr)
+        output = r.stdout + r.stderr
+        _NOOP_MARKERS = ("nothing to commit", "no changes added to commit")
+        if r.returncode != 0 and not any(m in output for m in _NOOP_MARKERS):
+            sys.stderr.write(output)
             sys.exit(1)
         if a.push:
             for _ in range(3):
