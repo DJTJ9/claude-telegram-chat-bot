@@ -14,7 +14,7 @@ if env_file.exists():
             os.environ.setdefault(k.strip(), v.strip())
 
 from core.telegram import get_updates, send_message, answer_callback_query, transcribe_voice, normalize_voice
-from core.settings import load_settings, save_settings
+from core.settings import load_settings, save_settings, update_settings
 
 TOKEN = os.environ["TOKEN_TEACH"]
 CHAT_ID = int(os.environ.get("CHAT_ID", "8896609541"))
@@ -91,17 +91,17 @@ def _send_lesson_list(slug: str, teach_dir=None) -> None:
 
 
 def _set_session():
-    s = load_settings()
-    s["active_session"] = "teach"
-    s["active_session_bot"] = "teach"
-    save_settings(s)
+    def _m(s):
+        s["active_session"] = "teach"
+        s["active_session_bot"] = "teach"
+    update_settings(_m)
 
 
 def _clear_session():
-    s = load_settings()
-    s["active_session"] = None
-    s["active_session_bot"] = None
-    save_settings(s)
+    def _m(s):
+        s["active_session"] = None
+        s["active_session_bot"] = None
+    update_settings(_m)
 
 
 def _update_index_html(lesson_path, teach_dir=None):

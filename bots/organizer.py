@@ -16,7 +16,7 @@ if env_file.exists():
             os.environ.setdefault(k.strip(), v.strip())
 
 from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, transcribe_voice, normalize_voice, edit_message, set_my_commands
-from core.settings import load_settings, save_settings
+from core.settings import load_settings, save_settings, update_settings
 from core.claude import run_claude, run_claude_parse
 from core.state import load_reminders, save_reminders, load_plans, save_plans, load_registry
 from core import nocodb_direct
@@ -1125,10 +1125,12 @@ def _handle_callback(cq: dict) -> None:
 
     if data.startswith("energie:"):
         level = data.split(":")[1]
-        settings = load_settings()
-        settings["energie_level"] = level
-        settings["energie_updated"] = datetime.now().isoformat(timespec="seconds")
-        save_settings(settings)
+
+        def _save_energie(s):
+            s["energie_level"] = level
+            s["energie_updated"] = datetime.now().isoformat(timespec="seconds")
+
+        update_settings(_save_energie)
         icon = ENERGIE_ICONS.get(level, "")
         send_message(TOKEN, CHAT_ID,
             f"✓ Energie: {icon} {level.capitalize()} gespeichert.",
