@@ -56,8 +56,11 @@ def _get_all_rows(table_id: str) -> list[dict]:
     return r.json().get("list", [])
 
 
-# nc_order-Basis für done-Features: garantiert größer als jeder Auto-/Top-Wert
-# (neue Rows landen bei "0.0001") → done-Block sortiert stabil ans Tabellenende.
+# nc_order-Schema: offene Features liegen chronologisch (Id-aufsteigend) im
+# Bereich [_OPEN_ORDER_BASE, _DONE_ORDER_BASE) → eine neue Idee landet am ENDE
+# des offenen Blocks (nach den älteren Ideen), aber immer VOR dem done-Block.
+# done-Features bekommen _DONE_ORDER_BASE + Id → stabil ganz ans Tabellenende.
+_OPEN_ORDER_BASE = 100_000
 _DONE_ORDER_BASE = 1_000_000
 
 
@@ -80,31 +83,30 @@ def upsert_feature(table_id: str, name: str, status: str,
     elif status == "done":
         _create_row_at_end(table_id, payload)
     else:
-        _create_row_at_top(table_id, payload)
+        _create_row_before_done(table_id, payload)
 
 
-def _top_order(row_id: int) -> str:
-    """nc_order für Top-Inserts: streng monoton fallend über die Row-Id.
+def _open_order(row_id: int) -> str:
+    """nc_order für offene Features: streng monoton STEIGEND über die Row-Id.
 
-    Ein fixes "0.0001" für ALLE Top-Inserts ließ sie gleichauf liegen — die
-    Reihenfolge entschied dann der Tiebreak statt der Insert, und eine neue Row
-    landete mitten im Block statt oben. Den kleinsten vorhandenen Wert lesen und
-    unterbieten geht nicht: nc_order ist schreibbar, wird aber von der v2-API nie
-    zurückgegeben (live geprüft — `fields=Id,nc_order` liefert nur Id).
-    1/(BASE+Id) liegt für jede neue, größere Id strikt unter jedem früheren Wert
-    dieser Formel und zugleich immer unter dem Alt-Fixwert 0.0001.
+    Die Id ist auto-increment, eine neue Row trägt also die größte Id → größter
+    Wert im offenen Bereich → landet am Ende des offenen Blocks (chronologisch
+    nach den älteren Ideen). Bleibt strikt unter _DONE_ORDER_BASE, damit der
+    done-Block (>= _DONE_ORDER_BASE) immer darunter sortiert. nc_order ist
+    schreibbar, wird von der v2-API aber nie zurückgegeben — ein Wert allein aus
+    der Id (ohne Lesen des Bestands) hält die Ordnung trotzdem deterministisch.
     """
-    return f"{1 / (_DONE_ORDER_BASE + row_id):.12f}"
+    return str(_OPEN_ORDER_BASE + row_id)
 
 
-def _create_row_at_top(table_id: str, payload: dict) -> None:
-    """POST neue Row (landet unten), dann PATCH nc_order → top.
-    Berührt keine anderen Rows, erhält deren manuelle Reihenfolge."""
+def _create_row_before_done(table_id: str, payload: dict) -> None:
+    """POST neue Row (landet zunächst irgendwo), dann PATCH nc_order → ans Ende
+    des offenen Blocks, vor den done-Block. Berührt keine anderen Rows."""
     resp = requests.post(_table_url(table_id), headers=_headers(), json=payload)
     new_id = resp.json().get("Id")
     if new_id is not None:
         requests.patch(_table_url(table_id), headers=_headers(),
-                       json=[{"Id": new_id, "nc_order": _top_order(new_id)}])
+                       json=[{"Id": new_id, "nc_order": _open_order(new_id)}])
 
 
 def _create_row_at_end(table_id: str, payload: dict) -> None:

@@ -9,7 +9,8 @@ os.environ.setdefault("NOCODB_BASE_ID", "test_base")
 
 from scripts.nocodb_sync import (
     _headers, _table_url, load_nocodb_table_id, find_row, upsert_feature,
-    sync_dev_to_nocodb, sync_nocodb_to_dev, _get_all_rows, _top_order,
+    sync_dev_to_nocodb, sync_nocodb_to_dev, _get_all_rows, _open_order,
+    _OPEN_ORDER_BASE, _DONE_ORDER_BASE,
 )
 
 FAKE_REGISTRY = [
@@ -200,7 +201,7 @@ class TestUpsertFeatureInPlace(unittest.TestCase):
     @patch("scripts.nocodb_sync.requests.patch")
     @patch("scripts.nocodb_sync.requests.post")
     @patch("scripts.nocodb_sync.find_row", return_value=None)
-    def test_new_row_posts_then_patches_nc_order_to_top(self, mock_find, mock_post, mock_patch):
+    def test_new_row_posts_then_patches_nc_order_before_done(self, mock_find, mock_post, mock_patch):
         mock_post.return_value.json.return_value = {"Id": 34}
         upsert_feature("tbl_abc123", "New Idea", "idea")
         post_body = mock_post.call_args[1]["json"]
@@ -208,18 +209,19 @@ class TestUpsertFeatureInPlace(unittest.TestCase):
         self.assertNotIn("nc_order", post_body)
         patch_body = mock_patch.call_args[1]["json"]
         self.assertEqual(patch_body[0]["Id"], 34)
-        self.assertEqual(patch_body[0]["nc_order"], _top_order(34))
-        # Alt-Fixwert 0.0001 galt für ALLE Top-Inserts → lagen gleichauf,
-        # neue Rows landeten mitten im Block statt oben.
-        self.assertLess(float(patch_body[0]["nc_order"]), 0.0001)
+        self.assertEqual(patch_body[0]["nc_order"], _open_order(34))
+        # Offene Idee landet am Ende des offenen Blocks, aber IMMER vor done.
+        order = float(patch_body[0]["nc_order"])
+        self.assertGreaterEqual(order, _OPEN_ORDER_BASE)
+        self.assertLess(order, _DONE_ORDER_BASE)
 
-    def test_top_order_strictly_decreases_with_id(self):
-        # Größere Id (= neuere Row) muss strikt kleiner sortieren → weiter oben.
-        orders = [float(_top_order(i)) for i in (1, 34, 35, 41, 45, 46)]
-        self.assertEqual(orders, sorted(orders, reverse=True))
+    def test_open_order_strictly_increases_with_id(self):
+        # Größere Id (= neuere Row) muss strikt größer sortieren → weiter unten,
+        # ans Ende des offenen Blocks. Und immer unter dem done-Block bleiben.
+        orders = [float(_open_order(i)) for i in (1, 34, 35, 41, 45, 46)]
+        self.assertEqual(orders, sorted(orders))
         self.assertEqual(len(set(orders)), len(orders))
-        # Muss auch Altbestand schlagen, der noch auf dem Fixwert steht.
-        self.assertTrue(all(o < 0.0001 for o in orders))
+        self.assertTrue(all(_OPEN_ORDER_BASE <= o < _DONE_ORDER_BASE for o in orders))
 
 
 class TestSyncDevToNocodbInPlace(unittest.TestCase):
