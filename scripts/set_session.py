@@ -6,18 +6,8 @@ WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
 SETTINGS_PATH = WORK_DIR / "settings.json"
 SESSIONS_DIR = WORK_DIR / "dev_sessions"
 
-
-def load_settings():
-    if SETTINGS_PATH.exists():
-        try:
-            return json.loads(SETTINGS_PATH.read_text())
-        except Exception:
-            pass
-    return {}
-
-
-def save_settings(data):
-    SETTINGS_PATH.write_text(json.dumps(data, indent=2))
+sys.path.insert(0, str(PROJECT_DIR))
+from core.atomic_json import atomic_update, atomic_write
 
 
 def require_session_id():
@@ -38,22 +28,16 @@ if __name__ == "__main__":
     session_path = SESSIONS_DIR / f"{sid}.json"
 
     if args[0] == "clear":
-        s = load_settings()
-        s["active_session"] = None
-        save_settings(s)
+        atomic_update(SETTINGS_PATH, lambda s: {**s, "active_session": None})
         session_path.unlink(missing_ok=True)
     elif args[0] == "dev":
         if len(args) < 2:
             print("Usage: set_session.py dev <slug>", file=sys.stderr)
             sys.exit(1)
-        s = load_settings()
-        s["active_session"] = "dev"
-        save_settings(s)
-        SESSIONS_DIR.mkdir(exist_ok=True)
+        atomic_update(SETTINGS_PATH, lambda s: {**s, "active_session": "dev"})
         # Read-merge: preserve worktree bookkeeping + implementation_mode that
-        # implement.md wrote via Edit tool. Overwriting them here wiped the
-        # worktree fields finish.md's merge/cleanup relies on and silently
-        # killed implementation_mode mid-run (LEARNINGS 2026-07-07).
+        # implement.md wrote via Edit tool (LEARNINGS 2026-07-07). session_path
+        # is per-sid unique -> atomic_write (no lock needed).
         data = {}
         if session_path.exists():
             try:
@@ -66,7 +50,7 @@ if __name__ == "__main__":
         data.setdefault("worktree_path", None)
         data.setdefault("branch", None)
         data.setdefault("worktree_base_dir", None)
-        session_path.write_text(json.dumps(data, indent=2))
+        atomic_write(session_path, data)
     else:
         print(f"Unknown command: {args[0]}", file=sys.stderr)
         sys.exit(1)
