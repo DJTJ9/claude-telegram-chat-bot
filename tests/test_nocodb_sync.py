@@ -210,18 +210,19 @@ class TestUpsertFeatureInPlace(unittest.TestCase):
         patch_body = mock_patch.call_args[1]["json"]
         self.assertEqual(patch_body[0]["Id"], 34)
         self.assertEqual(patch_body[0]["nc_order"], _open_order(34))
-        # Offene Idee landet am Ende des offenen Blocks, aber IMMER vor done.
+        # Neue Idee landet OBEN im offenen Block, aber IMMER positiv und
+        # unter allen bestehenden offenen Rows (>= _OPEN_ORDER_BASE) → ganz oben.
         order = float(patch_body[0]["nc_order"])
-        self.assertGreaterEqual(order, _OPEN_ORDER_BASE)
-        self.assertLess(order, _DONE_ORDER_BASE)
+        self.assertGreater(order, 0)
+        self.assertLess(order, _OPEN_ORDER_BASE)
 
-    def test_open_order_strictly_increases_with_id(self):
-        # Größere Id (= neuere Row) muss strikt größer sortieren → weiter unten,
-        # ans Ende des offenen Blocks. Und immer unter dem done-Block bleiben.
+    def test_open_order_strictly_decreases_with_id(self):
+        # Größere Id (= neuere Row) muss strikt KLEINER sortieren → weiter oben,
+        # an den Anfang des offenen Blocks. Immer positiv, unter _OPEN_ORDER_BASE.
         orders = [float(_open_order(i)) for i in (1, 34, 35, 41, 45, 46)]
-        self.assertEqual(orders, sorted(orders))
+        self.assertEqual(orders, sorted(orders, reverse=True))
         self.assertEqual(len(set(orders)), len(orders))
-        self.assertTrue(all(_OPEN_ORDER_BASE <= o < _DONE_ORDER_BASE for o in orders))
+        self.assertTrue(all(0 < o < _OPEN_ORDER_BASE for o in orders))
 
 
 class TestSyncDevToNocodbInPlace(unittest.TestCase):

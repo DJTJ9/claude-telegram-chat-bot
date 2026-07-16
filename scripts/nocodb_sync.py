@@ -56,10 +56,11 @@ def _get_all_rows(table_id: str) -> list[dict]:
     return r.json().get("list", [])
 
 
-# nc_order-Schema: offene Features liegen chronologisch (Id-aufsteigend) im
-# Bereich [_OPEN_ORDER_BASE, _DONE_ORDER_BASE) → eine neue Idee landet am ENDE
-# des offenen Blocks (nach den älteren Ideen), aber immer VOR dem done-Block.
-# done-Features bekommen _DONE_ORDER_BASE + Id → stabil ganz ans Tabellenende.
+# nc_order-Schema: offene Features sortieren umgekehrt-chronologisch (Id-absteigend)
+# im Bereich (0, _OPEN_ORDER_BASE) → eine neue Idee (größte Id) bekommt den
+# KLEINSTEN Wert und landet damit ganz OBEN, vor allen älteren offenen Rows
+# (die live mit dem alten Schema >= _OPEN_ORDER_BASE liegen) und immer vor dem
+# done-Block. done-Features bekommen _DONE_ORDER_BASE + Id → stabil ganz ans Ende.
 _OPEN_ORDER_BASE = 100_000
 _DONE_ORDER_BASE = 1_000_000
 
@@ -87,16 +88,17 @@ def upsert_feature(table_id: str, name: str, status: str,
 
 
 def _open_order(row_id: int) -> str:
-    """nc_order für offene Features: streng monoton STEIGEND über die Row-Id.
+    """nc_order für offene Features: streng monoton FALLEND über die Row-Id.
 
-    Die Id ist auto-increment, eine neue Row trägt also die größte Id → größter
-    Wert im offenen Bereich → landet am Ende des offenen Blocks (chronologisch
-    nach den älteren Ideen). Bleibt strikt unter _DONE_ORDER_BASE, damit der
-    done-Block (>= _DONE_ORDER_BASE) immer darunter sortiert. nc_order ist
+    Die Id ist auto-increment, eine neue Row trägt also die größte Id → kleinster
+    Wert im offenen Bereich → landet ganz OBEN im offenen Block (vor den älteren
+    Ideen). Bleibt strikt unter _OPEN_ORDER_BASE, damit neue Rows über allen
+    bestehenden offenen Rows (die live noch mit dem alten Schema >= _OPEN_ORDER_BASE
+    liegen) sortieren, und positiv, damit die Reihenfolge stabil bleibt. nc_order ist
     schreibbar, wird von der v2-API aber nie zurückgegeben — ein Wert allein aus
     der Id (ohne Lesen des Bestands) hält die Ordnung trotzdem deterministisch.
     """
-    return str(_OPEN_ORDER_BASE + row_id)
+    return str(_OPEN_ORDER_BASE - row_id)
 
 
 def _create_row_before_done(table_id: str, payload: dict) -> None:
