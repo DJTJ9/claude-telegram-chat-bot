@@ -93,7 +93,7 @@ class TestSyncDevToNocodb(unittest.TestCase):
     def test_calls_upsert_with_correct_args(self, mock_upsert, mock_load):
         sync_dev_to_nocodb("test-proj", "My Feature", "planned", spec="specs/foo.md")
         mock_upsert.assert_called_once_with(
-            "tbl_abc123", "My Feature", "planned", spec="specs/foo.md", plan="")
+            "tbl_abc123", "My Feature", "planned", spec="specs/foo.md", plan="", notiz=None)
 
     @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="")
     @patch("scripts.nocodb_sync.upsert_feature")
@@ -231,7 +231,7 @@ class TestSyncDevToNocodbInPlace(unittest.TestCase):
     def test_calls_upsert_without_position_args(self, mock_upsert, mock_load):
         sync_dev_to_nocodb("test-proj", "My Feature", "planned", spec="specs/foo.md")
         mock_upsert.assert_called_once_with(
-            "tbl_abc123", "My Feature", "planned", spec="specs/foo.md", plan="")
+            "tbl_abc123", "My Feature", "planned", spec="specs/foo.md", plan="", notiz=None)
 
 
 class TestRegenerateStatusRoadmap(unittest.TestCase):
@@ -304,6 +304,41 @@ class TestRemovedFlagsAndFunctions(unittest.TestCase):
             capture_output=True, text=True).stdout
         for flag in ("--insert-position", "--after", "--move-to-top", "--move-to-end", "--rebuild"):
             self.assertNotIn(flag, out, f"{flag} should be gone")
+
+
+class TestUpsertFeatureNotiz(unittest.TestCase):
+    @patch("scripts.nocodb_sync.requests.patch")
+    @patch("scripts.nocodb_sync.find_row", return_value={"Id": 5})
+    def test_notiz_is_written(self, mock_find, mock_patch):
+        upsert_feature("tbl_abc123", "Feature A", "idea", notiz="Kontext hier")
+        body = mock_patch.call_args[1]["json"]
+        self.assertEqual(body[0]["Notiz"], "Kontext hier")
+
+    @patch("scripts.nocodb_sync.requests.patch")
+    @patch("scripts.nocodb_sync.find_row", return_value={"Id": 5})
+    def test_without_notiz_field_is_untouched(self, mock_find, mock_patch):
+        upsert_feature("tbl_abc123", "Feature A", "planned")
+        body = mock_patch.call_args[1]["json"]
+        self.assertNotIn("Notiz", body[0])
+
+    @patch("scripts.nocodb_sync.requests.patch")
+    @patch("scripts.nocodb_sync.find_row", return_value={"Id": 5})
+    def test_empty_notiz_clears_field(self, mock_find, mock_patch):
+        upsert_feature("tbl_abc123", "Feature A", "idea", notiz="")
+        body = mock_patch.call_args[1]["json"]
+        self.assertEqual(body[0]["Notiz"], "")
+
+    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
+    @patch("scripts.nocodb_sync.upsert_feature")
+    def test_sync_passes_notiz_through(self, mock_upsert, mock_load):
+        sync_dev_to_nocodb("test-proj", "My Feature", "idea", notiz="Kontext")
+        self.assertEqual(mock_upsert.call_args[1]["notiz"], "Kontext")
+
+    def test_help_has_notiz_flag(self):
+        out = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "scripts" / "nocodb_sync.py"),
+             "--help"], capture_output=True, text=True).stdout
+        self.assertIn("--notiz", out)
 
 
 if __name__ == "__main__":

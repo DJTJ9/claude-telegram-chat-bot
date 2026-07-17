@@ -66,15 +66,18 @@ _DONE_ORDER_BASE = 1_000_000
 
 
 def upsert_feature(table_id: str, name: str, status: str,
-                   spec: str = "", plan: str = "") -> None:
-    notiz_parts = []
-    if spec:
-        notiz_parts.append(f"Spec: {spec}")
-    if plan:
-        notiz_parts.append(f"Plan: {plan}")
+                   spec: str = "", plan: str = "", notiz: str | None = None) -> None:
     payload: dict = {"Name": name, "Status": status}
-    if notiz_parts:
-        payload["Notiz"] = "\n".join(notiz_parts)
+    if notiz is not None:
+        payload["Notiz"] = notiz
+    else:
+        notiz_parts = []
+        if spec:
+            notiz_parts.append(f"Spec: {spec}")
+        if plan:
+            notiz_parts.append(f"Plan: {plan}")
+        if notiz_parts:
+            payload["Notiz"] = "\n".join(notiz_parts)
     row = find_row(table_id, name)
     if row:
         patch = {**payload, "Id": row["Id"]}
@@ -121,12 +124,12 @@ def _create_row_at_end(table_id: str, payload: dict) -> None:
 
 
 def sync_dev_to_nocodb(slug: str, feature: str, status: str,
-                       spec: str = "", plan: str = "") -> None:
+                       spec: str = "", plan: str = "", notiz: str | None = None) -> None:
     table_id = load_nocodb_table_id(slug)
     if not table_id:
         print(f"⚠️  No nocodb_table_id for {slug} — skipping", file=sys.stderr)
         return
-    upsert_feature(table_id, feature, status, spec=spec, plan=plan)
+    upsert_feature(table_id, feature, status, spec=spec, plan=plan, notiz=notiz)
     print("OK")
 
 
@@ -231,6 +234,7 @@ def main() -> None:
     parser.add_argument("--status", choices=["idea", "discussed", "planned", "done", "bug"])
     parser.add_argument("--spec", default="")
     parser.add_argument("--plan", default="")
+    parser.add_argument("--notiz", default=None)
     parser.add_argument("--all", dest="all_projects", action="store_true")
     parser.add_argument("--direction", choices=["dev-to-nocodb", "nocodb-to-dev"],
                         default="dev-to-nocodb")
@@ -249,7 +253,7 @@ def main() -> None:
         if not (args.slug and args.feature and args.status):
             parser.error("dev-to-nocodb requires --slug/--feature/--status")
         sync_dev_to_nocodb(args.slug, args.feature, args.status,
-                           spec=args.spec, plan=args.plan)
+                           spec=args.spec, plan=args.plan, notiz=args.notiz)
 
     elif args.direction == "nocodb-to-dev":
         if not args.slug:
