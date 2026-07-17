@@ -112,3 +112,83 @@ def test_parse_status_md_knows_new_fields(tmp_path):
     assert parsed["teach"] == "no"
     assert parsed["type"] == ""
     assert parsed["lesson"] == ""
+
+
+VISION_MD = """# Vision — testproj
+
+## Roadmap
+- [idea]      Feature Y
+- [discussed] Feature X
+- ✅ Feature Z   ← implementiert 2026-01-01
+"""
+
+
+def _make_vision(hub, text=VISION_MD):
+    (hub / "topics" / "testproj" / "VISION.md").write_text(text)
+
+
+def test_roadmap_set_changes_status_keeping_alignment(tmp_path):
+    hub = _make_hub(tmp_path)
+    r = _run(hub, "--command", "roadmap-set", "--slug", "testproj",
+             "--feature", "Feature X", "--status", "planned")
+    assert r.returncode == 0
+    lines = [l for l in _status(hub).splitlines() if l.startswith("- [")]
+    assert lines == [
+        "- [idea]      Feature Y",
+        "- [planned]   Feature X",
+        "- [done]      Feature Z",
+    ]
+
+
+def test_roadmap_set_move_to_end(tmp_path):
+    hub = _make_hub(tmp_path)
+    r = _run(hub, "--command", "roadmap-set", "--slug", "testproj",
+             "--feature", "Feature Y", "--status", "done", "--move-to-end")
+    assert r.returncode == 0
+    lines = [l for l in _status(hub).splitlines() if l.startswith("- [")]
+    assert lines == [
+        "- [discussed] Feature X",
+        "- [done]      Feature Z",
+        "- [done]      Feature Y",
+    ]
+
+
+def test_roadmap_set_not_found_exits_1(tmp_path):
+    hub = _make_hub(tmp_path)
+    before = _status(hub)
+    r = _run(hub, "--command", "roadmap-set", "--slug", "testproj",
+             "--feature", "Nicht da", "--status", "done")
+    assert r.returncode == 1
+    assert _status(hub) == before
+
+
+def test_roadmap_set_ambiguous_exits_1(tmp_path):
+    hub = _make_hub(tmp_path, status=STATUS_MD + "- [idea]      Feature X\n")
+    before = _status(hub)
+    r = _run(hub, "--command", "roadmap-set", "--slug", "testproj",
+             "--feature", "Feature X", "--status", "done")
+    assert r.returncode == 1
+    assert "ambiguous" in r.stderr.lower()
+    assert _status(hub) == before
+
+
+def test_finish_vision_marks_line(tmp_path):
+    hub = _make_hub(tmp_path)
+    _make_vision(hub)
+    r = _run(hub, "--command", "finish-vision", "--slug", "testproj",
+             "--feature", "Feature X")
+    assert r.returncode == 0
+    text = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    assert "- [discussed] Feature X" not in text
+    assert "- ✅ Feature X   ← implementiert " in text
+    assert "- [idea]      Feature Y" in text
+
+
+def test_finish_vision_not_found_exits_1(tmp_path):
+    hub = _make_hub(tmp_path)
+    _make_vision(hub)
+    before = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    r = _run(hub, "--command", "finish-vision", "--slug", "testproj",
+             "--feature", "Nicht da")
+    assert r.returncode == 1
+    assert (hub / "topics" / "testproj" / "VISION.md").read_text() == before
