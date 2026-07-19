@@ -135,6 +135,26 @@ def test_bug_save_writes_status_md_and_clears_state(tmp_path):
     assert brain._bug_state is None
 
 
+def test_bug_save_calls_nocodb_sync_without_stale_insert_position_flag(tmp_path):
+    import bots.brain as brain
+    status_md = tmp_path / "topics" / "myslug" / "STATUS.md"
+    status_md.parent.mkdir(parents=True)
+    status_md.write_text("## Roadmap\n")
+    brain._bug_state = {"slug": "myslug", "pending": {"title": "Bug: X", "summary": "desc"}}
+    with patch.object(brain, "HUB_DIR", tmp_path), \
+         patch("bots.brain.answer_callback_query"), \
+         patch("subprocess.run") as mock_run:
+        brain._handle_callback({"id": "cq1", "data": "bug_save:myslug"})
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][0]
+    assert "--insert-position" not in args
+    assert "--status" in args
+    assert "bug" in args
+    assert "--feature" in args
+    assert "Bug: X" in args
+    brain._bug_state = None
+
+
 def test_bug_cancel_clears_state():
     import bots.brain as brain
     brain._bug_state = {"slug": "myslug"}

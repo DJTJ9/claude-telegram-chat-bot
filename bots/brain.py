@@ -324,8 +324,7 @@ def _handle_callback(cq: dict) -> None:
              "--direction", "dev-to-nocodb",
              "--slug", slug,
              "--feature", title,
-             "--status", "bug",
-             "--insert-position", "top"],
+             "--status", "bug"],
             capture_output=True,
         )
         answer_callback_query(TOKEN, cq_id, text="🐛 Bug gespeichert!")
