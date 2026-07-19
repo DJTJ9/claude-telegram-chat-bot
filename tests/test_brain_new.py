@@ -93,11 +93,39 @@ def test_handle_message_capture_text(tmp_path):
     (tmp_path / "topics" / "p" / "VISION.md").write_text("# V\n## Roadmap\n")
     with patch.object(brain, "HUB_DIR", tmp_path), \
          patch("bots.brain.send_message") as mock_send, \
-         patch("bots.brain._summarize_idea", return_value="Gute Idee"):
+         patch("bots.brain._summarize_idea", return_value="Gute Idee"), \
+         patch("subprocess.run"):
         brain._handle_message({"text": "Ich möchte ein neues Feature",
                                 "chat": {"id": int(brain.CHAT_ID)}})
     assert brain._capture_state is None
     assert "Gute Idee" in mock_send.call_args[0][2]
+
+
+def test_handle_message_capture_syncs_idea_to_nocodb(tmp_path):
+    import bots.brain as brain
+    brain._capture_state = {"slug": "p", "name": "ProjP"}
+    (tmp_path / "topics" / "p").mkdir(parents=True)
+    (tmp_path / "topics" / "p" / "STATUS.md").write_text("# S\n## Roadmap\n")
+    (tmp_path / "topics" / "p" / "VISION.md").write_text("# V\n## Roadmap\n")
+    with patch.object(brain, "HUB_DIR", tmp_path), \
+         patch("bots.brain.send_message"), \
+         patch("bots.brain._summarize_idea", return_value="Gute Idee"), \
+         patch("subprocess.run") as mock_run:
+        brain._handle_message({"text": "Ich möchte ein neues Feature",
+                                "chat": {"id": int(brain.CHAT_ID)}})
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][0]
+    assert str(brain.WORK_DIR / "scripts" / "nocodb_sync.py") in args
+    assert "--direction" in args
+    assert "dev-to-nocodb" in args
+    assert "--slug" in args
+    assert "p" in args
+    assert "--feature" in args
+    assert "Gute Idee" in args
+    assert "--status" in args
+    assert "idea" in args
+    assert "--insert-position" not in args
+    brain._capture_state = None
 
 
 def test_handle_message_start_shows_accordion():

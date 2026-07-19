@@ -18,7 +18,6 @@ from core.telegram import (
     edit_message, transcribe_voice,
 )
 from core.settings import load_settings, save_settings
-from core import nocodb_direct
 
 TOKEN = os.environ["TOKEN_BRAIN"]
 CHAT_ID = int(os.environ.get("CHAT_ID", "0"))
@@ -506,10 +505,14 @@ def _handle_message(msg: dict) -> None:
 
     _append_idea(slug, summary)
     send_message(TOKEN, CHAT_ID, f"✅ Idee erfasst: {summary}")
-    try:
-        nocodb_direct.add_idea(summary)
-    except Exception:
-        pass
+    subprocess.run(
+        ["python", str(WORK_DIR / "scripts" / "nocodb_sync.py"),
+         "--direction", "dev-to-nocodb",
+         "--slug", slug,
+         "--feature", summary,
+         "--status", "idea"],
+        capture_output=True,
+    )
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
