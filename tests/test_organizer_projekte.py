@@ -106,3 +106,34 @@ def test_idea_for_project_workflow_step_present():
     from organizer import handle_workflow_step
     src = inspect.getsource(handle_workflow_step)
     assert '"idea_for_project:name"' in src
+
+
+def test_idea_for_project_name_step_calls_nocodb_sync(monkeypatch):
+    import organizer
+
+    calls = []
+    monkeypatch.setattr(organizer.subprocess, "run",
+                         lambda *a, **k: calls.append(a[0]))
+    monkeypatch.setattr(organizer, "send_message", lambda *a, **k: None)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        slug_dir = tmp / "topics" / "testslug"
+        slug_dir.mkdir(parents=True)
+        (slug_dir / "STATUS.md").write_text("## Roadmap\n")
+        (slug_dir / "VISION.md").write_text("## Roadmap\n")
+        orig_hub = organizer.HUB_DIR
+        organizer.HUB_DIR = tmp
+        organizer._workflow[999] = {"step": "idea_for_project:name", "data": {"slug": "testslug"}}
+        try:
+            organizer.handle_workflow_step("Neue Testidee", 999, "2026-07-22")
+        finally:
+            organizer.HUB_DIR = orig_hub
+            organizer._workflow.pop(999, None)
+
+    assert len(calls) == 1
+    args = calls[0]
+    assert "--direction" in args and "dev-to-nocodb" in args
+    assert "--slug" in args and "testslug" in args
+    assert "--feature" in args and "Neue Testidee" in args
+    assert "--status" in args and "idea" in args

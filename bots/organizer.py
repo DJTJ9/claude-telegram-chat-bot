@@ -1080,6 +1080,14 @@ def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
         slug = state["data"].get("slug", "")
         _workflow.pop(chat_id, None)
         _append_idea_hub(slug, text)
+        subprocess.run(
+            ["python", str(WORK_DIR / "scripts" / "nocodb_sync.py"),
+             "--direction", "dev-to-nocodb",
+             "--slug", slug,
+             "--feature", text,
+             "--status", "idea"],
+            capture_output=True,
+        )
         send_message(TOKEN, chat_id, f"✅ Idee erfasst für {slug}: {text}",
                      reply_markup=REPLY_KEYBOARD)
         return True
