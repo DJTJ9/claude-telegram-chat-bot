@@ -50,6 +50,12 @@ def add_idea(text: str) -> bool:
     return r.status_code == 200
 
 
+def add_ideensammlung_eintrag(title: str, typ: str) -> bool:
+    r = requests.post(_url(IDEENSAMMLUNG_TABLE_ID),
+                      headers=_headers(), json={"Title": title[:2000], "Typ": typ})
+    return r.status_code in (200, 201)
+
+
 def mark_sport_done(row_id: int) -> bool:
     r = requests.patch(_url(SPORT_TABLE_ID),
                        headers=_headers(), json=[{"Id": row_id, "Status": "Done"}])

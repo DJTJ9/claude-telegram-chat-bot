@@ -19,6 +19,7 @@ from core.nocodb_direct import (
     fetch_project_bilanz, fetch_abend_data,
     instantiate_recurring_tasks, promote_backlog_item,
     fetch_open_tasks, update_task, create_task,
+    add_ideensammlung_eintrag,
 )
 
 
@@ -55,6 +56,25 @@ class TestAddIdea(unittest.TestCase):
         self.assertIn("tbl_ideas", url)
         payload = mock_post.call_args[1]["json"]
         self.assertEqual(payload["Name"], "neue Idee")
+
+
+class TestAddIdeensammlungEintrag(unittest.TestCase):
+    @patch("core.nocodb_direct.requests.post")
+    def test_posts_title_and_typ_to_ideensammlung_table(self, mock_post):
+        mock_post.return_value.status_code = 200
+        result = add_ideensammlung_eintrag("Neues Brettspiel", "Spieleidee")
+        self.assertTrue(result)
+        url = mock_post.call_args[0][0]
+        self.assertIn("tbl_ideas", url)
+        payload = mock_post.call_args[1]["json"]
+        self.assertEqual(payload["Title"], "Neues Brettspiel")
+        self.assertEqual(payload["Typ"], "Spieleidee")
+
+    @patch("core.nocodb_direct.requests.post")
+    def test_returns_false_on_error_status(self, mock_post):
+        mock_post.return_value.status_code = 400
+        result = add_ideensammlung_eintrag("X", "Andere Idee")
+        self.assertFalse(result)
 
 
 class TestMarkSportDone(unittest.TestCase):
