@@ -31,7 +31,6 @@ TAGESORGANIZER_ID      = "38b4bba29c5581a7bd94cef1b0cc6c58"
 BACKLOG_DATA_SOURCE_ID = "0cb18d17-cf70-413d-b29d-adb4675db614"
 ARCHIV_DATA_SOURCE_ID  = "38b4bba29c558102b9aecb790594aff6"
 SPORT_CHALLENGES_DB_ID = "38b4bba29c5581c88f49c67bb85f78c0"
-IDEENSAMMLUNG_DB_ID    = "38b4bba29c55814f836ed9a05d3ec9a5"
 PROJEKTE_DB_ID         = "38b4bba29c5581e8868efe4e2fad255a"
 ARBEIT_DB_ID = ""  # Fill in after creating Arbeitsprojekte DB in Notion
 BEREICHE = {"arbeit", "privat", "lernen", "gesundheit"}
@@ -104,17 +103,6 @@ LERN_SYSTEM_PROMPT = """Du bist ein Lernthemen-Assistent. Der Nutzer nennt ein T
 Lege es in der Lernthemen-Datenbank an (data_source_id: 5a76447f-2b0a-4f6b-81bb-853f39aa04bb).
 Leite aus dem Text ab: Name, Kategorie (Programmierung/Sprachen/Mathematik/Design/Sonstiges, Programmierung falls unklar), Priorität (Mittel falls nicht angegeben).
 Antworte NUR mit einer Zeile: 📚 Lernthema gespeichert: [Name] · [Kategorie] · [Priorität]"""
-
-IDEE_SYSTEM_PROMPT = """Du bist ein Spieleideen-Assistent. Der Nutzer beschreibt eine Spielidee.
-Lege sie in der Spieleideen-Datenbank an (data_source_id: ce6783d1-54fe-421f-8d7d-aa8c34880853).
-Leite aus dem Text ab:
-- Name: kurzer prägnanter Titel
-- Typ: Neues Spiel / Game Mechanic / Erweiterung / Mod (Neues Spiel falls unklar)
-- Genre: ein oder mehrere aus: Strategy, RPG, Puzzle, Action, Simulation, Idle, Horror, Platformer
-- Plattform: PC falls nicht genannt
-- Status: immer "Idee"
-- Beschreibung: die vollständige Idee des Nutzers unverändert übernehmen
-Antworte NUR mit einer Zeile: 🎮 Spielidee gespeichert: [Name] · [Typ] · [Genre]"""
 
 HABIT_SYSTEM_PROMPT = """Du bist ein Habit-Assistent. Der Nutzer beschreibt einen wiederkehrenden Habit.
 Lege ihn in der Habits-Datenbank an (data_source_id: 6a4d7e7d-dcde-44e3-b7a0-c46330a6261c).
@@ -829,6 +817,7 @@ def start_workflow(kind: str, chat_id: int) -> None:
                 {"text": "🎮 Spieleidee",  "callback_data": "ideen:typ:spieleidee"},
                 {"text": "💡 Andere Idee", "callback_data": "ideen:typ:andere"},
             ],
+            [{"text": "📁 Projektidee", "callback_data": "idea_pick"}],
             [{"text": "✗ Abbrechen", "callback_data": "wf:abort"}],
         ]
         send_message(TOKEN, chat_id,
@@ -1066,10 +1055,12 @@ def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
 
     if step == "ideen:details":
         name = state["data"].get("name", "?")
+        typ = state["data"].get("typ", "Andere Idee")
         details = "" if text.strip() == "–" else text
         _workflow.pop(chat_id, None)
         full_text = f"{name}. {details}" if details else name
-        result = run_claude(full_text, system_prompt=IDEE_SYSTEM_PROMPT, automated=True)
+        ok = nocodb_direct.add_ideensammlung_eintrag(full_text, typ)
+        result = f"💡 {typ} gespeichert: {name}" if ok else "❌ Fehler beim Speichern der Idee"
         send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
         return True
 

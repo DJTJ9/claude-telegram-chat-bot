@@ -114,3 +114,25 @@ def test_termin_priority_uses_create_task():
     idx = src.index('data.startswith("termin:priority:")')
     snippet = src[idx:idx+550]
     assert "nocodb_direct.create_task" in snippet
+
+
+def test_ideensammlung_db_id_removed():
+    assert "IDEENSAMMLUNG_DB_ID" not in src
+
+
+def test_idee_system_prompt_removed():
+    assert "IDEE_SYSTEM_PROMPT" not in src
+
+
+def test_ideen_details_uses_nocodb():
+    idx = src.index('if step == "ideen:details"')
+    snippet = src[idx:idx+450]
+    assert "nocodb_direct.add_ideensammlung_eintrag" in snippet
+    assert "run_claude" not in snippet
+
+
+def test_ideen_menu_has_projektidee_button():
+    idx = src.index('kind == "ideen"')
+    snippet = src[idx:idx+700]
+    assert "📁 Projektidee" in snippet
+    assert '"callback_data": "idea_pick"' in snippet
