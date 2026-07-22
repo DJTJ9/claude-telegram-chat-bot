@@ -228,6 +228,65 @@ def merge_status_roadmap(path: Path, entries: list[dict]) -> None:
     path.write_text(text[:after_header] + body + tail, encoding="utf-8")
 
 
+def reorder_vision_roadmap(path: Path, entries: list[dict]) -> None:
+    """`- ✅ …`-Zeilen bleiben positionsfest. Offene Slots (`- [status] …`) werden
+    mit den offenen NocoDB-Features (Status != done) in NocoDB-Order befüllt —
+    per Namens-Match gegen die bereits in VISION vorhandenen offenen Zeilen.
+    NocoDB-Features ohne VISION-Match (nie über /dev idea erfasst) landen ans
+    Blockende statt einen Slot zu belegen."""
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    roadmap_idx = text.find("## Roadmap")
+    if roadmap_idx == -1:
+        return
+    after_header = roadmap_idx + len("## Roadmap")
+    next_sec = text.find("\n## ", after_header)
+    block = text[after_header:next_sec] if next_sec != -1 else text[after_header:]
+    tail = text[next_sec:] if next_sec != -1 else ""
+
+    slots = []
+    open_names = set()
+    for line in block.splitlines():
+        if not line.strip():
+            continue
+        if line.startswith("- ✅"):
+            slots.append(("done", line))
+        else:
+            m = re.match(r"^- \[(\w+)\]\s+(.+)$", line)
+            if m:
+                slots.append(("open", None))
+                open_names.add(m.group(2).strip())
+
+    open_entries = [e for e in entries if e.get("status") != "done"]
+    matched = [e for e in open_entries if e.get("name", "").strip() in open_names]
+    unmatched = [e for e in open_entries if e.get("name", "").strip() not in open_names]
+
+    queue = list(matched)
+    new_lines = []
+    for kind, val in slots:
+        if kind == "done":
+            new_lines.append(val)
+        elif queue:
+            entry = queue.pop(0)
+            name = entry.get("name", "").strip()
+            status = entry.get("status", "idea")
+            new_lines.append(f"- [{status}]".ljust(14) + name)
+    for entry in queue:
+        name = entry.get("name", "").strip()
+        status = entry.get("status", "idea")
+        new_lines.append(f"- [{status}]".ljust(14) + name)
+    for entry in unmatched:
+        name = entry.get("name", "").strip()
+        if not name:
+            continue
+        status = entry.get("status", "idea")
+        new_lines.append(f"- [{status}]".ljust(14) + name)
+
+    body = "\n" + "\n".join(new_lines) + "\n" if new_lines else "\n"
+    path.write_text(text[:after_header] + body + tail, encoding="utf-8")
+
+
 def sync_nocodb_to_dev(slug: str) -> None:
     table_id = load_nocodb_table_id(slug)
     if not table_id:

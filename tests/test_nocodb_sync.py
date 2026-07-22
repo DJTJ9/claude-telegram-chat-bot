@@ -392,5 +392,55 @@ Updated: 2026-06-30
         self.assertIn("keep me", out)
 
 
+from scripts.nocodb_sync import reorder_vision_roadmap
+
+
+class TestReorderVisionRoadmap(unittest.TestCase):
+    VISION = """# VISION — Test Proj
+## Was ist das Projekt?
+Testprojekt.
+## Roadmap
+- [idea]      Feature A
+- ✅ Feature B   ← implementiert 2026-06-01
+- [planned]   Feature C
+"""
+
+    def _run(self, entries):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "VISION.md"
+            p.write_text(self.VISION)
+            reorder_vision_roadmap(p, entries)
+            return p.read_text()
+
+    def test_done_line_stays_position_fixed(self):
+        text = self._run([
+            {"name": "Feature C", "status": "planned"},
+            {"name": "Feature A", "status": "discussed"},
+        ])
+        lines = [l for l in text.splitlines() if l.startswith("- ")]
+        self.assertEqual(lines[1], "- ✅ Feature B   ← implementiert 2026-06-01")
+
+    def test_open_lines_reordered_by_nocodb_order(self):
+        text = self._run([
+            {"name": "Feature C", "status": "planned"},
+            {"name": "Feature A", "status": "discussed"},
+        ])
+        lines = [l for l in text.splitlines() if l.startswith("- ")]
+        open_lines = [l for l in lines if not l.startswith("- ✅")]
+        self.assertEqual(open_lines, [
+            "- [planned]".ljust(14) + "Feature C",
+            "- [discussed]".ljust(14) + "Feature A",
+        ])
+
+    def test_missing_open_feature_appended_at_block_end(self):
+        text = self._run([
+            {"name": "Feature A", "status": "idea"},
+            {"name": "Feature C", "status": "planned"},
+            {"name": "Brand New Idea", "status": "idea"},
+        ])
+        lines = [l for l in text.splitlines() if l.startswith("- ")]
+        self.assertEqual(lines[-1], "- [idea]".ljust(14) + "Brand New Idea")
+
+
 if __name__ == "__main__":
     unittest.main()
