@@ -308,6 +308,27 @@ def sync_nocodb_to_dev(slug: str) -> None:
     print(f"nocodb-to-dev: {slug} — {len(entries)} Features, aktiv: {auto_active or '(keines)'}")
 
 
+def sync_nocodb_reorder(slug: str) -> None:
+    table_id = load_nocodb_table_id(slug)
+    if not table_id:
+        print(f"⚠️  No nocodb_table_id for {slug} — skipping", file=sys.stderr)
+        return
+    rows = _get_all_rows(table_id)
+    if not rows:
+        print(f"nocodb-reorder: keine Einträge in {slug}.")
+        return
+    entries = [{"name": r.get("Name", ""), "status": r.get("Status", "idea")} for r in rows]
+    non_done = [e for e in entries if e["status"] != "done"]
+    auto_active = non_done[0]["name"] if non_done else ""
+    hub_dir = Path(os.environ.get("HUB_DIR", ""))
+    status_path = hub_dir / "topics" / slug / "STATUS.md"
+    vision_path = hub_dir / "topics" / slug / "VISION.md"
+    _update_status_active(status_path, auto_active, conditional=False)
+    merge_status_roadmap(status_path, entries)
+    reorder_vision_roadmap(vision_path, entries)
+    print(f"nocodb-reorder: {slug} — {len(entries)} Features, aktiv: {auto_active or '(keines)'}")
+
+
 def sync_all_to_nocodb(hub_dir: Path) -> None:
     for status_path in sorted(hub_dir.glob("topics/*/STATUS.md")):
         data = parse_status_md(status_path)
@@ -333,7 +354,7 @@ def main() -> None:
     parser.add_argument("--plan", default="")
     parser.add_argument("--notiz", default=None)
     parser.add_argument("--all", dest="all_projects", action="store_true")
-    parser.add_argument("--direction", choices=["dev-to-nocodb", "nocodb-to-dev"],
+    parser.add_argument("--direction", choices=["dev-to-nocodb", "nocodb-to-dev", "nocodb-reorder"],
                         default="dev-to-nocodb")
     args = parser.parse_args()
 
@@ -356,6 +377,11 @@ def main() -> None:
         if not args.slug:
             parser.error("nocodb-to-dev requires --slug")
         sync_nocodb_to_dev(args.slug)
+
+    elif args.direction == "nocodb-reorder":
+        if not args.slug:
+            parser.error("nocodb-reorder requires --slug")
+        sync_nocodb_reorder(args.slug)
 
 
 if __name__ == "__main__":

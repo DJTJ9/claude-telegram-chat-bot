@@ -442,5 +442,63 @@ Testprojekt.
         self.assertEqual(lines[-1], "- [idea]".ljust(14) + "Brand New Idea")
 
 
+from scripts.nocodb_sync import sync_nocodb_reorder
+
+
+class TestSyncNocodbReorder(unittest.TestCase):
+    @patch("scripts.nocodb_sync.reorder_vision_roadmap")
+    @patch("scripts.nocodb_sync.merge_status_roadmap")
+    @patch("scripts.nocodb_sync._update_status_active")
+    @patch("scripts.nocodb_sync._get_all_rows")
+    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
+    def test_active_set_unconditional(self, mock_load, mock_rows, mock_active,
+                                       mock_merge, mock_reorder):
+        mock_rows.return_value = [
+            {"Name": "Feature A", "Status": "done"},
+            {"Name": "Feature B", "Status": "planned"},
+        ]
+        sync_nocodb_reorder("test-proj")
+        mock_active.assert_called_once()
+        args, kwargs = mock_active.call_args
+        self.assertEqual(args[1], "Feature B")
+        self.assertEqual(kwargs.get("conditional"), False)
+
+    @patch("scripts.nocodb_sync.reorder_vision_roadmap")
+    @patch("scripts.nocodb_sync.merge_status_roadmap")
+    @patch("scripts.nocodb_sync._update_status_active")
+    @patch("scripts.nocodb_sync._get_all_rows")
+    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
+    def test_calls_merge_and_reorder_with_same_entries(self, mock_load, mock_rows,
+                                                        mock_active, mock_merge, mock_reorder):
+        mock_rows.return_value = [{"Name": "Feature A", "Status": "idea"}]
+        sync_nocodb_reorder("test-proj")
+        mock_merge.assert_called_once()
+        mock_reorder.assert_called_once()
+        merge_entries = mock_merge.call_args[0][1]
+        reorder_entries = mock_reorder.call_args[0][1]
+        self.assertEqual(merge_entries, reorder_entries)
+        self.assertEqual(merge_entries, [{"name": "Feature A", "status": "idea"}])
+
+    @patch("scripts.nocodb_sync._get_all_rows")
+    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="")
+    def test_skips_when_no_table_id(self, mock_load, mock_rows):
+        sync_nocodb_reorder("unknown")
+        mock_rows.assert_not_called()
+
+    def test_help_has_nocodb_reorder_direction(self):
+        out = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "scripts" / "nocodb_sync.py"),
+             "--help"], capture_output=True, text=True).stdout
+        self.assertIn("nocodb-reorder", out)
+
+    def test_nocodb_reorder_requires_slug(self):
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "scripts" / "nocodb_sync.py"),
+             "--direction", "nocodb-reorder"],
+            capture_output=True, text=True,
+            env={**os.environ, "NOCODB_API_URL": "http://localhost:8090"})
+        self.assertEqual(result.returncode, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
