@@ -341,5 +341,56 @@ class TestUpsertFeatureNotiz(unittest.TestCase):
         self.assertIn("--notiz", out)
 
 
+from scripts.nocodb_sync import merge_status_roadmap
+
+
+class TestMergeStatusRoadmap(unittest.TestCase):
+    STATUS = """# Project Status — test-proj
+Active: Feature A
+Phase: plan
+Updated: 2026-06-30
+## Roadmap
+- [idea]      Feature A
+- [done]      Feature B
+- [planned]   Stale Only In Status
+"""
+
+    def _run(self, entries):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "STATUS.md"
+            p.write_text(self.STATUS)
+            merge_status_roadmap(p, entries)
+            return p.read_text()
+
+    def test_nocodb_entries_sorted_by_order(self):
+        text = self._run([
+            {"name": "Feature B", "status": "done"},
+            {"name": "Feature A", "status": "discussed"},
+        ])
+        lines = [l for l in text.splitlines() if l.startswith("- [")]
+        self.assertEqual(lines[:2], [
+            "- [done]".ljust(14) + "Feature B",
+            "- [discussed]".ljust(14) + "Feature A",
+        ])
+
+    def test_local_only_row_survives_at_end(self):
+        text = self._run([
+            {"name": "Feature A", "status": "discussed"},
+            {"name": "Feature B", "status": "done"},
+        ])
+        lines = [l for l in text.splitlines() if l.startswith("- [")]
+        self.assertEqual(lines[-1], "- [planned]".ljust(14) + "Stale Only In Status")
+
+    def test_preserves_trailing_section(self):
+        status = self.STATUS + "\n## Notes\nkeep me\n"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "STATUS.md"
+            p.write_text(status)
+            merge_status_roadmap(p, [{"name": "Feature A", "status": "idea"}])
+            out = p.read_text()
+        self.assertIn("## Notes", out)
+        self.assertIn("keep me", out)
+
+
 if __name__ == "__main__":
     unittest.main()

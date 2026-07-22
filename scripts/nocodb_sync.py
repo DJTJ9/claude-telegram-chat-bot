@@ -190,6 +190,44 @@ def regenerate_status_roadmap(path: Path, entries: list[dict]) -> None:
     path.write_text(text[:after_header] + body + tail, encoding="utf-8")
 
 
+def merge_status_roadmap(path: Path, entries: list[dict]) -> None:
+    """Wie regenerate_status_roadmap, aber lokale Zeilen ohne NocoDB-Match
+    überleben ans Blockende statt gewiped zu werden (Merge statt Wipe)."""
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    roadmap_idx = text.find("## Roadmap")
+    if roadmap_idx == -1:
+        return
+    after_header = roadmap_idx + len("## Roadmap")
+    next_sec = text.find("\n## ", after_header)
+    block = text[after_header:next_sec] if next_sec != -1 else text[after_header:]
+    tail = text[next_sec:] if next_sec != -1 else ""
+
+    local_items = []
+    for line in block.splitlines():
+        m = re.match(r"^- \[(\w+)\]\s+(.+)$", line)
+        if m:
+            local_items.append((m.group(1), m.group(2).strip()))
+
+    nocodb_names = {e.get("name", "").strip() for e in entries if e.get("name", "").strip()}
+
+    lines = []
+    for entry in entries:
+        name = entry.get("name", "").strip()
+        if not name:
+            continue
+        status = entry.get("status", "idea")
+        lines.append(f"- [{status}]".ljust(14) + name)
+
+    for status, name in local_items:
+        if name not in nocodb_names:
+            lines.append(f"- [{status}]".ljust(14) + name)
+
+    body = "\n" + "\n".join(lines) + "\n" if lines else "\n"
+    path.write_text(text[:after_header] + body + tail, encoding="utf-8")
+
+
 def sync_nocodb_to_dev(slug: str) -> None:
     table_id = load_nocodb_table_id(slug)
     if not table_id:
