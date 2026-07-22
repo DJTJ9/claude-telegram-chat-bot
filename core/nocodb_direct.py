@@ -50,10 +50,21 @@ def add_idea(text: str) -> bool:
     return r.status_code == 200
 
 
-def add_ideensammlung_eintrag(title: str, typ: str) -> bool:
-    r = requests.post(_url(IDEENSAMMLUNG_TABLE_ID),
-                      headers=_headers(), json={"Title": title[:2000], "Typ": typ})
-    return r.status_code in (200, 201)
+def add_ideensammlung_eintrag(title: str, typ: str, detail: str = "") -> bool:
+    r = requests.post(_url(IDEENSAMMLUNG_TABLE_ID), headers=_headers(),
+                      json={"Title": title[:2000], "Typ": typ, "Detail": detail[:2000]})
+    if r.status_code not in (200, 201):
+        return False
+    new_id = r.json().get("Id")
+    if new_id is not None:
+        _move_to_top(IDEENSAMMLUNG_TABLE_ID, new_id)
+    return True
+
+
+def _move_to_top(table_id: str, row_id: int) -> bool:
+    r = requests.patch(_url(table_id), headers=_headers(),
+                       json=[{"Id": row_id, "nc_order": -row_id}])
+    return r.status_code == 200
 
 
 def mark_sport_done(row_id: int) -> bool:
