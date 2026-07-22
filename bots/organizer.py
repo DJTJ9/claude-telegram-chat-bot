@@ -1058,8 +1058,7 @@ def handle_workflow_step(text: str, chat_id: int, today: str) -> bool:
         typ = state["data"].get("typ", "Andere Idee")
         details = "" if text.strip() == "–" else text
         _workflow.pop(chat_id, None)
-        full_text = f"{name}. {details}" if details else name
-        ok = nocodb_direct.add_ideensammlung_eintrag(full_text, typ)
+        ok = nocodb_direct.add_ideensammlung_eintrag(name, typ, details)
         result = f"💡 {typ} gespeichert: {name}" if ok else "❌ Fehler beim Speichern der Idee"
         send_message(TOKEN, chat_id, result, reply_markup=REPLY_KEYBOARD)
         return True

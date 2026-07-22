@@ -131,6 +131,13 @@ def test_ideen_details_uses_nocodb():
     assert "run_claude" not in snippet
 
 
+def test_ideen_details_passes_name_and_details_separately():
+    idx = src.index('if step == "ideen:details"')
+    snippet = src[idx:idx+450]
+    assert "full_text" not in snippet
+    assert "add_ideensammlung_eintrag(name, typ, details)" in snippet
+
+
 def test_ideen_menu_has_projektidee_button():
     idx = src.index('kind == "ideen"')
     snippet = src[idx:idx+700]
