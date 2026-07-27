@@ -72,3 +72,33 @@ def test_check_wait_notify_renotifies_new_timestamp(tmp_path):
         brain._check_wait_notify()
     assert ms.call_count == 2
     _reset(brain)
+
+
+def test_check_wait_notify_gated_off(tmp_path):
+    import bots.brain as brain
+    _reset(brain)
+    _write_wait(tmp_path)
+    with patch.object(brain, "WORK_DIR", tmp_path), \
+         patch("bots.brain.load_settings", return_value={"wait_notify_enabled": False}), \
+         patch("bots.brain.send_message") as ms:
+        brain._check_wait_notify()
+    ms.assert_not_called()
+    _reset(brain)
+
+
+def test_main_keyboard_has_toggle_row_on():
+    import bots.brain as brain
+    with patch("bots.brain.load_settings", return_value={"wait_notify_enabled": True}):
+        kb = brain._build_main_keyboard([])
+    flat = [b for row in kb for b in row]
+    toggle = [b for b in flat if b["callback_data"] == "toggle_wait_notify"]
+    assert len(toggle) == 1
+    assert "An" in toggle[0]["text"]
+
+
+def test_main_keyboard_toggle_row_off():
+    import bots.brain as brain
+    with patch("bots.brain.load_settings", return_value={"wait_notify_enabled": False}):
+        kb = brain._build_main_keyboard([])
+    toggle = [b for row in kb for b in row if b["callback_data"] == "toggle_wait_notify"]
+    assert "Aus" in toggle[0]["text"]

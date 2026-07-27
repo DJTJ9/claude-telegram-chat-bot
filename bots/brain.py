@@ -17,7 +17,7 @@ from core.telegram import (
     get_updates, send_message, answer_callback_query,
     edit_message, transcribe_voice,
 )
-from core.settings import load_settings, save_settings
+from core.settings import load_settings, save_settings, update_settings
 
 TOKEN = os.environ["TOKEN_BRAIN"]
 CHAT_ID = int(os.environ.get("CHAT_ID", "0"))
@@ -66,6 +66,8 @@ _wait_notified: dict[str, float] = {}
 
 
 def _check_wait_notify() -> None:
+    if not load_settings().get("wait_notify_enabled", True):
+        return
     for path in sorted(WORK_DIR.glob("pending_wait_*.json")):
         try:
             data = json.loads(path.read_text())
@@ -234,6 +236,9 @@ def _build_main_keyboard(projects: list[dict]) -> list[list[dict]]:
     rows: list[list[dict]] = []
     for p in projects:
         rows.append([{"text": f"📁 {p['name']}", "callback_data": f"proj:{p['slug']}"}])
+    on = load_settings().get("wait_notify_enabled", True)
+    label = "⏳ Wait-Reminder: An" if on else "🔕 Wait-Reminder: Aus"
+    rows.append([{"text": label, "callback_data": "toggle_wait_notify"}])
     return rows
 
 
@@ -268,6 +273,15 @@ def _handle_callback(cq: dict) -> None:
     if data == "back":
         _show_main_menu()
         answer_callback_query(TOKEN, cq_id)
+
+    elif data == "toggle_wait_notify":
+        new = update_settings(
+            lambda s: s.__setitem__("wait_notify_enabled",
+                                    not s.get("wait_notify_enabled", True))
+        )
+        state = "An" if new.get("wait_notify_enabled", True) else "Aus"
+        _show_main_menu()
+        answer_callback_query(TOKEN, cq_id, text=f"⏳ Wait-Reminder: {state}")
 
     elif data.startswith("proj:"):
         slug = data[5:]
