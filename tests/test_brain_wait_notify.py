@@ -102,3 +102,12 @@ def test_main_keyboard_toggle_row_off():
         kb = brain._build_main_keyboard([])
     toggle = [b for row in kb for b in row if b["callback_data"] == "toggle_wait_notify"]
     assert "Aus" in toggle[0]["text"]
+
+
+def test_toggle_row_is_first_above_projects():
+    import bots.brain as brain
+    projects = [{"name": "Proj A", "slug": "a"}, {"name": "Proj B", "slug": "b"}]
+    with patch("bots.brain.load_settings", return_value={"wait_notify_enabled": True}):
+        kb = brain._build_main_keyboard(projects)
+    assert kb[0][0]["callback_data"] == "toggle_wait_notify"
+    assert kb[1][0]["callback_data"] == "proj:a"

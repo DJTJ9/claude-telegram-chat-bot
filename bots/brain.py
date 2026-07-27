@@ -234,11 +234,11 @@ def _handle_impl_time_input(text: str) -> None:
 
 def _build_main_keyboard(projects: list[dict]) -> list[list[dict]]:
     rows: list[list[dict]] = []
-    for p in projects:
-        rows.append([{"text": f"📁 {p['name']}", "callback_data": f"proj:{p['slug']}"}])
     on = load_settings().get("wait_notify_enabled", True)
     label = "⏳ Wait-Reminder: An" if on else "🔕 Wait-Reminder: Aus"
     rows.append([{"text": label, "callback_data": "toggle_wait_notify"}])
+    for p in projects:
+        rows.append([{"text": f"📁 {p['name']}", "callback_data": f"proj:{p['slug']}"}])
     return rows
 
 
