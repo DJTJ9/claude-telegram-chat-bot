@@ -46,3 +46,9 @@ def test_update_settings_return_new_dict():
         from core.settings import update_settings, load_settings
         update_settings(lambda s: {**s, "active_session": "teach"}, d)
         assert load_settings(d)["active_session"] == "teach"
+
+
+def test_wait_notify_enabled_defaults_true():
+    with tempfile.TemporaryDirectory() as d:
+        from core.settings import load_settings
+        assert load_settings(d)["wait_notify_enabled"] is True

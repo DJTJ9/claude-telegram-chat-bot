@@ -11,6 +11,7 @@ _DEFAULTS = {
     "active_session_bot": None,
     "energie_level": None,
     "energie_updated": None,
+    "wait_notify_enabled": True,
 }
 
 def load_settings(work_dir=None):
