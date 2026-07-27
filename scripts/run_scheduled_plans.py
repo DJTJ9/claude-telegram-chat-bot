@@ -30,15 +30,6 @@ def _notify_failure(slug: str) -> None:
     )
 
 
-def _notify_start(slug: str) -> None:
-    notify = WORK_DIR / "scripts" / "telegram_notify.py"
-    subprocess.run(
-        [sys.executable, str(notify), "--bot", "brain", f"🚀 Starte Implementierung: {slug}"],
-        timeout=10,
-        capture_output=True,
-    )
-
-
 def _notify_success(slug: str) -> None:
     notify = WORK_DIR / "scripts" / "telegram_notify.py"
     subprocess.run(
@@ -68,7 +59,6 @@ def main() -> None:
 
         plan_path = HUB_DIR / entry.get("plan_path", "")
         slug = entry.get("slug", str(plan_path))
-        _notify_start(slug)
         try:
             result = subprocess.run(
                 [

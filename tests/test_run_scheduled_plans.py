@@ -81,7 +81,7 @@ def test_sets_failed_and_notifies_on_nonzero_returncode(tmp_path):
     assert any("telegram_notify" in c for c in notify_calls)
 
 
-def test_notifies_start_and_success(tmp_path):
+def test_notifies_success_only_no_start(tmp_path):
     hub = tmp_path / "hub"
     hub.mkdir()
     plans_file = make_plans_file(tmp_path, [
@@ -98,6 +98,6 @@ def test_notifies_start_and_success(tmp_path):
         mock_sub.run.return_value = mock_result
         rsp.main()
     notify_calls = [str(c) for c in mock_sub.run.call_args_list]
-    assert sum("telegram_notify" in c for c in notify_calls) == 2
-    assert any("Starte" in c for c in notify_calls)
+    assert sum("telegram_notify" in c for c in notify_calls) == 1
+    assert not any("Starte" in c for c in notify_calls)
     assert any("abgeschlossen" in c for c in notify_calls)
