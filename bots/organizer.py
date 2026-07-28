@@ -18,7 +18,7 @@ if env_file.exists():
 from core.telegram import get_updates, send_message, build_inline_keyboard, answer_callback_query, transcribe_voice, normalize_voice, edit_message, set_my_commands
 from core.settings import load_settings, save_settings, update_settings
 from core.claude import run_claude, run_claude_parse
-from core.state import load_reminders, save_reminders, load_plans, save_plans, load_registry
+from core.state import load_reminders, save_reminders, load_registry
 from core import nocodb_direct
 
 TOKEN = os.environ["TOKEN_ORGANIZER"]
@@ -1672,50 +1672,6 @@ def _run_archive_once():
         print(f"archive error: {e}")
 
 
-def _schedule_plan(slug, scheduled_time):
-    plans = load_plans()
-    for plan in plans:
-        if plan["slug"] == slug:
-            plan["scheduled_time"] = scheduled_time
-            save_plans(plans)
-            subprocess.run(["git", "-C", str(HUB_DIR), "add", "scheduled_plans.json"], capture_output=True)
-            subprocess.run(["git", "-C", str(HUB_DIR), "commit", "-m", f"chore: schedule plan {slug} at {scheduled_time}"], capture_output=True)
-            return f"⏰ {slug} geplant für {scheduled_time}"
-    return f"❌ Kein Plan mit slug '{slug}' gefunden"
-
-
-def _abort_plan(slug):
-    plans = load_plans()
-    for plan in plans:
-        if plan["slug"] == slug:
-            if plan["status"] == "running":
-                return "⚠️ Plan läuft gerade — abbrechen nicht möglich"
-            new_plans = [p for p in plans if p["slug"] != slug]
-            save_plans(new_plans)
-            subprocess.run(["git", "-C", str(HUB_DIR), "add", "scheduled_plans.json"], capture_output=True)
-            subprocess.run(["git", "-C", str(HUB_DIR), "commit", "-m", f"chore: remove plan {slug}"], capture_output=True)
-            return f"🗑 {slug} entfernt"
-    return f"❌ Kein Plan mit slug '{slug}' gefunden"
-
-
-def _format_plans():
-    plans = [p for p in load_plans() if p["status"] in ("pending", "running")]
-    if not plans:
-        return "Keine ausstehenden Pläne."
-    scheduled = [p for p in plans if p.get("scheduled_time")]
-    waiting   = [p for p in plans if not p.get("scheduled_time")]
-    lines = ["📋 Geplante Implementierungen"]
-    if scheduled:
-        lines.append("\n⏰ Geplant:")
-        for p in scheduled:
-            lines.append(f"• {p['slug']} — {p['scheduled_time']}")
-    if waiting:
-        lines.append("\n📌 Wartend (kein Termin):")
-        for p in waiting:
-            lines.append(f"• {p['slug']}")
-    return "\n".join(lines)
-
-
 def _get_projects():
     return {p["slug"]: {"path": p.get("path", ""), "notion_name": p.get("name", p["slug"])} for p in load_registry()}
 
@@ -1777,10 +1733,9 @@ def _handle_message(msg: dict) -> None:
     if chat_id in callback_state and text:
         cb = callback_state[chat_id]
         _is_interrupt = (
-            text.lower() in ("erinnerungen", "/plans")
+            text.lower() in ("erinnerungen",)
             or any(text.lower().startswith(p) for p in (
-                "erinnere", "erinnerung:", "implement-plan:",
-                "abort-plan:", "impl-mode:"))
+                "erinnere", "erinnerung:", "impl-mode:"))
             or text in BUTTON_MAP
         )
         if _is_interrupt:
@@ -1937,9 +1892,6 @@ def _handle_message(msg: dict) -> None:
                 lines.append(f"· {due_dt.strftime('%d.%m. %H:%M')} — {r['text']}")
             response = "\n".join(lines)
 
-    elif t.lower() == "/plans":
-        response = _format_plans()
-
     elif t.lower() == "/monat":
         now = datetime.now()
         data = nocodb_direct.fetch_tasks_month(now.year, now.month)
@@ -1991,7 +1943,6 @@ def main():
     threading.Thread(target=_archive_loop, daemon=True).start()
 
     set_my_commands(TOKEN, [
-        {"command": "plans",   "description": "Geplante Implementierungen anzeigen"},
         {"command": "monat",   "description": "Monatsübersicht: Termine + Task-Bilanz"},
         {"command": "energie", "description": "Energie-Level für heute setzen"},
         {"command": "zyklen",  "description": "Zyklische Tasks verwalten"},
