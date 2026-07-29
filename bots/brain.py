@@ -20,6 +20,7 @@ from core.telegram import (
 from core.settings import load_settings, save_settings, update_settings
 
 TOKEN = os.environ["TOKEN_BRAIN"]
+NOTIFY_TOKEN = os.environ["TOKEN_NOTIFICATIONS"]
 CHAT_ID = int(os.environ.get("CHAT_ID", "0"))
 WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
 HUB_DIR = Path(os.environ.get("HUB_DIR", str(WORK_DIR)))
@@ -81,7 +82,7 @@ def _check_wait_notify() -> None:
         _, phase = _get_dev_status(slug)
         suffix = f" ({phase})" if phase else ""
         send_message(
-            TOKEN, CHAT_ID,
+            NOTIFY_TOKEN, CHAT_ID,
             f"⏳ dev-Session {slug}{suffix} wartet auf Antwort",
         )
 

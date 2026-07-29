@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault("TOKEN_BRAIN", "test_token")
+os.environ.setdefault("TOKEN_NOTIFICATIONS", "test_token_notify")
 os.environ.setdefault("CHAT_ID", "12345")
 os.environ.setdefault("GROQ_API_KEY", "x")
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -28,6 +29,8 @@ def test_check_wait_notify_sends_message(tmp_path):
          patch("bots.brain._get_dev_status", return_value=("Bug: X", "implement")):
         brain._check_wait_notify()
     ms.assert_called_once()
+    assert ms.call_args[0][0] == brain.NOTIFY_TOKEN
+    assert ms.call_args[0][0] != brain.TOKEN
     text = ms.call_args[0][2]
     assert "dev-skill" in text
     assert "implement" in text

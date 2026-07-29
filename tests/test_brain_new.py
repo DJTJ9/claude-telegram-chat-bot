@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 os.environ.setdefault("TOKEN_BRAIN", "test_token")
+os.environ.setdefault("TOKEN_NOTIFICATIONS", "test_token_notify")
 os.environ.setdefault("CHAT_ID", "12345")
 os.environ.setdefault("GROQ_API_KEY", "x")
 sys.path.insert(0, str(Path(__file__).parent.parent))
