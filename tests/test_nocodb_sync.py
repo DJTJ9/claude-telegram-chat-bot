@@ -103,7 +103,7 @@ class TestSyncDevToNocodb(unittest.TestCase):
 
 
 import tempfile
-from scripts.nocodb_sync import regenerate_status_roadmap
+from scripts.nocodb_sync import regenerate_status_roadmap, _dedup_entries, merge_status_roadmap
 from scripts.nocodb_create_table import create_nocodb_table, write_table_id_to_registry
 
 
@@ -286,6 +286,61 @@ Updated: 2026-06-30
             out = p.read_text()
         self.assertIn("## Notes", out)
         self.assertIn("keep me", out)
+
+
+class TestDedupEntries(unittest.TestCase):
+    def test_collapses_same_name_keeps_highest_status_at_its_position(self):
+        # Streu-[idea] oben + echtes [done] unten → nur [done] überlebt, an seiner Position
+        out = _dedup_entries([
+            {"name": "prompt injection", "status": "idea"},
+            {"name": "Bug-Audit", "status": "idea"},
+            {"name": "prompt injection", "status": "done"},
+        ])
+        self.assertEqual(out, [
+            {"name": "Bug-Audit", "status": "idea"},
+            {"name": "prompt injection", "status": "done"},
+        ])
+
+    def test_drops_null_and_empty_names(self):
+        out = _dedup_entries([
+            {"name": None, "status": "idea"},
+            {"name": "  ", "status": "idea"},
+            {"name": "Feature A", "status": "idea"},
+        ])
+        self.assertEqual(out, [{"name": "Feature A", "status": "idea"}])
+
+    def test_preserves_order_of_unique_entries(self):
+        entries = [
+            {"name": "A", "status": "idea"},
+            {"name": "B", "status": "planned"},
+            {"name": "C", "status": "done"},
+        ]
+        self.assertEqual(_dedup_entries(entries), entries)
+
+
+class TestMergeStatusRoadmap(unittest.TestCase):
+    def _run(self, status_body, entries):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "STATUS.md"
+            p.write_text("# X\nActive: A\n## Roadmap\n" + status_body)
+            merge_status_roadmap(p, entries)
+            return [l for l in p.read_text().splitlines() if l.startswith("- [")]
+
+    def test_case_drifted_local_line_does_not_survive_as_zombie(self):
+        # Lokale kleingeschriebene Alt-Zeilen + NocoDB großgeschrieben → nur NocoDB überlebt
+        lines = self._run(
+            "- [idea]      prompt injection schutz einbauen\n"
+            "- [done]      prompt injection schutz einbauen\n",
+            [{"name": "Prompt injection Schutz einbauen", "status": "done"}],
+        )
+        self.assertEqual(lines, ["- [done]      Prompt injection Schutz einbauen"])
+
+    def test_genuinely_local_only_line_survives(self):
+        lines = self._run(
+            "- [idea]      Nur lokal erfasst\n",
+            [{"name": "Feature A", "status": "idea"}],
+        )
+        self.assertIn("- [idea]      Nur lokal erfasst", lines)
 
 
 import subprocess
