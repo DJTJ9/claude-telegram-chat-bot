@@ -10,7 +10,7 @@ os.environ.setdefault("NOCODB_BASE_ID", "test_base")
 from scripts.nocodb_sync import (
     _headers, _table_url, load_nocodb_table_id, find_row, upsert_feature,
     sync_dev_to_nocodb, sync_nocodb_to_dev, _get_all_rows, _open_order,
-    _OPEN_ORDER_BASE, _DONE_ORDER_BASE,
+    _OPEN_ORDER_BASE, _DONE_ORDER_BASE, _move_to_top,
 )
 
 FAKE_REGISTRY = [
@@ -100,6 +100,31 @@ class TestSyncDevToNocodb(unittest.TestCase):
     def test_skips_when_no_table_id(self, mock_upsert, mock_load):
         sync_dev_to_nocodb("unknown", "Feature", "idea")
         mock_upsert.assert_not_called()
+
+
+class TestMoveToTop(unittest.TestCase):
+    @patch("scripts.nocodb_sync.requests.patch")
+    def test_patches_negative_nc_order(self, mock_patch):
+        _move_to_top("tbl_abc123", 42)
+        body = mock_patch.call_args[1]["json"]
+        self.assertEqual(body, [{"Id": 42, "nc_order": "-42"}])
+
+
+class TestSyncDevToNocodbTop(unittest.TestCase):
+    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
+    @patch("scripts.nocodb_sync.upsert_feature")
+    @patch("scripts.nocodb_sync.find_row", return_value={"Id": 99})
+    @patch("scripts.nocodb_sync._move_to_top")
+    def test_top_moves_row_to_top_after_upsert(self, mock_top, mock_find, mock_upsert, mock_load):
+        sync_dev_to_nocodb("test-proj", "Bug: X", "bug", top=True)
+        mock_top.assert_called_once_with("tbl_abc123", 99)
+
+    @patch("scripts.nocodb_sync.load_nocodb_table_id", return_value="tbl_abc123")
+    @patch("scripts.nocodb_sync.upsert_feature")
+    @patch("scripts.nocodb_sync._move_to_top")
+    def test_default_does_not_move_to_top(self, mock_top, mock_upsert, mock_load):
+        sync_dev_to_nocodb("test-proj", "Feature", "planned")
+        mock_top.assert_not_called()
 
 
 import tempfile

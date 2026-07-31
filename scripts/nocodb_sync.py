@@ -123,13 +123,28 @@ def _create_row_at_end(table_id: str, payload: dict) -> None:
                        json=[{"Id": new_id, "nc_order": str(_DONE_ORDER_BASE + new_id)}])
 
 
+def _move_to_top(table_id: str, row_id: int) -> None:
+    """PATCH nc_order = -row_id → Row ganz an den Anfang der Tabelle, über ALLE
+    anderen (auch manuell in der UI hochgezogene). Ids steigen monoton, also ist
+    -row_id garantiert kleiner als jeder nicht-negative Bestandswert und die
+    zuletzt an-Top-gesetzte Row (größte Id) liegt oben. Kein GET nötig (nc_order
+    wird von der v2-API nie zurückgegeben)."""
+    requests.patch(_table_url(table_id), headers=_headers(),
+                   json=[{"Id": row_id, "nc_order": str(-row_id)}])
+
+
 def sync_dev_to_nocodb(slug: str, feature: str, status: str,
-                       spec: str = "", plan: str = "", notiz: str | None = None) -> None:
+                       spec: str = "", plan: str = "", notiz: str | None = None,
+                       top: bool = False) -> None:
     table_id = load_nocodb_table_id(slug)
     if not table_id:
         print(f"⚠️  No nocodb_table_id for {slug} — skipping", file=sys.stderr)
         return
     upsert_feature(table_id, feature, status, spec=spec, plan=plan, notiz=notiz)
+    if top:
+        row = find_row(table_id, feature)
+        if row:
+            _move_to_top(table_id, row["Id"])
     print("OK")
 
 
@@ -380,6 +395,8 @@ def main() -> None:
     parser.add_argument("--plan", default="")
     parser.add_argument("--notiz", default=None)
     parser.add_argument("--all", dest="all_projects", action="store_true")
+    parser.add_argument("--top", action="store_true",
+                        help="Row nach dem Sync ganz an den Tabellenanfang setzen")
     parser.add_argument("--direction", choices=["dev-to-nocodb", "nocodb-to-dev", "nocodb-reorder"],
                         default="dev-to-nocodb")
     args = parser.parse_args()
@@ -397,7 +414,7 @@ def main() -> None:
         if not (args.slug and args.feature and args.status):
             parser.error("dev-to-nocodb requires --slug/--feature/--status")
         sync_dev_to_nocodb(args.slug, args.feature, args.status,
-                           spec=args.spec, plan=args.plan, notiz=args.notiz)
+                           spec=args.spec, plan=args.plan, notiz=args.notiz, top=args.top)
 
     elif args.direction == "nocodb-to-dev":
         if not args.slug:
