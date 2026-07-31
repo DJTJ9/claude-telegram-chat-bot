@@ -181,7 +181,7 @@ def regenerate_status_roadmap(path: Path, entries: list[dict]) -> None:
     tail = text[next_sec:] if next_sec != -1 else ""
     lines = []
     for entry in entries:
-        name = entry.get("name", "").strip()
+        name = (entry.get("name") or "").strip()
         if not name:
             continue
         status = entry.get("status", "idea")
@@ -210,11 +210,11 @@ def merge_status_roadmap(path: Path, entries: list[dict]) -> None:
         if m:
             local_items.append((m.group(1), m.group(2).strip()))
 
-    nocodb_names = {e.get("name", "").strip() for e in entries if e.get("name", "").strip()}
+    nocodb_names = {(e.get("name") or "").strip() for e in entries if (e.get("name") or "").strip()}
 
     lines = []
     for entry in entries:
-        name = entry.get("name", "").strip()
+        name = (entry.get("name") or "").strip()
         if not name:
             continue
         status = entry.get("status", "idea")
@@ -259,8 +259,8 @@ def reorder_vision_roadmap(path: Path, entries: list[dict]) -> None:
                 open_names.add(m.group(2).strip())
 
     open_entries = [e for e in entries if e.get("status") != "done"]
-    matched = [e for e in open_entries if e.get("name", "").strip() in open_names]
-    unmatched = [e for e in open_entries if e.get("name", "").strip() not in open_names]
+    matched = [e for e in open_entries if (e.get("name") or "").strip() in open_names]
+    unmatched = [e for e in open_entries if (e.get("name") or "").strip() not in open_names]
 
     queue = list(matched)
     new_lines = []
@@ -269,15 +269,15 @@ def reorder_vision_roadmap(path: Path, entries: list[dict]) -> None:
             new_lines.append(val)
         elif queue:
             entry = queue.pop(0)
-            name = entry.get("name", "").strip()
+            name = (entry.get("name") or "").strip()
             status = entry.get("status", "idea")
             new_lines.append(f"- [{status}]".ljust(14) + name)
     for entry in queue:
-        name = entry.get("name", "").strip()
+        name = (entry.get("name") or "").strip()
         status = entry.get("status", "idea")
         new_lines.append(f"- [{status}]".ljust(14) + name)
     for entry in unmatched:
-        name = entry.get("name", "").strip()
+        name = (entry.get("name") or "").strip()
         if not name:
             continue
         status = entry.get("status", "idea")
