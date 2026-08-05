@@ -16,13 +16,8 @@ def _write_wait(tmp_path, session_id="s1", **over):
     return data
 
 
-def _reset(brain):
-    brain._wait_notified.clear()
-
-
 def test_check_wait_notify_sends_message(tmp_path):
     import bots.brain as brain
-    _reset(brain)
     _write_wait(tmp_path)
     with patch.object(brain, "WORK_DIR", tmp_path), \
          patch("bots.brain.send_message") as ms, \
@@ -35,12 +30,10 @@ def test_check_wait_notify_sends_message(tmp_path):
     assert "dev-skill" in text
     assert "implement" in text
     assert "Frage?" not in text
-    _reset(brain)
 
 
 def test_check_wait_notify_omits_phase_when_status_missing(tmp_path):
     import bots.brain as brain
-    _reset(brain)
     _write_wait(tmp_path)
     with patch.object(brain, "WORK_DIR", tmp_path), \
          patch("bots.brain.send_message") as ms, \
@@ -49,24 +42,20 @@ def test_check_wait_notify_omits_phase_when_status_missing(tmp_path):
     text = ms.call_args[0][2]
     assert "dev-skill" in text
     assert "()" not in text
-    _reset(brain)
 
 
 def test_check_wait_notify_dedupes_same_timestamp(tmp_path):
     import bots.brain as brain
-    _reset(brain)
     _write_wait(tmp_path)
     with patch.object(brain, "WORK_DIR", tmp_path), \
          patch("bots.brain.send_message") as ms:
         brain._check_wait_notify()
         brain._check_wait_notify()
     ms.assert_called_once()
-    _reset(brain)
 
 
 def test_check_wait_notify_renotifies_new_timestamp(tmp_path):
     import bots.brain as brain
-    _reset(brain)
     _write_wait(tmp_path, timestamp=1234.0)
     with patch.object(brain, "WORK_DIR", tmp_path), \
          patch("bots.brain.send_message") as ms:
@@ -74,19 +63,45 @@ def test_check_wait_notify_renotifies_new_timestamp(tmp_path):
         _write_wait(tmp_path, timestamp=9999.0)
         brain._check_wait_notify()
     assert ms.call_count == 2
-    _reset(brain)
 
 
 def test_check_wait_notify_gated_off(tmp_path):
     import bots.brain as brain
-    _reset(brain)
     _write_wait(tmp_path)
     with patch.object(brain, "WORK_DIR", tmp_path), \
          patch("bots.brain.load_settings", return_value={"wait_notify_enabled": False}), \
          patch("bots.brain.send_message") as ms:
         brain._check_wait_notify()
     ms.assert_not_called()
-    _reset(brain)
+
+
+def test_notify_deduped_across_restart_via_marker(tmp_path):
+    import bots.brain as brain
+    _write_wait(tmp_path, timestamp=111.0)
+    with patch.object(brain, "WORK_DIR", tmp_path), \
+         patch("bots.brain.send_message") as ms:
+        brain._check_wait_notify()
+        # Restart simulieren: etwaiger In-Memory-State weg, Marker-Datei bleibt
+        if hasattr(brain, "_wait_notified"):
+            brain._wait_notified.clear()
+        brain._check_wait_notify()
+    ms.assert_called_once()  # M4: Marker verhindert Doppel-Notify
+    assert (tmp_path / "pending_wait_s1.notified").read_text() == "111.0"
+
+
+def test_phase_suffix_from_feature_file(tmp_path):
+    import bots.brain as brain
+    fdir = tmp_path / "topics" / "dev-skill" / "features"
+    fdir.mkdir(parents=True)
+    (fdir / "email-auth.md").write_text("# E-Mail Auth\nPhase: implement\n")
+    _write_wait(tmp_path, feature="email-auth", timestamp=1.0)
+    with patch.object(brain, "WORK_DIR", tmp_path), \
+         patch.object(brain, "HUB_DIR", tmp_path), \
+         patch("bots.brain.send_message") as ms:
+        brain._check_wait_notify()
+    text = ms.call_args[0][2]
+    assert "dev-skill" in text
+    assert "(implement)" in text
 
 
 def test_main_keyboard_has_toggle_row_on():

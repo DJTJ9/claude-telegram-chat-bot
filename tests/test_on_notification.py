@@ -144,6 +144,33 @@ def test_on_stop_writes_turn_ended_flag(tmp_path):
     assert _flag(tmp_path).exists()
 
 
+def test_pending_wait_includes_feature(tmp_path):
+    _mk_session(tmp_path, active_dev_feature="email-auth")
+    _run(tmp_path, {"session_id": "s1", "message": "Claude is waiting for your input"})
+    data = json.loads(_pending(tmp_path).read_text())
+    assert data["feature"] == "email-auth"
+
+
+def test_pending_wait_feature_empty_when_unset(tmp_path):
+    _mk_session(tmp_path)
+    _run(tmp_path, {"session_id": "s1", "message": "Claude is waiting for your input"})
+    data = json.loads(_pending(tmp_path).read_text())
+    assert data["feature"] == ""
+
+
+def test_on_stop_removes_marker(tmp_path):
+    _pending(tmp_path).write_text("{}")
+    (tmp_path / "pending_wait_s1.notified").write_text("1.0")
+    env = {**os.environ, "WORK_DIR": str(tmp_path), "CLAUDE_AUTOMATED": "1"}
+    r = subprocess.run(
+        [sys.executable, str(ON_STOP)],
+        input=json.dumps({"session_id": "s1"}),
+        capture_output=True, text=True, env=env, timeout=15,
+    )
+    assert r.returncode == 0
+    assert not (tmp_path / "pending_wait_s1.notified").exists()
+
+
 ON_USER_PROMPT = PROJECT_DIR / "scripts" / "on_user_prompt.py"
 
 

@@ -50,6 +50,7 @@ def main() -> int:
 
     (WORK_DIR / f"pending_wait_{session_id}.json").write_text(json.dumps({
         "slug": slug,
+        "feature": sdata.get("active_dev_feature") or "",
         "pane": pane,
         "question": question,
         "timestamp": time.time(),

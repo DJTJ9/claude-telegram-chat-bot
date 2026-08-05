@@ -62,7 +62,15 @@ def _dispatch_update(upd: dict) -> None:
 
 # ── Wait-Notify (Session wartet auf Terminal-Input) ──────────────────────────
 
-_wait_notified: dict[str, float] = {}
+def _get_feature_phase(slug: str, feature_key: str) -> str:
+    path = HUB_DIR / "topics" / slug / "features" / f"{feature_key}.md"
+    try:
+        for line in path.read_text().splitlines():
+            if line.startswith("Phase:"):
+                return line.split(":", 1)[1].strip()
+    except FileNotFoundError:
+        pass
+    return ""
 
 
 def _check_wait_notify() -> None:
@@ -75,16 +83,24 @@ def _check_wait_notify() -> None:
             continue
         session_id = path.stem[len("pending_wait_"):]
         ts = data.get("timestamp", 0)
-        if _wait_notified.get(session_id) == ts:
-            continue
-        _wait_notified[session_id] = ts
+        # M4: durabler Marker statt In-Memory-Dict — übersteht Service-Restarts
+        marker = WORK_DIR / f"pending_wait_{session_id}.notified"
+        try:
+            if marker.exists() and float(marker.read_text() or 0) == float(ts):
+                continue
+        except ValueError:
+            pass
         slug = data.get("slug", "?")
-        _, phase = _get_dev_status(slug)
+        feature = data.get("feature") or ""
+        phase = _get_feature_phase(slug, feature) if feature else ""
+        if not phase:
+            _, phase = _get_dev_status(slug)
         suffix = f" ({phase})" if phase else ""
         send_message(
             NOTIFY_TOKEN, CHAT_ID,
             f"⏳ dev-Session {slug}{suffix} wartet auf Antwort",
         )
+        marker.write_text(str(ts))
 
 
 # ── Accordion UI ──────────────────────────────────────────────────────────────
@@ -109,6 +125,20 @@ def _get_dev_status(slug: str) -> tuple[str, str]:
             active = line.split(":", 1)[1].strip()
         elif line.startswith("Phase:"):
             phase = line.split(":", 1)[1].strip()
+    if not active:
+        # Singleton-Zeilen nach Migration weg → jüngste Feature-Datei
+        fdir = HUB_DIR / "topics" / slug / "features"
+        if fdir.is_dir():
+            for p in sorted(fdir.glob("*.md"),
+                            key=lambda p: p.stat().st_mtime, reverse=True):
+                name = fphase = ""
+                for line in p.read_text().splitlines():
+                    if line.startswith("# ") and not name:
+                        name = line[2:].strip()
+                    elif line.startswith("Phase:"):
+                        fphase = line.split(":", 1)[1].strip()
+                if name:
+                    return name, fphase
     return active, phase
 
 
@@ -119,16 +149,12 @@ def _get_dev_status_full(slug: str) -> str:
     except FileNotFoundError:
         return "❌ STATUS.md nicht gefunden"
 
-    active = phase = ""
+    active, phase = _get_dev_status(slug)
     roadmap_items: list[dict] = []
     in_roadmap = False
 
     for line in content.splitlines():
-        if line.startswith("Active:"):
-            active = line.split(":", 1)[1].strip()
-        elif line.startswith("Phase:"):
-            phase = line.split(":", 1)[1].strip()
-        elif line.startswith("## Roadmap"):
+        if line.startswith("## Roadmap"):
             in_roadmap = True
         elif in_roadmap and line.startswith("- ["):
             close = line.index("]")
