@@ -128,7 +128,7 @@ class TestSyncDevToNocodbTop(unittest.TestCase):
 
 
 import tempfile
-from scripts.nocodb_sync import regenerate_status_roadmap, _dedup_entries, merge_status_roadmap
+from scripts.nocodb_sync import _dedup_entries, merge_status_roadmap
 from scripts.nocodb_create_table import create_nocodb_table, write_table_id_to_registry
 
 
@@ -259,7 +259,9 @@ class TestSyncDevToNocodbInPlace(unittest.TestCase):
             "tbl_abc123", "My Feature", "planned", spec="specs/foo.md", plan="", notiz=None)
 
 
-class TestRegenerateStatusRoadmap(unittest.TestCase):
+class TestMergeStatusRoadmapProjection(unittest.TestCase):
+    """Ehemals TestRegenerateStatusRoadmap — seit dem Race-Fix (H3) projiziert
+    nocodb-to-dev via merge_status_roadmap: lokale Zeilen überleben."""
     STATUS = """# Project Status — test-proj
 Active: Feature A
 Phase: plan
@@ -274,10 +276,10 @@ Updated: 2026-06-30
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "STATUS.md"
             p.write_text(self.STATUS)
-            regenerate_status_roadmap(p, entries)
+            merge_status_roadmap(p, entries)
             return p.read_text()
 
-    def test_full_projection_matches_nocodb_order_including_done(self):
+    def test_projection_matches_nocodb_order_local_only_at_end(self):
         text = self._run([
             {"name": "testi test", "status": "idea"},
             {"name": "Feature A", "status": "discussed"},
@@ -288,11 +290,12 @@ Updated: 2026-06-30
             "- [idea]      testi test",
             "- [discussed] Feature A",
             "- [done]      Feature B",
+            "- [planned]   Stale Only In Status",
         ])
 
-    def test_status_only_row_is_dropped(self):
+    def test_status_only_row_survives(self):
         text = self._run([{"name": "Feature A", "status": "idea"}])
-        self.assertNotIn("Stale Only In Status", text)
+        self.assertIn("Stale Only In Status", text)
 
     def test_empty_name_skipped(self):
         text = self._run([
@@ -300,14 +303,16 @@ Updated: 2026-06-30
             {"name": "Feature A", "status": "idea"},
         ])
         lines = [l for l in text.splitlines() if l.startswith("- [")]
-        self.assertEqual(len(lines), 1)
+        # kein Eintrag aus dem leeren Namen — nur Feature A + 2 lokale Überlebende
+        self.assertEqual(lines[0], "- [idea]      Feature A")
+        self.assertEqual(len(lines), 3)
 
     def test_preserves_trailing_section(self):
         status = self.STATUS + "\n## Notes\nkeep me\n"
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "STATUS.md"
             p.write_text(status)
-            regenerate_status_roadmap(p, [{"name": "Feature A", "status": "idea"}])
+            merge_status_roadmap(p, [{"name": "Feature A", "status": "idea"}])
             out = p.read_text()
         self.assertIn("## Notes", out)
         self.assertIn("keep me", out)
@@ -599,6 +604,42 @@ class TestGlobalLock:
         with open(nocodb_sync._lock_path(), "w") as fh:
             fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
+class TestMergeNoDowngrade:
+    def _status(self, tmp_path, lines):
+        p = tmp_path / "STATUS.md"
+        p.write_text("# Project Status — x\n\n## Roadmap\n" + "\n".join(lines) + "\n")
+        return p
+
+    def test_local_higher_rank_wins(self, tmp_path):
+        from scripts.nocodb_sync import merge_status_roadmap
+        p = self._status(tmp_path, ["- [planned]   Feature A"])
+        merge_status_roadmap(p, [{"name": "Feature A", "status": "idea"}])
+        assert "- [planned]" in p.read_text()
+        assert "- [idea]" not in p.read_text()
+
+    def test_nocodb_higher_rank_still_applies(self, tmp_path):
+        from scripts.nocodb_sync import merge_status_roadmap
+        p = self._status(tmp_path, ["- [idea]      Feature A"])
+        merge_status_roadmap(p, [{"name": "Feature A", "status": "done"}])
+        assert "- [done]" in p.read_text()
+
+    def test_sync_nocodb_to_dev_keeps_fresh_local_line(self, tmp_path, monkeypatch):
+        # frische lokale Zeile ohne NocoDB-Row überlebt den Sync (Merge statt Wipe)
+        import scripts.nocodb_sync as ns
+        (tmp_path / "topics" / "proj").mkdir(parents=True)
+        p = tmp_path / "topics" / "proj" / "STATUS.md"
+        p.write_text("# x\n\n## Roadmap\n- [idea]      Frisch Lokal\n")
+        monkeypatch.setenv("HUB_DIR", str(tmp_path))
+        monkeypatch.setattr(ns, "load_nocodb_table_id", lambda slug: "tbl1")
+        monkeypatch.setattr(ns.requests, "get", lambda *a, **k: type(
+            "R", (), {"json": lambda self: {"list": [
+                {"Name": "Aus NocoDB", "Status": "planned"}]}})())
+        ns.sync_nocodb_to_dev("proj")
+        text = p.read_text()
+        assert "Frisch Lokal" in text          # H3: kein Wipe
+        assert "Aus NocoDB" in text
 
 
 if __name__ == "__main__":

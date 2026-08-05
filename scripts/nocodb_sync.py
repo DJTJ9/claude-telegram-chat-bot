@@ -223,32 +223,11 @@ def _dedup_entries(entries: list[dict]) -> list[dict]:
     return [e for _, _, e in sorted(best.values(), key=lambda t: t[1])]
 
 
-def regenerate_status_roadmap(path: Path, entries: list[dict]) -> None:
-    """Erzeugt den ## Roadmap-Block komplett neu aus `entries` (Reihenfolge =
-    NocoDB nc_order). Keine STATUS-only-Zeilen überleben."""
-    if not path.exists():
-        return
-    text = path.read_text(encoding="utf-8")
-    roadmap_idx = text.find("## Roadmap")
-    if roadmap_idx == -1:
-        return
-    after_header = roadmap_idx + len("## Roadmap")
-    next_sec = text.find("\n## ", after_header)
-    tail = text[next_sec:] if next_sec != -1 else ""
-    lines = []
-    for entry in entries:
-        name = (entry.get("name") or "").strip()
-        if not name:
-            continue
-        status = entry.get("status", "idea")
-        lines.append(f"- [{status}]".ljust(14) + name)
-    body = "\n" + "\n".join(lines) + "\n" if lines else "\n"
-    path.write_text(text[:after_header] + body + tail, encoding="utf-8")
-
-
 def merge_status_roadmap(path: Path, entries: list[dict]) -> None:
-    """Wie regenerate_status_roadmap, aber lokale Zeilen ohne NocoDB-Match
-    überleben ans Blockende statt gewiped zu werden (Merge statt Wipe)."""
+    """Projiziert den ## Roadmap-Block aus `entries` (Reihenfolge = NocoDB
+    nc_order). Lokale Zeilen ohne NocoDB-Match überleben ans Blockende statt
+    gewiped zu werden (Merge statt Wipe, H3); lokale Zeilen mit höherem
+    Status gewinnen gegen die NocoDB-Zeile gleichen Namens (H6)."""
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8")
@@ -272,12 +251,20 @@ def merge_status_roadmap(path: Path, entries: list[dict]) -> None:
     nocodb_names = {(e.get("name") or "").strip().casefold()
                     for e in entries if (e.get("name") or "").strip()}
 
+    # Rank-Guard (H6): lokale Zeile mit höherem Status gewinnt gegen die
+    # NocoDB-Zeile gleichen Namens — kein Status-Downgrade durch den Sync.
+    local_rank = {name.casefold(): (_STATUS_RANK.get(status, 0), status)
+                  for status, name in local_items}
+
     lines = []
     for entry in entries:
         name = (entry.get("name") or "").strip()
         if not name:
             continue
         status = entry.get("status", "idea")
+        lr = local_rank.get(name.casefold())
+        if lr and lr[0] > _STATUS_RANK.get(status, 0):
+            status = lr[1]
         lines.append(f"- [{status}]".ljust(14) + name)
 
     for status, name in local_items:
@@ -364,7 +351,7 @@ def sync_nocodb_to_dev(slug: str) -> None:
     non_done = [e for e in entries if e["status"] != "done"]
     auto_active = non_done[0]["name"] if non_done else ""
     _update_status_active(hub_dir / "topics" / slug / "STATUS.md", auto_active, conditional=True)
-    regenerate_status_roadmap(hub_dir / "topics" / slug / "STATUS.md", entries)
+    merge_status_roadmap(hub_dir / "topics" / slug / "STATUS.md", entries)
     print(f"nocodb-to-dev: {slug} — {len(entries)} Features, aktiv: {auto_active or '(keines)'}")
 
 
