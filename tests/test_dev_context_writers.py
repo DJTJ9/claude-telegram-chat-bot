@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import os
 import subprocess
@@ -192,3 +193,95 @@ def test_finish_vision_not_found_exits_1(tmp_path):
              "--feature", "Nicht da")
     assert r.returncode == 1
     assert (hub / "topics" / "testproj" / "VISION.md").read_text() == before
+
+
+def _load_dev_context():
+    spec = importlib.util.spec_from_file_location("dev_context", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# Realer Hub-Korpus: alle Roadmap-Zeilen mit "#" (Grep 2026-08-05).
+CORPUS = [
+    ("- [idea]      dev-patch: tote H1-Überschrift in patch.md entfernen — "
+     "patch_notes.py parst nur Frontmatter + ##-Sektionen, Member-Name kommt aus "
+     "Registry-name, die H1-Titelzeile ist wirkungslos (führte bei der Marken-Wahl "
+     "in die Irre)",
+     "idea",
+     "dev-patch: tote H1-Überschrift in patch.md entfernen — patch_notes.py parst "
+     "nur Frontmatter + ##-Sektionen, Member-Name kommt aus Registry-name, die "
+     "H1-Titelzeile ist wirkungslos (führte bei der Marken-Wahl in die Irre)",
+     ""),
+    ("- [done]      Task 7: references/unity.md — 7 C#-Vorlagen "
+     "(Harness/Debug/Capture/Seed/Tuning/Build/Test)",
+     "done",
+     "Task 7: references/unity.md — 7 C#-Vorlagen "
+     "(Harness/Debug/Capture/Seed/Tuning/Build/Test)",
+     ""),
+    ("- [done]      Unity-Compile-Verifikation: C#-Vorlagen gegen "
+     "Scratch-Unity-Projekt kompilieren + Toolbar-Menüpunkte (Tools/Playtest, "
+     "Tools/Build) prüfen",
+     "done",
+     "Unity-Compile-Verifikation: C#-Vorlagen gegen Scratch-Unity-Projekt "
+     "kompilieren + Toolbar-Menüpunkte (Tools/Playtest, Tools/Build) prüfen",
+     ""),
+    ("- [done]      Firmen-Watchlist (Career-Pages kleiner Studios)  "
+     "# erweitert Job-Ingestion, nach MVP",
+     "done",
+     "Firmen-Watchlist (Career-Pages kleiner Studios)",
+     "  # erweitert Job-Ingestion, nach MVP"),
+    ("- [vision] Server-Unity headless (GameCI-Docker): Features serverseitig "
+     "fertigstellen (PlayMode-Tests + Builds), Workstation führt nur noch Script "
+     "aus + testet — Playtest bleibt Workstation  # Priorität: Hoch",
+     "vision",
+     "Server-Unity headless (GameCI-Docker): Features serverseitig fertigstellen "
+     "(PlayMode-Tests + Builds), Workstation führt nur noch Script aus + testet — "
+     "Playtest bleibt Workstation",
+     "  # Priorität: Hoch"),
+    ("- [done]      NocoDB: Positionierung via # statt Position-Property",
+     "done",
+     "NocoDB: Positionierung via # statt Position-Property",
+     ""),
+]
+
+
+def test_split_roadmap_line_real_corpus():
+    dc = _load_dev_context()
+    for line, status, name, comment in CORPUS:
+        assert dc._split_roadmap_line(line) == (status, name, comment), line
+
+
+def test_roadmap_name_keeps_hash_in_name():
+    dc = _load_dev_context()
+    for line, _status, name, _comment in CORPUS:
+        assert dc._roadmap_name(line) == name
+
+
+def test_roadmap_key_reads_anchor():
+    dc = _load_dev_context()
+    assert dc._roadmap_key("- [idea]      Feature X  #key:feature-x") == "feature-x"
+
+
+def test_roadmap_key_coexists_with_priority_comment():
+    dc = _load_dev_context()
+    line = "- [vision] Feature X  # Priorität: Hoch #key:feature-x"
+    assert dc._roadmap_key(line) == "feature-x"
+    assert dc._roadmap_name(line) == "Feature X"
+
+
+def test_roadmap_key_empty_without_anchor():
+    dc = _load_dev_context()
+    assert dc._roadmap_key("- [idea]      Feature X") == ""
+    assert dc._roadmap_key("- [done]      NocoDB: via # statt Position") == ""
+
+
+def test_parse_status_md_keeps_hash_in_feature_name(tmp_path):
+    status = ("# Project Status — testproj\nUpdated: 2026-01-01\n\n## Roadmap\n"
+              "- [done]      Task 7: 7 C#-Vorlagen (Harness/Debug)\n"
+              "- [idea]      Firmen-Watchlist  # erweitert Job-Ingestion\n")
+    hub = _make_hub(tmp_path, status=status)
+    r = _run(hub, "--command", "status", "--slug", "testproj")
+    assert r.returncode == 0
+    names = [f["name"] for f in json.loads(r.stdout)]
+    assert names == ["Task 7: 7 C#-Vorlagen (Harness/Debug)", "Firmen-Watchlist"]
