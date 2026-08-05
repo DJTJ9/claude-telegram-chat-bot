@@ -112,3 +112,66 @@ class TestFeatureList:
         (done / "fertig.md").write_text("# Fertig\nPhase: finish\n")
         r = _run(hub, "--command", "feature-list", "--slug", "proj")
         assert [f["key"] for f in json.loads(r.stdout)] == ["offen"]
+
+
+class TestSessionFeatureBinding:
+    def _bound_session(self, tmp_path, feature_key):
+        hub = _make_hub(tmp_path)
+        (hub / "topics" / "proj" / "STATUS.md").write_text(
+            "# Project Status — proj\nUpdated: 2026-08-05\n\n## Roadmap\n- [planned]   E-Mail Auth\n")
+        _run(hub, "--command", "feature-set", "--slug", "proj",
+             "--feature-key", "email-auth", "--name", "E-Mail Auth",
+             "--set", "Phase=implement", "--set", "Plan=topics/proj/plans/p.md")
+        work = tmp_path / "work"
+        (work / "dev_sessions").mkdir(parents=True)
+        (work / "dev_sessions" / "sid-1.json").write_text(json.dumps(
+            {"active_dev_slug": "proj", "active_dev_feature": feature_key}))
+        r = _run(hub, "--command", "session",
+                 env_extra={"WORK_DIR": str(work), "CLAUDE_CODE_SESSION_ID": "sid-1"})
+        return json.loads(r.stdout)
+
+    def test_session_overrides_from_feature_file(self, tmp_path):
+        data = self._bound_session(tmp_path, "email-auth")
+        assert data["feature_key"] == "email-auth"
+        assert data["active"] == "E-Mail Auth"
+        assert data["phase"] == "implement"
+        assert data["plan"] == "topics/proj/plans/p.md"
+        assert data["features"] == [{"name": "E-Mail Auth", "status": "planned"}]
+
+    def test_session_without_feature_binding_keeps_old_shape(self, tmp_path):
+        data = self._bound_session(tmp_path, None)
+        assert data["slug"] == "proj"
+        assert "feature_key" not in data or not data["feature_key"]
+
+
+class TestGoFeatureEnrichment:
+    def test_go_reads_spec_plan_phase_from_feature_file(self, tmp_path):
+        hub = _make_hub(tmp_path)
+        (hub / "projects-registry.json").write_text(
+            json.dumps([{"slug": "proj", "name": "Proj", "path": ""}]))
+        (hub / "topics" / "proj" / "STATUS.md").write_text(
+            "# Project Status — proj\nUpdated: 2026-08-05\n\n## Roadmap\n- [discussed]  E-Mail Auth\n")
+        _run(hub, "--command", "feature-set", "--slug", "proj",
+             "--feature-key", "email-auth", "--name", "E-Mail Auth",
+             "--set", "Phase=plan", "--set", "Spec=topics/proj/specs/s.md")
+        r = _run(hub, "--command", "go", "--query", "proj e-mail auth")
+        data = json.loads(r.stdout)
+        assert data["feature_key"] == "email-auth"
+        assert data["spec"] == "topics/proj/specs/s.md"
+        assert data["phase"] == "plan"
+
+
+class TestProjekteFeatureFallback:
+    def test_projekte_active_from_feature_file_when_no_singleton(self, tmp_path):
+        hub = _make_hub(tmp_path)
+        (hub / "projects-registry.json").write_text(
+            json.dumps([{"slug": "proj", "name": "Proj", "path": ""}]))
+        (hub / "topics" / "proj" / "STATUS.md").write_text(
+            "# Project Status — proj\nUpdated: 2026-08-05\n\n## Roadmap\n- [planned]   E-Mail Auth\n")
+        _run(hub, "--command", "feature-set", "--slug", "proj",
+             "--feature-key", "email-auth", "--name", "E-Mail Auth",
+             "--set", "Phase=implement")
+        r = _run(hub, "--command", "projekte")
+        data = json.loads(r.stdout)
+        assert data[0]["active"] == "E-Mail Auth"
+        assert data[0]["phase"] == "implement"
