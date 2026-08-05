@@ -580,5 +580,26 @@ class TestSyncNocodbReorder(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
 
 
+class TestGlobalLock:
+    def test_sync_lock_holds_exclusive_flock(self, tmp_path, monkeypatch):
+        import fcntl
+        monkeypatch.setenv("WORK_DIR", str(tmp_path))
+        from scripts import nocodb_sync
+        with nocodb_sync._sync_lock():
+            lock_file = nocodb_sync._lock_path()
+            assert lock_file.exists()
+            with open(lock_file, "w") as fh:
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    held = False
+                except BlockingIOError:
+                    held = True
+            assert held
+        # nach Verlassen wieder frei
+        with open(nocodb_sync._lock_path(), "w") as fh:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 if __name__ == "__main__":
     unittest.main()

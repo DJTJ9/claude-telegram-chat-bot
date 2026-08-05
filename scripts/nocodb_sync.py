@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Sync Dev Skill feature status to NocoDB."""
-import argparse, json, os, re, sys
+import argparse, fcntl, json, os, re, sys
+from contextlib import contextmanager
 from pathlib import Path
 import requests
 
@@ -26,6 +27,25 @@ def _headers() -> dict:
 
 def _table_url(table_id: str) -> str:
     return f"{NOCODB_API_URL}/api/v2/tables/{table_id}/records"
+
+
+def _lock_path() -> Path:
+    return Path(os.environ.get("WORK_DIR", str(PROJECT_DIR))) / "nocodb_sync.lock"
+
+
+@contextmanager
+def _sync_lock():
+    """Globaler flock: serialisiert ALLE Sync-Richtungen über Sessions hinweg
+    (H3+H6 — parallele dev-to-nocodb/nocodb-to-dev-Läufe raceten sonst auf
+    Roadmap-Blöcken und NocoDB-Rows)."""
+    p = _lock_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "w") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
 def load_registry() -> list:
@@ -405,26 +425,27 @@ def main() -> None:
         print("⚠️  NOCODB_API_URL not set — skipping", file=sys.stderr)
         sys.exit(0)
 
-    if args.all_projects:
-        hub_dir = Path(os.environ.get("HUB_DIR", ""))
-        sync_all_to_nocodb(hub_dir)
-        return
+    with _sync_lock():
+        if args.all_projects:
+            hub_dir = Path(os.environ.get("HUB_DIR", ""))
+            sync_all_to_nocodb(hub_dir)
+            return
 
-    if args.direction == "dev-to-nocodb":
-        if not (args.slug and args.feature and args.status):
-            parser.error("dev-to-nocodb requires --slug/--feature/--status")
-        sync_dev_to_nocodb(args.slug, args.feature, args.status,
-                           spec=args.spec, plan=args.plan, notiz=args.notiz, top=args.top)
+        if args.direction == "dev-to-nocodb":
+            if not (args.slug and args.feature and args.status):
+                parser.error("dev-to-nocodb requires --slug/--feature/--status")
+            sync_dev_to_nocodb(args.slug, args.feature, args.status,
+                               spec=args.spec, plan=args.plan, notiz=args.notiz, top=args.top)
 
-    elif args.direction == "nocodb-to-dev":
-        if not args.slug:
-            parser.error("nocodb-to-dev requires --slug")
-        sync_nocodb_to_dev(args.slug)
+        elif args.direction == "nocodb-to-dev":
+            if not args.slug:
+                parser.error("nocodb-to-dev requires --slug")
+            sync_nocodb_to_dev(args.slug)
 
-    elif args.direction == "nocodb-reorder":
-        if not args.slug:
-            parser.error("nocodb-reorder requires --slug")
-        sync_nocodb_reorder(args.slug)
+        elif args.direction == "nocodb-reorder":
+            if not args.slug:
+                parser.error("nocodb-reorder requires --slug")
+            sync_nocodb_reorder(args.slug)
 
 
 if __name__ == "__main__":
