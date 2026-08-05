@@ -202,6 +202,30 @@ def _update_status_active(path: Path, active: str, conditional: bool = False) ->
     path.write_text(text, encoding="utf-8")
 
 
+_COMMENT_RE = re.compile(r"\s{2,}#")
+_ROADMAP_RE = re.compile(r"^- \[(\w+)\]\s+(.+)$")
+
+
+def _split_roadmap_line(line: str) -> tuple[str, str, str] | None:
+    """(status, name, comment) einer Roadmap-Zeile, sonst None.
+
+    Kommentar-Zone beginnt erst bei mindestens ZWEI Leerzeichen vor einer `#`,
+    damit Namen mit Raute (`C#-Vorlagen`) vollständig bleiben und der
+    `#key:`-Anker den Rewrite überlebt. Bewusste Kopie des Splitters aus
+    `$HUB_DIR/scripts/dev_context.py` — ein Cross-Repo-Import koppelte dieses
+    Repo zur Importzeit an gesetztes HUB_DIR und machte die Testsuite
+    umgebungsabhängig.
+    """
+    m = _ROADMAP_RE.match(line)
+    if not m:
+        return None
+    status, body = m.group(1), m.group(2)
+    c = _COMMENT_RE.search(body)
+    if c:
+        return status, body[:c.start()].strip(), body[c.start():]
+    return status, body.strip(), ""
+
+
 _STATUS_RANK = {"idea": 0, "discussed": 1, "planned": 2, "in_progress": 3, "done": 4}
 
 
@@ -241,9 +265,9 @@ def merge_status_roadmap(path: Path, entries: list[dict]) -> None:
 
     local_items = []
     for line in block.splitlines():
-        m = re.match(r"^- \[(\w+)\]\s+(.+)$", line)
-        if m:
-            local_items.append((m.group(1), m.group(2).strip()))
+        parts = _split_roadmap_line(line)
+        if parts:
+            local_items.append(parts)
 
     # casefold: eine lokale Zeile, die dasselbe Feature nur anders geschrieben
     # meint (z.B. "prompt injection…" vs. NocoDB "Prompt injection…"), matcht und
@@ -254,7 +278,10 @@ def merge_status_roadmap(path: Path, entries: list[dict]) -> None:
     # Rank-Guard (H6): lokale Zeile mit höherem Status gewinnt gegen die
     # NocoDB-Zeile gleichen Namens — kein Status-Downgrade durch den Sync.
     local_rank = {name.casefold(): (_STATUS_RANK.get(status, 0), status)
-                  for status, name in local_items}
+                  for status, name, _comment in local_items}
+    # Kommentar-Zone (inkl. #key:-Anker) der lokalen Zeile überlebt den Neuaufbau.
+    local_comment = {name.casefold(): comment
+                     for _status, name, comment in local_items if comment}
 
     lines = []
     for entry in entries:
@@ -265,11 +292,12 @@ def merge_status_roadmap(path: Path, entries: list[dict]) -> None:
         lr = local_rank.get(name.casefold())
         if lr and lr[0] > _STATUS_RANK.get(status, 0):
             status = lr[1]
-        lines.append(f"- [{status}]".ljust(14) + name)
+        lines.append(f"- [{status}]".ljust(14) + name
+                     + local_comment.get(name.casefold(), ""))
 
-    for status, name in local_items:
+    for status, name, comment in local_items:
         if name.casefold() not in nocodb_names:
-            lines.append(f"- [{status}]".ljust(14) + name)
+            lines.append(f"- [{status}]".ljust(14) + name + comment)
 
     body = "\n" + "\n".join(lines) + "\n" if lines else "\n"
     path.write_text(text[:after_header] + body + tail, encoding="utf-8")
@@ -294,20 +322,29 @@ def reorder_vision_roadmap(path: Path, entries: list[dict]) -> None:
 
     slots = []
     open_names = set()
+    open_comment = {}
     for line in block.splitlines():
         if not line.strip():
             continue
         if line.startswith("- ✅"):
             slots.append(("done", line))
-        else:
-            m = re.match(r"^- \[(\w+)\]\s+(.+)$", line)
-            if m:
-                slots.append(("open", None))
-                open_names.add(m.group(2).strip())
+            continue
+        parts = _split_roadmap_line(line)
+        if parts:
+            _status, name, comment = parts
+            slots.append(("open", None))
+            open_names.add(name)
+            if comment:
+                open_comment[name] = comment
 
     open_entries = [e for e in entries if e.get("status") != "done"]
     matched = [e for e in open_entries if (e.get("name") or "").strip() in open_names]
     unmatched = [e for e in open_entries if (e.get("name") or "").strip() not in open_names]
+
+    def _line(entry):
+        name = (entry.get("name") or "").strip()
+        status = entry.get("status", "idea")
+        return f"- [{status}]".ljust(14) + name + open_comment.get(name, "")
 
     queue = list(matched)
     new_lines = []
@@ -315,20 +352,13 @@ def reorder_vision_roadmap(path: Path, entries: list[dict]) -> None:
         if kind == "done":
             new_lines.append(val)
         elif queue:
-            entry = queue.pop(0)
-            name = (entry.get("name") or "").strip()
-            status = entry.get("status", "idea")
-            new_lines.append(f"- [{status}]".ljust(14) + name)
+            new_lines.append(_line(queue.pop(0)))
     for entry in queue:
-        name = (entry.get("name") or "").strip()
-        status = entry.get("status", "idea")
-        new_lines.append(f"- [{status}]".ljust(14) + name)
+        new_lines.append(_line(entry))
     for entry in unmatched:
-        name = (entry.get("name") or "").strip()
-        if not name:
+        if not (entry.get("name") or "").strip():
             continue
-        status = entry.get("status", "idea")
-        new_lines.append(f"- [{status}]".ljust(14) + name)
+        new_lines.append(_line(entry))
 
     body = "\n" + "\n".join(new_lines) + "\n" if new_lines else "\n"
     path.write_text(text[:after_header] + body + tail, encoding="utf-8")

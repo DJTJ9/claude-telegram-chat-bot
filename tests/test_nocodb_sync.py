@@ -642,5 +642,72 @@ class TestMergeNoDowngrade:
         assert "Aus NocoDB" in text
 
 
+class TestRoadmapCommentZoneMerge(unittest.TestCase):
+    STATUS = """# Project Status — test-proj
+Updated: 2026-06-30
+## Roadmap
+- [idea]      Firmen-Watchlist  # erweitert Job-Ingestion
+- [done]      Task 7: 7 C#-Vorlagen
+- [planned]   Nur lokal  #key:nur-lokal
+"""
+
+    def _run(self, entries):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "STATUS.md"
+            p.write_text(self.STATUS)
+            merge_status_roadmap(p, entries)
+            return p.read_text()
+
+    def test_comment_survives_merge(self):
+        text = self._run([{"name": "Firmen-Watchlist", "status": "discussed"}])
+        self.assertIn("- [discussed]".ljust(14)
+                      + "Firmen-Watchlist  # erweitert Job-Ingestion", text)
+
+    def test_commented_line_matches_nocodb_name_no_zombie(self):
+        text = self._run([{"name": "Firmen-Watchlist", "status": "discussed"}])
+        lines = [l for l in text.splitlines() if "Firmen-Watchlist" in l]
+        self.assertEqual(len(lines), 1)
+
+    def test_hash_name_not_truncated(self):
+        text = self._run([{"name": "Task 7: 7 C#-Vorlagen", "status": "done"}])
+        self.assertIn("- [done]".ljust(14) + "Task 7: 7 C#-Vorlagen", text)
+
+    def test_local_only_line_keeps_key_anchor(self):
+        text = self._run([{"name": "Firmen-Watchlist", "status": "idea"}])
+        self.assertIn("- [planned]".ljust(14) + "Nur lokal  #key:nur-lokal", text)
+
+
+class TestReorderVisionKeepsAnchors(unittest.TestCase):
+    VISION = """# VISION — Test Proj
+## Roadmap
+- [idea]      Feature A  #key:feature-a
+- ✅ Feature B   ← implementiert 2026-06-01
+- [planned]   Feature C  # Priorität: Hoch #key:feature-c
+"""
+
+    def _run(self, entries):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "VISION.md"
+            p.write_text(self.VISION)
+            reorder_vision_roadmap(p, entries)
+            return p.read_text()
+
+    def test_key_anchor_survives_reorder(self):
+        text = self._run([
+            {"name": "Feature C", "status": "planned"},
+            {"name": "Feature A", "status": "discussed"},
+        ])
+        open_lines = [l for l in text.splitlines()
+                      if l.startswith("- [")]
+        self.assertEqual(open_lines, [
+            "- [planned]".ljust(14) + "Feature C  # Priorität: Hoch #key:feature-c",
+            "- [discussed]".ljust(14) + "Feature A  #key:feature-a",
+        ])
+
+    def test_commented_line_matches_by_name_not_appended(self):
+        text = self._run([{"name": "Feature C", "status": "planned"}])
+        self.assertEqual(len([l for l in text.splitlines() if "Feature C" in l]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
