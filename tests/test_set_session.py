@@ -17,14 +17,45 @@ def test_set_dev_session_writes_session_file(tmp_path):
     result = _run(["dev", "my-proj"],
                   env_override={"WORK_DIR": str(tmp_path), "CLAUDE_CODE_SESSION_ID": "test-sid-1"})
     assert result.returncode == 0
+    # K4: settings.json wird nicht mehr angefasst
     settings = json.loads(settings_path.read_text())
-    assert settings["active_session"] == "dev"
-    assert "active_dev_slug" not in settings
+    assert settings == {"notifications_enabled": True}
     session_file = tmp_path / "dev_sessions" / "test-sid-1.json"
     data = json.loads(session_file.read_text())
     assert data["active_dev_slug"] == "my-proj"
     assert data["implementation_mode"] is False
     assert data["implementation_mode_until"] is None
+
+
+def test_dev_binds_slug_and_feature(tmp_path):
+    result = _run(["dev", "proj", "email-auth"],
+                  env_override={"WORK_DIR": str(tmp_path), "CLAUDE_CODE_SESSION_ID": "sid-a"})
+    assert result.returncode == 0
+    data = json.loads((tmp_path / "dev_sessions" / "sid-a.json").read_text())
+    assert data["active_dev_slug"] == "proj"
+    assert data["active_dev_feature"] == "email-auth"
+
+
+def test_dev_without_feature_keeps_none(tmp_path):
+    result = _run(["dev", "proj"],
+                  env_override={"WORK_DIR": str(tmp_path), "CLAUDE_CODE_SESSION_ID": "sid-a"})
+    assert result.returncode == 0
+    data = json.loads((tmp_path / "dev_sessions" / "sid-a.json").read_text())
+    assert data["active_dev_slug"] == "proj"
+    assert data["active_dev_feature"] is None
+
+
+def test_clear_removes_only_own_session_file(tmp_path):
+    (tmp_path / "dev_sessions").mkdir(exist_ok=True)
+    (tmp_path / "dev_sessions" / "sid-b.json").write_text('{"active_dev_slug": "other"}')
+    (tmp_path / "settings.json").write_text('{"active_session": "teach", "x": 1}')
+    env = {"WORK_DIR": str(tmp_path), "CLAUDE_CODE_SESSION_ID": "sid-a"}
+    assert _run(["dev", "proj"], env_override=env).returncode == 0
+    assert _run(["clear"], env_override=env).returncode == 0
+    assert not (tmp_path / "dev_sessions" / "sid-a.json").exists()
+    assert (tmp_path / "dev_sessions" / "sid-b.json").exists()
+    # K4: settings.json bleibt byte-identisch — kein active_session-Clear mehr
+    assert json.loads((tmp_path / "settings.json").read_text()) == {"active_session": "teach", "x": 1}
 
 
 def test_set_dev_session_includes_worktree_fields(tmp_path):
@@ -75,8 +106,9 @@ def test_clear_session_deletes_session_file(tmp_path):
     result = _run(["clear"],
                   env_override={"WORK_DIR": str(tmp_path), "CLAUDE_CODE_SESSION_ID": "test-sid-2"})
     assert result.returncode == 0
+    # K4: settings.json bleibt unberührt
     settings = json.loads(settings_path.read_text())
-    assert settings["active_session"] is None
+    assert settings == {"active_session": "dev"}
     assert not (sessions_dir / "test-sid-2.json").exists()
 
 
