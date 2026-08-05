@@ -363,3 +363,59 @@ def test_finish_vision_unknown_key_and_name_exits_1(tmp_path):
              "--feature", "Nicht da", "--feature-key", "auch-nicht-da")
     assert r.returncode == 1
     assert (hub / "topics" / "testproj" / "VISION.md").read_text() == before
+
+
+def test_vision_key_anchors_existing_line(tmp_path):
+    hub = _make_hub(tmp_path)
+    _make_vision(hub)
+    r = _run(hub, "--command", "vision-key", "--slug", "testproj",
+             "--feature-key", "feature-x", "--feature", "Feature X")
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["action"] == "anchored"
+    text = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    assert "- [discussed] Feature X  #key:feature-x" in text
+
+
+def test_vision_key_is_idempotent(tmp_path):
+    hub = _make_hub(tmp_path)
+    _make_vision(hub)
+    _run(hub, "--command", "vision-key", "--slug", "testproj",
+         "--feature-key", "feature-x", "--feature", "Feature X")
+    first = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    r = _run(hub, "--command", "vision-key", "--slug", "testproj",
+             "--feature-key", "feature-x", "--feature", "Ganz anderer Name")
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["action"] == "unchanged"
+    assert (hub / "topics" / "testproj" / "VISION.md").read_text() == first
+
+
+def test_vision_key_creates_missing_line(tmp_path):
+    hub = _make_hub(tmp_path)
+    _make_vision(hub)
+    r = _run(hub, "--command", "vision-key", "--slug", "testproj",
+             "--feature-key", "neues-feature", "--feature", "Neues Feature",
+             "--status", "discussed")
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["action"] == "created"
+    lines = [l for l in (hub / "topics" / "testproj" / "VISION.md")
+             .read_text().splitlines() if l.startswith("- ")]
+    assert lines[-1] == "- [discussed] Neues Feature  #key:neues-feature"
+
+
+def test_vision_key_keeps_existing_comment(tmp_path):
+    hub = _make_hub(tmp_path)
+    _make_vision(hub, text=("# Vision — testproj\n\n## Roadmap\n"
+                            "- [idea]      Feature X  # Priorität: Hoch\n"))
+    r = _run(hub, "--command", "vision-key", "--slug", "testproj",
+             "--feature-key", "feature-x", "--feature", "Feature X")
+    assert r.returncode == 0
+    text = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    assert "- [idea]      Feature X  # Priorität: Hoch  #key:feature-x" in text
+
+
+def test_vision_key_missing_args_exits_1(tmp_path):
+    hub = _make_hub(tmp_path)
+    _make_vision(hub)
+    r = _run(hub, "--command", "vision-key", "--slug", "testproj",
+             "--feature-key", "feature-x")
+    assert r.returncode == 1
