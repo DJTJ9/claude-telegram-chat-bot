@@ -1,50 +1,32 @@
 #!/usr/bin/env python3
 """Compile-Verifikation der game-Skill-C#-Vorlagen (references/unity.md):
 extrahiert alle csharp-Blocks, platziert sie regelbasiert im Scratch-Unity-
-Projekt (Assets/Skill/, wipe + rewrite inkl. asmdefs) und kompiliert headless
-im unityci/editor-Container. SkillCheck.Run prüft danach per TypeCache die
+Projekt (Assets/Skill/, wipe + rewrite nach den Unity-Konventionen via
+unity_scaffold.scaffold) und kompiliert headless im unityci/editor-Container.
+SkillCheck.Run prüft danach per TypeCache die
 Toolbar-Menüpunkte. Fail-hard Exit 0/1.
 """
 import argparse
-import json
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from scripts.unity_scaffold import scaffold  # Test-Kontext (Repo-Root auf sys.path)
+except ImportError:
+    from unity_scaffold import scaffold  # Script-Kontext (scripts/ ist sys.path[0])
+
 FENCE_RE = re.compile(r"```csharp\n(.*?)```", re.DOTALL)
 CLASS_RE = re.compile(r"(?:class|struct|interface)\s+([A-Za-z_]\w*)")
 ERROR_RE = re.compile(r"error CS\d+[^\n]*")
 VERSION_RE = re.compile(r"m_EditorVersion:\s*(\S+)")
 
-ASMDEFS = {
-    "Runtime/Skill.Runtime.asmdef": {"name": "Skill.Runtime"},
-    "Editor/Skill.Editor.asmdef": {
-        "name": "Skill.Editor",
-        "references": ["Skill.Runtime"],
-        "includePlatforms": ["Editor"],
-    },
-    "Tests/EditMode/Skill.Tests.EditMode.asmdef": {
-        "name": "Skill.Tests.EditMode",
-        "references": ["UnityEngine.TestRunner", "UnityEditor.TestRunner",
-                       "Skill.Runtime"],
-        "includePlatforms": ["Editor"],
-        "overrideReferences": True,
-        "precompiledReferences": ["nunit.framework.dll"],
-        "autoReferenced": False,
-        "defineConstraints": ["UNITY_INCLUDE_TESTS"],
-    },
-    "Tests/PlayMode/Skill.Tests.PlayMode.asmdef": {
-        "name": "Skill.Tests.PlayMode",
-        "references": ["UnityEngine.TestRunner", "UnityEditor.TestRunner",
-                       "Skill.Runtime"],
-        "overrideReferences": True,
-        "precompiledReferences": ["nunit.framework.dll"],
-        "autoReferenced": False,
-        "defineConstraints": ["UNITY_INCLUDE_TESTS"],
-    },
-}
+# Scratch-Projekt spiegelt die Konventionen 1:1 (references/unity-conventions.md):
+# Assembly-Ordner aus dem Block-Inhalt, darunter der Feature-Ordner.
+PREFIX = "Skill"
+FEATURE = "Templates"
 
 
 def extract_blocks(md_text: str) -> list:
@@ -59,11 +41,12 @@ def class_name(block: str):
 
 
 def placement(block: str) -> str:
-    """Zielordner unter Assets/Skill/ — erste Regel gewinnt."""
+    """Zielordner unter Assets/<PREFIX>/ — erste Regel gewinnt.
+    Assembly-Ordner nach Block-Inhalt, darunter der Feature-Ordner."""
     if "[UnityTest]" in block:
-        return "Tests/PlayMode"
+        return f"Tests/PlayMode/{FEATURE}"
     if "using NUnit.Framework" in block:
-        return "Tests/EditMode"
+        return f"Tests/EditMode/{FEATURE}"
     depth = 0
     for line in block.splitlines():
         s = line.strip()
@@ -72,19 +55,17 @@ def placement(block: str) -> str:
         elif s.startswith("#endif") and depth:
             depth -= 1
         elif s.startswith("using UnityEditor") and depth == 0:
-            return "Editor"
-    return "Runtime"
+            return f"Editor/{FEATURE}"
+    return f"Runtime/{FEATURE}"
 
 
 def write_project_files(blocks: list, scratch: Path) -> list:
-    """Wipe + Rewrite von Assets/Skill/ (asmdefs + .cs). -> relative Pfade."""
-    skill = scratch / "Assets" / "Skill"
+    """Wipe + Rewrite von Assets/<PREFIX>/ (Konventions-Skelett + asmdefs via
+    unity_scaffold.scaffold, dann die .cs-Blocks). -> relative Pfade."""
+    skill = scratch / "Assets" / PREFIX
     if skill.exists():
         shutil.rmtree(skill)
-    for rel, content in ASMDEFS.items():
-        p = skill / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(content, indent=4) + "\n", encoding="utf-8")
+    scaffold(scratch, PREFIX)
     written = []
     for block in blocks:
         name = class_name(block)
@@ -93,7 +74,9 @@ def write_project_files(blocks: list, scratch: Path) -> list:
                   file=sys.stderr)
             sys.exit(1)
         rel = f"{placement(block)}/{name}.cs"
-        (skill / rel).write_text(block, encoding="utf-8")
+        p = skill / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(block, encoding="utf-8")
         written.append(rel)
     return written
 
@@ -163,7 +146,7 @@ def main() -> int:
         return 1
     tag = image_tag(scratch)
     written = write_project_files(blocks, scratch)
-    print(f"{len(blocks)} csharp-Blocks -> {scratch}/Assets/Skill/:")
+    print(f"{len(blocks)} csharp-Blocks -> {scratch}/Assets/{PREFIX}/:")
     for rel in written:
         print(f"  {rel}")
     print(f"Image: {tag}")

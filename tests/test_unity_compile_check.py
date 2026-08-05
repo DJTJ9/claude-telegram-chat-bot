@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.unity_compile_check import (
     extract_blocks, class_name, placement, write_project_files,
-    image_tag, docker_cmd, parse_log, main,
+    image_tag, docker_cmd, parse_log, main, PREFIX, FEATURE,
 )
 
 SAMPLE_MD = """# Doc
@@ -70,8 +70,10 @@ class TestExtractBlocks(unittest.TestCase):
             "FeatureEditModeTests", "FeaturePlayModeTests",
         ])
         self.assertEqual([placement(b) for b in blocks], [
-            "Editor", "Runtime", "Runtime", "Runtime", "Runtime", "Runtime",
-            "Editor", "Tests/EditMode", "Tests/PlayMode",
+            "Editor/Templates", "Runtime/Templates", "Runtime/Templates",
+            "Runtime/Templates", "Runtime/Templates", "Runtime/Templates",
+            "Editor/Templates", "Tests/EditMode/Templates",
+            "Tests/PlayMode/Templates",
         ])
 
 
@@ -89,16 +91,22 @@ class TestPlacement(unittest.TestCase):
         self.blocks = extract_blocks(SAMPLE_MD)
 
     def test_unguarded_unityeditor_is_editor(self):
-        self.assertEqual(placement(self.blocks[0]), "Editor")
+        self.assertEqual(placement(self.blocks[0]), "Editor/Templates")
 
     def test_guarded_unityeditor_is_runtime(self):
-        self.assertEqual(placement(self.blocks[1]), "Runtime")
+        self.assertEqual(placement(self.blocks[1]), "Runtime/Templates")
 
     def test_nunit_is_editmode(self):
-        self.assertEqual(placement(self.blocks[2]), "Tests/EditMode")
+        self.assertEqual(placement(self.blocks[2]), "Tests/EditMode/Templates")
 
     def test_unitytest_is_playmode(self):
-        self.assertEqual(placement(self.blocks[3]), "Tests/PlayMode")
+        self.assertEqual(placement(self.blocks[3]), "Tests/PlayMode/Templates")
+
+
+class TestScratchConstants(unittest.TestCase):
+    def test_prefix_and_feature(self):
+        self.assertEqual(PREFIX, "Skill")
+        self.assertEqual(FEATURE, "Templates")
 
 
 class TestWriteProjectFiles(unittest.TestCase):
@@ -114,9 +122,10 @@ class TestWriteProjectFiles(unittest.TestCase):
             skill = scratch / "Assets" / "Skill"
             self.assertFalse(stale.exists())
             self.assertEqual(sorted(written), sorted([
-                "Editor/EditorThing.cs", "Runtime/RuntimeThing.cs",
-                "Tests/EditMode/ThingEditModeTests.cs",
-                "Tests/PlayMode/ThingPlayModeTests.cs",
+                "Editor/Templates/EditorThing.cs",
+                "Runtime/Templates/RuntimeThing.cs",
+                "Tests/EditMode/Templates/ThingEditModeTests.cs",
+                "Tests/PlayMode/Templates/ThingPlayModeTests.cs",
             ]))
             for rel in written:
                 self.assertTrue((skill / rel).exists())
@@ -126,6 +135,7 @@ class TestWriteProjectFiles(unittest.TestCase):
                 "Tests/PlayMode/Skill.Tests.PlayMode.asmdef",
             ]:
                 self.assertTrue((skill / asmdef).exists(), asmdef)
+            self.assertTrue((skill / "Runtime" / "Shared").is_dir())
 
     def test_block_without_class_fails_hard(self):
         with tempfile.TemporaryDirectory() as tmp:
