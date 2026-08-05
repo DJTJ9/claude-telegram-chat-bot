@@ -285,3 +285,81 @@ def test_parse_status_md_keeps_hash_in_feature_name(tmp_path):
     assert r.returncode == 0
     names = [f["name"] for f in json.loads(r.stdout)]
     assert names == ["Task 7: 7 C#-Vorlagen (Harness/Debug)", "Firmen-Watchlist"]
+
+
+STATUS_HASH_MD = """# Project Status — testproj
+Updated: 2026-01-01
+
+## Roadmap
+- [idea]      Feature Y
+- [discussed] Task 7: 7 C#-Vorlagen (Harness/Debug)  #key:unity-vorlagen
+- [done]      Feature Z
+"""
+
+VISION_HASH_MD = """# Vision — testproj
+
+## Roadmap
+- [idea]      Feature Y
+- [discussed] Task 7: 7 C#-Vorlagen (Harness/Debug)  # Priorität: Hoch #key:unity-vorlagen
+"""
+
+
+def test_roadmap_set_keeps_full_hash_name_and_comment(tmp_path):
+    hub = _make_hub(tmp_path, status=STATUS_HASH_MD)
+    r = _run(hub, "--command", "roadmap-set", "--slug", "testproj",
+             "--feature", "Task 7: 7 C#-Vorlagen (Harness/Debug)", "--status", "planned")
+    assert r.returncode == 0
+    assert ("- [planned]   Task 7: 7 C#-Vorlagen (Harness/Debug)  #key:unity-vorlagen"
+            in _status(hub))
+
+
+def test_roadmap_set_matches_by_key(tmp_path):
+    hub = _make_hub(tmp_path, status=STATUS_HASH_MD)
+    r = _run(hub, "--command", "roadmap-set", "--slug", "testproj",
+             "--feature", "Voellig anderer Name", "--feature-key", "unity-vorlagen",
+             "--status", "done")
+    assert r.returncode == 0
+    assert ("- [done]      Task 7: 7 C#-Vorlagen (Harness/Debug)  #key:unity-vorlagen"
+            in _status(hub))
+
+
+def test_roadmap_set_unknown_key_falls_back_to_name(tmp_path):
+    hub = _make_hub(tmp_path, status=STATUS_HASH_MD)
+    r = _run(hub, "--command", "roadmap-set", "--slug", "testproj",
+             "--feature", "Feature Y", "--feature-key", "gibt-es-nicht",
+             "--status", "planned")
+    assert r.returncode == 0
+    assert "- [planned]   Feature Y" in _status(hub)
+
+
+def test_finish_vision_keeps_hash_name_and_comment(tmp_path):
+    hub = _make_hub(tmp_path)
+    _make_vision(hub, text=VISION_HASH_MD)
+    r = _run(hub, "--command", "finish-vision", "--slug", "testproj",
+             "--feature", "Task 7: 7 C#-Vorlagen (Harness/Debug)")
+    assert r.returncode == 0
+    text = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    assert ("- ✅ Task 7: 7 C#-Vorlagen (Harness/Debug)  # Priorität: Hoch "
+            "#key:unity-vorlagen   ← implementiert " in text)
+
+
+def test_finish_vision_matches_by_key(tmp_path):
+    hub = _make_hub(tmp_path)
+    _make_vision(hub, text=VISION_HASH_MD)
+    r = _run(hub, "--command", "finish-vision", "--slug", "testproj",
+             "--feature", "Umformulierter Name", "--feature-key", "unity-vorlagen")
+    assert r.returncode == 0
+    text = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    assert "- ✅ Task 7: 7 C#-Vorlagen (Harness/Debug)" in text
+    assert "Umformulierter Name" not in text
+    assert json.loads(r.stdout)["feature"] == "Task 7: 7 C#-Vorlagen (Harness/Debug)"
+
+
+def test_finish_vision_unknown_key_and_name_exits_1(tmp_path):
+    hub = _make_hub(tmp_path)
+    _make_vision(hub, text=VISION_HASH_MD)
+    before = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    r = _run(hub, "--command", "finish-vision", "--slug", "testproj",
+             "--feature", "Nicht da", "--feature-key", "auch-nicht-da")
+    assert r.returncode == 1
+    assert (hub / "topics" / "testproj" / "VISION.md").read_text() == before
