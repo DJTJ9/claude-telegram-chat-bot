@@ -85,3 +85,30 @@ def test_init_repo_fails_on_missing_dir(tmp_path):
     with pytest.raises(SystemExit) as e:
         ug.init_repo(tmp_path / "does-not-exist")
     assert e.value.code == 1
+
+
+def test_find_yaml_merge_none_when_no_install(monkeypatch):
+    monkeypatch.setattr(ug, "MERGE_GLOBS", ["/nope/*/UnityYAMLMerge"])
+    assert ug.find_yaml_merge() is None
+
+
+def test_setup_mergetool_warns_and_returns_false_when_not_found(monkeypatch, capsys):
+    monkeypatch.setattr(ug, "find_yaml_merge", lambda: None)
+    assert ug.setup_mergetool(Path("/tmp")) is False
+    assert "UnityYAMLMerge nicht gefunden" in capsys.readouterr().err
+
+
+def test_setup_lfs_non_fatal_when_git_missing(monkeypatch, capsys):
+    def boom(*a, **k):
+        raise FileNotFoundError
+    monkeypatch.setattr(ug.subprocess, "run", boom)
+    assert ug.setup_lfs(Path("/tmp")) is False
+    assert "git-lfs nicht installiert" in capsys.readouterr().err
+
+
+def test_init_repo_writes_files_even_when_git_absent(tmp_path, monkeypatch):
+    monkeypatch.setattr(ug, "setup_lfs", lambda repo: False)
+    monkeypatch.setattr(ug, "setup_mergetool", lambda repo: False)
+    ug.init_repo(tmp_path)  # kein SystemExit trotz "fehlendem" Git
+    assert (tmp_path / ".gitignore").exists()
+    assert (tmp_path / ".gitattributes").exists()

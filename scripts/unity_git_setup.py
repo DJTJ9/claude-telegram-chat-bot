@@ -71,6 +71,8 @@ def init_repo(repo):
     if not repo.is_dir():
         fail(f"Repo-Pfad {repo} existiert nicht")
     write_hygiene_files(repo)
+    setup_lfs(repo)
+    setup_mergetool(repo)
 
 
 def check_repo(repo):
@@ -102,6 +104,88 @@ def check_repo(repo):
             print(f"  - {p}", file=sys.stderr)
         sys.exit(1)
     print(f"OK: Git-Hygiene-Check für {repo} grün")
+
+
+def _git(repo, args):
+    try:
+        r = subprocess.run(["git", "-C", str(repo), *args],
+                           capture_output=True, text=True)
+        return r.returncode, r.stderr
+    except FileNotFoundError:
+        return None, "git nicht gefunden"
+
+
+def setup_lfs(repo):
+    try:
+        probe = subprocess.run(["git", "lfs", "version"],
+                               capture_output=True, text=True)
+        available = probe.returncode == 0
+    except FileNotFoundError:
+        available = False
+    if not available:
+        print("WARN: git-lfs nicht installiert — LFS-Filter nicht aktiviert. "
+              "Install: https://git-lfs.com , dann `git lfs install` im Repo. "
+              "Die .gitattributes-Tracking-Zeilen sind bereits geschrieben.",
+              file=sys.stderr)
+        return False
+    rc, err = _git(repo, ["lfs", "install", "--local"])
+    if rc != 0:
+        print(f"WARN: `git lfs install --local` fehlgeschlagen "
+              f"({(err or '').strip()}) — kein Git-Repo? LFS-Hooks nicht gesetzt, "
+              ".gitattributes-Zeilen bleiben.", file=sys.stderr)
+        return False
+    print("OK: git lfs install --local")
+    return True
+
+
+MERGE_GLOBS = [
+    os.path.expanduser("~/Unity/Hub/Editor/*/Editor/Data/Tools/UnityYAMLMerge"),
+    os.path.expanduser("~/Unity/Hub/Editor/*/Editor/Data/Tools/UnityYAMLMerge.exe"),
+    "/Applications/Unity/Hub/Editor/*/Unity.app/Contents/Tools/UnityYAMLMerge",
+    os.path.expanduser(
+        "~/Applications/Unity/Hub/Editor/*/Unity.app/Contents/Tools/UnityYAMLMerge"),
+    "C:/Program Files/Unity/Hub/Editor/*/Editor/Data/Tools/UnityYAMLMerge.exe",
+]
+
+
+def find_yaml_merge():
+    for pattern in MERGE_GLOBS:
+        hits = sorted(glob.glob(pattern))
+        if hits:
+            return hits[-1]
+    return None
+
+
+def setup_mergetool(repo):
+    tool = find_yaml_merge()
+    if tool is None:
+        print("WARN: UnityYAMLMerge nicht gefunden — Smart-Merge nicht konfiguriert.\n"
+              "  Manuell (UnityYAMLMerge-Pfad des Editors einsetzen):\n"
+              "    git config merge.unityyamlmerge.name \"Unity SmartMerge\"\n"
+              "    git config merge.unityyamlmerge.driver "
+              "'<UnityYAMLMerge> merge -h -p --force --fallback none %O %B %A %A'\n"
+              "    git config mergetool.unityyamlmerge.trustExitCode false\n"
+              "  Die .gitattributes-Merge-Zeilen sind bereits gesetzt.",
+              file=sys.stderr)
+        return False
+    driver = f'{tool} merge -h -p --force --fallback none %O %B %A %A'
+    cmd = f'{tool} merge -p "$BASE" "$REMOTE" "$LOCAL" "$MERGED"'
+    calls = [
+        ["config", "merge.unityyamlmerge.name", "Unity SmartMerge"],
+        ["config", "merge.unityyamlmerge.driver", driver],
+        ["config", "mergetool.unityyamlmerge.cmd", cmd],
+        ["config", "mergetool.unityyamlmerge.trustExitCode", "false"],
+    ]
+    ok = True
+    for c in calls:
+        rc, err = _git(repo, c)
+        if rc != 0:
+            ok = False
+            print(f"WARN: `git {' '.join(c)}` fehlgeschlagen ({(err or '').strip()})",
+                  file=sys.stderr)
+    if ok:
+        print(f"OK: UnityYAMLMerge konfiguriert ({tool})")
+    return ok
 
 
 def main():
