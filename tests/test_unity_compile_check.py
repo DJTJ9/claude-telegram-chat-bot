@@ -157,7 +157,7 @@ class TestDockerCmd(unittest.TestCase):
         self.assertEqual(cmd[:3], ["docker", "run", "--rm"])
         self.assertIn("/root/unity-scratch:/project", cmd)
         self.assertIn("/root/secrets/unity/Unity_lic.ulf:"
-                      "/usr/share/unity3d/config/Unity_lic.ulf:ro", cmd)
+                      "/root/.local/share/unity3d/Unity/Unity_lic.ulf", cmd)
         self.assertIn("-executeMethod", cmd)
         self.assertIn("SkillCheck.Run", cmd)
         self.assertNotIn("-quit", cmd)

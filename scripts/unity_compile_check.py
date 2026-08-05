@@ -118,7 +118,7 @@ def docker_cmd(scratch: Path, license_path: Path, tag: str) -> list:
     return [
         "docker", "run", "--rm",
         "-v", f"{scratch}:/project",
-        "-v", f"{license_path}:/usr/share/unity3d/config/Unity_lic.ulf:ro",
+        "-v", f"{license_path}:/root/.local/share/unity3d/Unity/Unity_lic.ulf",
         tag,
         "unity-editor", "-batchmode", "-nographics",
         "-projectPath", "/project",
