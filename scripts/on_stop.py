@@ -1,16 +1,16 @@
-import json, os, sys
+import json, sys
 from pathlib import Path
 
-PROJECT_DIR = Path(__file__).parent.parent
-WORK_DIR = Path(os.environ.get("WORK_DIR", str(PROJECT_DIR)))
+sys.path.insert(0, str(Path(__file__).parent))
+import wait_state
 
 try:
     _sid = json.loads(sys.stdin.read()).get("session_id", "")
 except Exception:
     _sid = ""
 if _sid:
-    (WORK_DIR / f"pending_wait_{_sid}.json").unlink(missing_ok=True)
-    (WORK_DIR / f"pending_wait_{_sid}.notified").unlink(missing_ok=True)
+    wait_state.delete(f"pending_wait_{_sid}.json")
+    wait_state.delete(f"pending_wait_{_sid}.notified")
     # Turn beendet: markiert, dass ein danach feuerndes Idle-Notification kein
     # echtes Warten auf eine Antwort ist (on_notification.py skippt dann).
-    (WORK_DIR / f"turn_ended_{_sid}.flag").write_text("")
+    wait_state.write(f"turn_ended_{_sid}.flag", "")

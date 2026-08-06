@@ -193,3 +193,76 @@ def test_on_user_prompt_survives_empty_stdin(tmp_path):
         input="", capture_output=True, text=True, env=env, timeout=15,
     )
     assert r.returncode == 0
+
+
+def _remote_env(tmp_path):
+    """Fake ssh auf PATH + Remote-Modus erzwungen; gibt (env, log, stdin_log) zurueck."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    log = tmp_path / "ssh.log"
+    stdin_log = tmp_path / "ssh.stdin"
+    fake = bin_dir / "ssh"
+    fake.write_text(
+        "#!/bin/sh\n"
+        f'printf "%s\\n" "$*" >> "{log}"\n'
+        "case \"$*\" in\n"
+        f'  *"cat > "*) cat >> "{stdin_log}"; exit 0 ;;\n'
+        '  *"test -e"*) exit 1 ;;\n'
+        '  *"capture-pane"*) printf "Frage?\\nA) Ja\\n"; exit 0 ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
+    fake.chmod(0o755)
+    env = {**os.environ,
+           "WORK_DIR": str(tmp_path),
+           "PATH": f"{bin_dir}:{os.environ['PATH']}",
+           "WAIT_STATE_REMOTE": "1",
+           "WAIT_STATE_HOST": "dev",
+           "WAIT_STATE_REMOTE_WORK_DIR": "/srv/bot",
+           "SHARKY_TMUX": "sharky-game-skill"}
+    env.pop("TMUX_PANE", None)
+    return env, log, stdin_log
+
+
+def test_remote_mode_writes_pending_wait_over_ssh(tmp_path):
+    _mk_session(tmp_path)
+    env, log, stdin_log = _remote_env(tmp_path)
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        input=json.dumps({"session_id": "s1",
+                          "message": "Claude is waiting for your input"}),
+        capture_output=True, text=True, env=env, timeout=15,
+    )
+    assert r.returncode == 0, r.stderr
+    assert not _pending(tmp_path).exists()          # nichts lokal auf Windows
+    assert "cat > /srv/bot/pending_wait_s1.json" in log.read_text()
+    assert "tmux capture-pane -p -t sharky-game-skill" in log.read_text()
+    data = json.loads(stdin_log.read_text())
+    assert data["slug"] == "dev-skill"
+    assert data["pane"] == "sharky-game-skill"
+    assert "Frage?" in data["question"]
+
+
+def test_remote_mode_on_stop_deletes_and_flags_over_ssh(tmp_path):
+    env, log, _ = _remote_env(tmp_path)
+    r = subprocess.run(
+        [sys.executable, str(ON_STOP)],
+        input=json.dumps({"session_id": "s1"}),
+        capture_output=True, text=True, env=env, timeout=15,
+    )
+    assert r.returncode == 0, r.stderr
+    calls = log.read_text()
+    assert "rm -f /srv/bot/pending_wait_s1.json" in calls
+    assert "rm -f /srv/bot/pending_wait_s1.notified" in calls
+    assert "cat > /srv/bot/turn_ended_s1.flag" in calls
+
+
+def test_remote_mode_on_user_prompt_clears_flag_over_ssh(tmp_path):
+    env, log, _ = _remote_env(tmp_path)
+    r = subprocess.run(
+        [sys.executable, str(ON_USER_PROMPT)],
+        input=json.dumps({"session_id": "s1"}),
+        capture_output=True, text=True, env=env, timeout=15,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "rm -f /srv/bot/turn_ended_s1.flag" in log.read_text()
