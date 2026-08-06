@@ -187,6 +187,19 @@ def parse_status_md(path: Path) -> dict:
     return {"slug": slug, "active": active, "phase": phase, "items": items}
 
 
+_NO_ACTIVE = "(keine aktive Entwicklung)"
+
+# `(none)` und ein leeres Feld heissen "nie gesetzt" — da darf der Sync ein
+# Feature eintragen. `(keine aktive Entwicklung)` ist dagegen eine AUSSAGE, die
+# die finish-Phase bewusst schreibt: dieses Projekt hat gerade nichts Aktives.
+# Stand der Sentinel früher mit in dieser Liste, hat der Rückwärts-Sync direkt
+# im Anschluss an jedes /dev|/game finish die oberste Idee als aktiv eingetragen
+# — bei `Phase: (none)`, also ein Zustand, den keine Phase erzeugen kann.
+# Das Nachrücken des nächsten Features macht `dev_context.py --command advance`,
+# und zwar über [planned]/[discussed] statt über die erstbeste Idee.
+_UNSET_ACTIVE = ("(none)",)
+
+
 def _update_status_active(path: Path, active: str, conditional: bool = False) -> None:
     if not path.exists():
         return
@@ -195,9 +208,9 @@ def _update_status_active(path: Path, active: str, conditional: bool = False) ->
         m = re.search(r'^Active: (.*)$', text, re.MULTILINE)
         if m:
             current = m.group(1).strip()
-            if current and current not in ("(none)", "(keine aktive Entwicklung)"):
+            if current and current not in _UNSET_ACTIVE:
                 return
-    display = active if active else "(keine aktive Entwicklung)"
+    display = active if active else _NO_ACTIVE
     text = re.sub(r'^Active: .*$', f'Active: {display}', text, flags=re.MULTILINE)
     path.write_text(text, encoding="utf-8")
 

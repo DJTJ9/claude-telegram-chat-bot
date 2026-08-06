@@ -709,5 +709,65 @@ class TestReorderVisionKeepsAnchors(unittest.TestCase):
         self.assertEqual(len([l for l in text.splitlines() if "Feature C" in l]), 1)
 
 
+from scripts.nocodb_sync import _update_status_active, parse_status_md
+
+
+class TestUpdateStatusActive(unittest.TestCase):
+    """Wann darf der Rückwärts-Sync das Active-Feld anfassen?"""
+
+    def _status(self, active: str, phase: str = "(none)") -> Path:
+        d = Path(tempfile.mkdtemp())
+        p = d / "STATUS.md"
+        p.write_text(f"Active: {active}\nPhase: {phase}\n", encoding="utf-8")
+        return p
+
+    def test_conditional_keeps_running_feature(self):
+        p = self._status("My Current Feature", phase="implement")
+        _update_status_active(p, "Top Idea From NocoDB", conditional=True)
+        self.assertIn("Active: My Current Feature", p.read_text())
+
+    def test_conditional_fills_never_set_field(self):
+        p = self._status("(none)")
+        _update_status_active(p, "First Feature", conditional=True)
+        self.assertIn("Active: First Feature", p.read_text())
+
+    def test_conditional_fills_empty_field(self):
+        p = self._status("")
+        _update_status_active(p, "First Feature", conditional=True)
+        self.assertIn("Active: First Feature", p.read_text())
+
+    def test_conditional_respects_deliberate_no_active(self):
+        """finish schreibt den Sentinel absichtlich — der Sync darf ihn nicht
+        durch die oberste Idee ersetzen (sonst: aktives Feature bei Phase none)."""
+        p = self._status("(keine aktive Entwicklung)")
+        _update_status_active(p, "Top Idea From NocoDB", conditional=True)
+        self.assertIn("Active: (keine aktive Entwicklung)", p.read_text())
+
+    def test_unconditional_overwrites_the_sentinel(self):
+        """nocodb-reorder ist eine explizite Nutzeraktion und darf ihn setzen."""
+        p = self._status("(keine aktive Entwicklung)")
+        _update_status_active(p, "Top Idea From NocoDB", conditional=False)
+        self.assertIn("Active: Top Idea From NocoDB", p.read_text())
+
+    def test_empty_active_writes_the_sentinel(self):
+        p = self._status("Some Feature")
+        _update_status_active(p, "", conditional=False)
+        self.assertIn("Active: (keine aktive Entwicklung)", p.read_text())
+
+
+class TestParseStatusMdKeyAnchor(unittest.TestCase):
+    def test_key_anchor_is_not_part_of_the_feature_name(self):
+        """Sonst wandert '  #key:foo' als Teil des Namens nach NocoDB und
+        find_row matcht die bestehende Row nie wieder -> Duplikat je Sync."""
+        d = Path(tempfile.mkdtemp())
+        p = d / "STATUS.md"
+        p.write_text("Active: (none)\nPhase: (none)\n\n## Roadmap\n"
+                     "- [done]      Belastungsmodell  #key:belastungsmodell\n"
+                     "- [idea]      C#-Vorlagen erweitern\n", encoding="utf-8")
+        items = parse_status_md(p)["items"]
+        self.assertEqual(items, [("done", "Belastungsmodell"),
+                                 ("idea", "C#-Vorlagen erweitern")])
+
+
 if __name__ == "__main__":
     unittest.main()
