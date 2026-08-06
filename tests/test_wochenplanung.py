@@ -17,7 +17,7 @@ class TestCreateWochenplanungView(unittest.TestCase):
         self.assertTrue(callable(getattr(ct, "create_wochenplanung_view", None)))
 
     def test_wochenplanung_flag_in_argparse(self):
-        src = Path("scripts/nocodb_create_table.py").read_text()
+        src = Path("scripts/nocodb_create_table.py").read_text(encoding="utf-8")
         self.assertIn("--wochenplanung", src)
 
     @patch("scripts.nocodb_create_table.requests.post")

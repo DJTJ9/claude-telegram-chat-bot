@@ -41,7 +41,7 @@ def _project(tmp, version="6000.4.3f1"):
     project = Path(tmp) / "project"
     pv = project / "ProjectSettings" / "ProjectVersion.txt"
     pv.parent.mkdir(parents=True)
-    pv.write_text(f"m_EditorVersion: {version}\n")
+    pv.write_text(f"m_EditorVersion: {version}\n", encoding="utf-8")
     (project / "Logs").mkdir()
     return project
 
@@ -146,7 +146,7 @@ class TestMain(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             project = _project(tmp)
             lic = Path(tmp) / "Unity_lic.ulf"
-            lic.write_text("<lic/>")
+            lic.write_text("<lic/>", encoding="utf-8")
             calls = []
 
             def run(cmd, **kwargs):
@@ -166,7 +166,7 @@ class TestMain(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             project = _project(tmp)
             lic = Path(tmp) / "Unity_lic.ulf"
-            lic.write_text("<lic/>")
+            lic.write_text("<lic/>", encoding="utf-8")
             with patch("scripts.unity_test_run.subprocess.run",
                        side_effect=_writer(project, "EditMode", RED_XML)):
                 with patch("sys.argv", ["unity_test_run.py", "--project", str(project),
@@ -195,7 +195,7 @@ class TestMain(unittest.TestCase):
             project = Path(tmp) / "not-unity"
             project.mkdir()
             lic = Path(tmp) / "Unity_lic.ulf"
-            lic.write_text("<lic/>")
+            lic.write_text("<lic/>", encoding="utf-8")
             with patch("sys.argv", ["unity_test_run.py", "--project", str(project),
                                     "--license", str(lic)]):
                 self.assertEqual(main(), 2)

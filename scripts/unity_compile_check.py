@@ -13,6 +13,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.console import enable_safe_console
+
+enable_safe_console()
+
+
 try:
     from scripts.unity_scaffold import scaffold  # Test-Kontext (Repo-Root auf sys.path)
 except ImportError:

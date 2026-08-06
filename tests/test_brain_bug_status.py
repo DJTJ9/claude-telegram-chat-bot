@@ -21,7 +21,7 @@ def test_get_dev_status_full_parses_epics_and_counts(tmp_path):
         "- [idea]      Brain Bot: Feature A\n"
         "- [idea]      NocoDB: Feature B\n"
         "- [done]       Brain Bot: Feature C\n"
-    )
+    , encoding="utf-8")
     with patch.object(brain, "HUB_DIR", tmp_path):
         result = brain._get_dev_status_full("proj")
     assert "Brain Bot: Fix X" in result
@@ -39,7 +39,7 @@ def test_get_dev_status_full_next_5_in_order(tmp_path):
     for i in range(7):
         lines.append(f"- [idea]      Feature {i}\n")
     lines.append("- [done]       Done Feature\n")
-    status_md.write_text("".join(lines))
+    status_md.write_text("".join(lines), encoding="utf-8")
     with patch.object(brain, "HUB_DIR", tmp_path):
         result = brain._get_dev_status_full("proj")
     assert "Feature 4" in result
@@ -58,7 +58,7 @@ def test_status_callback_sends_message(tmp_path):
     import bots.brain as brain
     status_md = tmp_path / "topics" / "myslug" / "STATUS.md"
     status_md.parent.mkdir(parents=True)
-    status_md.write_text("# P\nActive: X\nPhase: plan\n## Roadmap\n")
+    status_md.write_text("# P\nActive: X\nPhase: plan\n## Roadmap\n", encoding="utf-8")
     with patch.object(brain, "HUB_DIR", tmp_path), \
          patch("bots.brain.send_message") as mock_send, \
          patch("bots.brain.answer_callback_query") as mock_ack:
@@ -125,13 +125,13 @@ def test_bug_save_writes_status_md_and_clears_state(tmp_path):
     import bots.brain as brain
     status_md = tmp_path / "topics" / "myslug" / "STATUS.md"
     status_md.parent.mkdir(parents=True)
-    status_md.write_text("## Roadmap\n")
+    status_md.write_text("## Roadmap\n", encoding="utf-8")
     brain._bug_state = {"slug": "myslug", "pending": {"title": "Bug: X", "summary": "desc"}}
     with patch.object(brain, "HUB_DIR", tmp_path), \
          patch("bots.brain.answer_callback_query"), \
          patch("subprocess.run"):
         brain._handle_callback({"id": "cq1", "data": "bug_save:myslug"})
-    content = status_md.read_text()
+    content = status_md.read_text(encoding="utf-8")
     assert "- [idea]      Bug: X" in content
     assert brain._bug_state is None
 
@@ -140,7 +140,7 @@ def test_bug_save_calls_nocodb_sync_without_stale_insert_position_flag(tmp_path)
     import bots.brain as brain
     status_md = tmp_path / "topics" / "myslug" / "STATUS.md"
     status_md.parent.mkdir(parents=True)
-    status_md.write_text("## Roadmap\n")
+    status_md.write_text("## Roadmap\n", encoding="utf-8")
     brain._bug_state = {"slug": "myslug", "pending": {"title": "Bug: X", "summary": "desc"}}
     with patch.object(brain, "HUB_DIR", tmp_path), \
          patch("bots.brain.answer_callback_query"), \
@@ -168,8 +168,8 @@ def test_append_bug_to_status_md(tmp_path):
     import bots.brain as brain
     status_md = tmp_path / "topics" / "proj" / "STATUS.md"
     status_md.parent.mkdir(parents=True)
-    status_md.write_text("## Roadmap\n- [idea]      Existing\n")
+    status_md.write_text("## Roadmap\n- [idea]      Existing\n", encoding="utf-8")
     with patch.object(brain, "HUB_DIR", tmp_path):
         brain._append_bug_to_status_md("proj", "Bug: crash on load")
-    content = status_md.read_text()
+    content = status_md.read_text(encoding="utf-8")
     assert "- [idea]      Bug: crash on load" in content

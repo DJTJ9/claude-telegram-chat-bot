@@ -23,7 +23,7 @@ def test_per_project_prompt_existing_entry_no_position_update():
 
 
 def test_sync_reorder_to_notion_exists_in_source():
-    src = Path("scripts/notion_sync.py").read_text()
+    src = Path("scripts/notion_sync.py").read_text(encoding="utf-8")
     assert "def sync_reorder_to_notion" in src
     assert "--reorder" in src
 
@@ -71,7 +71,7 @@ def test_update_status_active_conditional_no_override(tmp_path):
     status.write_text("Active: My Current Feature\nPhase: implement\n", encoding="utf-8")
     from scripts.notion_sync import _update_status_active
     _update_status_active(status, "New Feature From Notion", conditional=True)
-    assert "My Current Feature" in status.read_text()
+    assert "My Current Feature" in status.read_text(encoding="utf-8")
 
 
 def test_update_status_active_conditional_sets_when_never_set(tmp_path):
@@ -80,7 +80,7 @@ def test_update_status_active_conditional_sets_when_never_set(tmp_path):
     status.write_text("Active: (none)\nPhase: (none)\n", encoding="utf-8")
     from scripts.notion_sync import _update_status_active
     _update_status_active(status, "First Feature", conditional=True)
-    assert "First Feature" in status.read_text()
+    assert "First Feature" in status.read_text(encoding="utf-8")
 
 
 def test_update_status_active_conditional_respects_deliberate_no_active(tmp_path):
@@ -91,12 +91,12 @@ def test_update_status_active_conditional_respects_deliberate_no_active(tmp_path
     status.write_text("Active: (keine aktive Entwicklung)\nPhase: (none)\n", encoding="utf-8")
     from scripts.notion_sync import _update_status_active
     _update_status_active(status, "Top Feature From Notion", conditional=True)
-    assert "Active: (keine aktive Entwicklung)" in status.read_text()
+    assert "Active: (keine aktive Entwicklung)" in status.read_text(encoding="utf-8")
 
 
 def test_sync_feature_order_auto_active_from_first_non_done():
     """sync_feature_order_from_notion must compute auto_active Python-side."""
-    src = Path("scripts/notion_sync.py").read_text()
+    src = Path("scripts/notion_sync.py").read_text(encoding="utf-8")
     func_start = src.index("def sync_feature_order_from_notion")
     func_src = src[func_start:func_start + 1500]
     assert 'e.get("aktiv")' not in func_src

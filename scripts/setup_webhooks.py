@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
-import os, requests
+import os, sys, requests
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.console import enable_safe_console
+
+enable_safe_console()
+
 
 PROJECT_DIR = Path(__file__).parent.parent
 env_file = PROJECT_DIR / ".env"

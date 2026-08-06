@@ -24,7 +24,7 @@ def test_write_db_id_to_registry(tmp_path, monkeypatch):
     monkeypatch.setenv("HUB_DIR", str(tmp_path))
     from scripts.notion_create_db import write_db_id_to_registry
     write_db_id_to_registry("test-proj", "uuid-123")
-    data = json.loads((tmp_path / "projects-registry.json").read_text())
+    data = json.loads((tmp_path / "projects-registry.json").read_text(encoding="utf-8"))
     assert data[0]["notion_db_id"] == "uuid-123"
     assert "notion_db_id" not in data[1]
 
@@ -35,7 +35,7 @@ def test_write_db_id_unknown_slug_noop(tmp_path, monkeypatch):
     monkeypatch.setenv("HUB_DIR", str(tmp_path))
     from scripts.notion_create_db import write_db_id_to_registry
     write_db_id_to_registry("nonexistent", "uuid-999")
-    data = json.loads((tmp_path / "projects-registry.json").read_text())
+    data = json.loads((tmp_path / "projects-registry.json").read_text(encoding="utf-8"))
     assert "notion_db_id" not in data[0]
 
 
@@ -52,12 +52,12 @@ def test_all_flag_skips_existing_creates_missing(tmp_path, monkeypatch):
         from scripts.notion_create_db import create_all_missing
         create_all_missing(tmp_path)
     mock.assert_called_once()  # only for slug "b"
-    data = json.loads((tmp_path / "projects-registry.json").read_text())
+    data = json.loads((tmp_path / "projects-registry.json").read_text(encoding="utf-8"))
     assert data[0]["notion_db_id"] == "existing-id"
     assert data[1]["notion_db_id"] == "11111111-2222-3333-4444-555555555555"
 
 
 def test_all_flag_main_has_route():
-    src = Path("scripts/notion_create_db.py").read_text()
+    src = Path("scripts/notion_create_db.py").read_text(encoding="utf-8")
     assert "all_projects" in src
     assert "create_all_missing" in src

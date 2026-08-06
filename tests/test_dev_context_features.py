@@ -17,7 +17,7 @@ def _run(hub, *args, env_extra=None):
 
 def _make_hub(tmp_path):
     (tmp_path / "topics" / "proj").mkdir(parents=True)
-    (tmp_path / "projects-registry.json").write_text("[]")
+    (tmp_path / "projects-registry.json").write_text("[]", encoding="utf-8")
     return tmp_path
 
 
@@ -28,7 +28,7 @@ class TestFeatureSet:
                  "--feature-key", "email-auth", "--name", "E-Mail Auth",
                  "--set", "Phase=discuss", "--set", "Type=feature")
         assert r.returncode == 0, r.stderr
-        text = (hub / "topics" / "proj" / "features" / "email-auth.md").read_text()
+        text = (hub / "topics" / "proj" / "features" / "email-auth.md").read_text(encoding="utf-8")
         assert text.splitlines()[0] == "# E-Mail Auth"
         assert "Phase: discuss" in text
         assert "Type: feature" in text
@@ -45,7 +45,7 @@ class TestFeatureSet:
         r = _run(hub, "--command", "feature-set", "--slug", "proj",
                  "--feature-key", "email-auth", "--set", "Phase=plan")
         assert r.returncode == 0, r.stderr
-        text = (hub / "topics" / "proj" / "features" / "email-auth.md").read_text()
+        text = (hub / "topics" / "proj" / "features" / "email-auth.md").read_text(encoding="utf-8")
         assert "Phase: plan" in text
         assert "Spec: topics/proj/specs/x.md" in text
         assert text.splitlines()[0] == "# E-Mail Auth"
@@ -109,7 +109,7 @@ class TestFeatureList:
              "--feature-key", "offen", "--name", "Offen", "--set", "Phase=plan")
         done = hub / "topics" / "proj" / "features" / "done"
         done.mkdir()
-        (done / "fertig.md").write_text("# Fertig\nPhase: finish\n")
+        (done / "fertig.md").write_text("# Fertig\nPhase: finish\n", encoding="utf-8")
         r = _run(hub, "--command", "feature-list", "--slug", "proj")
         assert [f["key"] for f in json.loads(r.stdout)] == ["offen"]
 
@@ -118,14 +118,14 @@ class TestSessionFeatureBinding:
     def _bound_session(self, tmp_path, feature_key):
         hub = _make_hub(tmp_path)
         (hub / "topics" / "proj" / "STATUS.md").write_text(
-            "# Project Status — proj\nUpdated: 2026-08-05\n\n## Roadmap\n- [planned]   E-Mail Auth\n")
+            "# Project Status — proj\nUpdated: 2026-08-05\n\n## Roadmap\n- [planned]   E-Mail Auth\n", encoding="utf-8")
         _run(hub, "--command", "feature-set", "--slug", "proj",
              "--feature-key", "email-auth", "--name", "E-Mail Auth",
              "--set", "Phase=implement", "--set", "Plan=topics/proj/plans/p.md")
         work = tmp_path / "work"
         (work / "dev_sessions").mkdir(parents=True)
         (work / "dev_sessions" / "sid-1.json").write_text(json.dumps(
-            {"active_dev_slug": "proj", "active_dev_feature": feature_key}))
+            {"active_dev_slug": "proj", "active_dev_feature": feature_key}), encoding="utf-8")
         r = _run(hub, "--command", "session",
                  env_extra={"WORK_DIR": str(work), "CLAUDE_CODE_SESSION_ID": "sid-1"})
         return json.loads(r.stdout)
@@ -148,9 +148,9 @@ class TestGoFeatureEnrichment:
     def test_go_reads_spec_plan_phase_from_feature_file(self, tmp_path):
         hub = _make_hub(tmp_path)
         (hub / "projects-registry.json").write_text(
-            json.dumps([{"slug": "proj", "name": "Proj", "path": ""}]))
+            json.dumps([{"slug": "proj", "name": "Proj", "path": ""}]), encoding="utf-8")
         (hub / "topics" / "proj" / "STATUS.md").write_text(
-            "# Project Status — proj\nUpdated: 2026-08-05\n\n## Roadmap\n- [discussed]  E-Mail Auth\n")
+            "# Project Status — proj\nUpdated: 2026-08-05\n\n## Roadmap\n- [discussed]  E-Mail Auth\n", encoding="utf-8")
         _run(hub, "--command", "feature-set", "--slug", "proj",
              "--feature-key", "email-auth", "--name", "E-Mail Auth",
              "--set", "Phase=plan", "--set", "Spec=topics/proj/specs/s.md")
@@ -165,9 +165,9 @@ class TestProjekteFeatureFallback:
     def test_projekte_active_from_feature_file_when_no_singleton(self, tmp_path):
         hub = _make_hub(tmp_path)
         (hub / "projects-registry.json").write_text(
-            json.dumps([{"slug": "proj", "name": "Proj", "path": ""}]))
+            json.dumps([{"slug": "proj", "name": "Proj", "path": ""}]), encoding="utf-8")
         (hub / "topics" / "proj" / "STATUS.md").write_text(
-            "# Project Status — proj\nUpdated: 2026-08-05\n\n## Roadmap\n- [planned]   E-Mail Auth\n")
+            "# Project Status — proj\nUpdated: 2026-08-05\n\n## Roadmap\n- [planned]   E-Mail Auth\n", encoding="utf-8")
         _run(hub, "--command", "feature-set", "--slug", "proj",
              "--feature-key", "email-auth", "--name", "E-Mail Auth",
              "--set", "Phase=implement")

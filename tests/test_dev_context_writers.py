@@ -26,8 +26,8 @@ Updated: 2026-01-01
 def _make_hub(tmp_path, status=STATUS_MD):
     hub = tmp_path / "hub"
     (hub / "topics" / "testproj").mkdir(parents=True)
-    (hub / "topics" / "testproj" / "STATUS.md").write_text(status)
-    (hub / "projects-registry.json").write_text("[]")
+    (hub / "topics" / "testproj" / "STATUS.md").write_text(status, encoding="utf-8")
+    (hub / "projects-registry.json").write_text("[]", encoding="utf-8")
     return hub
 
 
@@ -38,7 +38,7 @@ def _run(hub, *args):
 
 
 def _status(hub):
-    return (hub / "topics" / "testproj" / "STATUS.md").read_text()
+    return (hub / "topics" / "testproj" / "STATUS.md").read_text(encoding="utf-8")
 
 
 def test_status_set_sets_field_and_stamps_updated(tmp_path):
@@ -125,7 +125,7 @@ VISION_MD = """# Vision — testproj
 
 
 def _make_vision(hub, text=VISION_MD):
-    (hub / "topics" / "testproj" / "VISION.md").write_text(text)
+    (hub / "topics" / "testproj" / "VISION.md").write_text(text, encoding="utf-8")
 
 
 def test_roadmap_set_changes_status_keeping_alignment(tmp_path):
@@ -179,7 +179,7 @@ def test_finish_vision_marks_line(tmp_path):
     r = _run(hub, "--command", "finish-vision", "--slug", "testproj",
              "--feature", "Feature X")
     assert r.returncode == 0
-    text = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    text = (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8")
     assert "- [discussed] Feature X" not in text
     assert "- ✅ Feature X   ← implementiert " in text
     assert "- [idea]      Feature Y" in text
@@ -188,11 +188,11 @@ def test_finish_vision_marks_line(tmp_path):
 def test_finish_vision_not_found_exits_1(tmp_path):
     hub = _make_hub(tmp_path)
     _make_vision(hub)
-    before = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    before = (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8")
     r = _run(hub, "--command", "finish-vision", "--slug", "testproj",
              "--feature", "Nicht da")
     assert r.returncode == 1
-    assert (hub / "topics" / "testproj" / "VISION.md").read_text() == before
+    assert (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8") == before
 
 
 def _load_dev_context():
@@ -338,7 +338,7 @@ def test_finish_vision_keeps_hash_name_and_comment(tmp_path):
     r = _run(hub, "--command", "finish-vision", "--slug", "testproj",
              "--feature", "Task 7: 7 C#-Vorlagen (Harness/Debug)")
     assert r.returncode == 0
-    text = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    text = (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8")
     assert ("- ✅ Task 7: 7 C#-Vorlagen (Harness/Debug)  # Priorität: Hoch "
             "#key:unity-vorlagen   ← implementiert " in text)
 
@@ -349,7 +349,7 @@ def test_finish_vision_matches_by_key(tmp_path):
     r = _run(hub, "--command", "finish-vision", "--slug", "testproj",
              "--feature", "Umformulierter Name", "--feature-key", "unity-vorlagen")
     assert r.returncode == 0
-    text = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    text = (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8")
     assert "- ✅ Task 7: 7 C#-Vorlagen (Harness/Debug)" in text
     assert "Umformulierter Name" not in text
     assert json.loads(r.stdout)["feature"] == "Task 7: 7 C#-Vorlagen (Harness/Debug)"
@@ -358,11 +358,11 @@ def test_finish_vision_matches_by_key(tmp_path):
 def test_finish_vision_unknown_key_and_name_exits_1(tmp_path):
     hub = _make_hub(tmp_path)
     _make_vision(hub, text=VISION_HASH_MD)
-    before = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    before = (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8")
     r = _run(hub, "--command", "finish-vision", "--slug", "testproj",
              "--feature", "Nicht da", "--feature-key", "auch-nicht-da")
     assert r.returncode == 1
-    assert (hub / "topics" / "testproj" / "VISION.md").read_text() == before
+    assert (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8") == before
 
 
 def test_vision_key_anchors_existing_line(tmp_path):
@@ -372,7 +372,7 @@ def test_vision_key_anchors_existing_line(tmp_path):
              "--feature-key", "feature-x", "--feature", "Feature X")
     assert r.returncode == 0
     assert json.loads(r.stdout)["action"] == "anchored"
-    text = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    text = (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8")
     assert "- [discussed] Feature X  #key:feature-x" in text
 
 
@@ -381,12 +381,12 @@ def test_vision_key_is_idempotent(tmp_path):
     _make_vision(hub)
     _run(hub, "--command", "vision-key", "--slug", "testproj",
          "--feature-key", "feature-x", "--feature", "Feature X")
-    first = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    first = (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8")
     r = _run(hub, "--command", "vision-key", "--slug", "testproj",
              "--feature-key", "feature-x", "--feature", "Ganz anderer Name")
     assert r.returncode == 0
     assert json.loads(r.stdout)["action"] == "unchanged"
-    assert (hub / "topics" / "testproj" / "VISION.md").read_text() == first
+    assert (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8") == first
 
 
 def test_vision_key_creates_missing_line(tmp_path):
@@ -398,7 +398,7 @@ def test_vision_key_creates_missing_line(tmp_path):
     assert r.returncode == 0
     assert json.loads(r.stdout)["action"] == "created"
     lines = [l for l in (hub / "topics" / "testproj" / "VISION.md")
-             .read_text().splitlines() if l.startswith("- ")]
+             .read_text(encoding="utf-8").splitlines() if l.startswith("- ")]
     assert lines[-1] == "- [discussed] Neues Feature  #key:neues-feature"
 
 
@@ -409,7 +409,7 @@ def test_vision_key_keeps_existing_comment(tmp_path):
     r = _run(hub, "--command", "vision-key", "--slug", "testproj",
              "--feature-key", "feature-x", "--feature", "Feature X")
     assert r.returncode == 0
-    text = (hub / "topics" / "testproj" / "VISION.md").read_text()
+    text = (hub / "topics" / "testproj" / "VISION.md").read_text(encoding="utf-8")
     assert "- [idea]      Feature X  # Priorität: Hoch  #key:feature-x" in text
 
 

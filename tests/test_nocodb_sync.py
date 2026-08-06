@@ -161,7 +161,7 @@ class TestWriteTableIdToRegistry(unittest.TestCase):
             json.dump(registry, f)
             tmp = Path(f.name)
         write_table_id_to_registry("proj-a", "tbl_xyz", registry_path=tmp)
-        data = json.loads(tmp.read_text())
+        data = json.loads(tmp.read_text(encoding="utf-8"))
         self.assertEqual(data[0]["nocodb_table_id"], "tbl_xyz")
         self.assertNotIn("nocodb_table_id", data[1])
         tmp.unlink()
@@ -275,9 +275,9 @@ Updated: 2026-06-30
     def _run(self, entries):
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "STATUS.md"
-            p.write_text(self.STATUS)
+            p.write_text(self.STATUS, encoding="utf-8")
             merge_status_roadmap(p, entries)
-            return p.read_text()
+            return p.read_text(encoding="utf-8")
 
     def test_projection_matches_nocodb_order_local_only_at_end(self):
         text = self._run([
@@ -311,9 +311,9 @@ Updated: 2026-06-30
         status = self.STATUS + "\n## Notes\nkeep me\n"
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "STATUS.md"
-            p.write_text(status)
+            p.write_text(status, encoding="utf-8")
             merge_status_roadmap(p, [{"name": "Feature A", "status": "idea"}])
-            out = p.read_text()
+            out = p.read_text(encoding="utf-8")
         self.assertIn("## Notes", out)
         self.assertIn("keep me", out)
 
@@ -352,9 +352,9 @@ class TestMergeStatusRoadmap(unittest.TestCase):
     def _run(self, status_body, entries):
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "STATUS.md"
-            p.write_text("# X\nActive: A\n## Roadmap\n" + status_body)
+            p.write_text("# X\nActive: A\n## Roadmap\n" + status_body, encoding="utf-8")
             merge_status_roadmap(p, entries)
-            return [l for l in p.read_text().splitlines() if l.startswith("- [")]
+            return [l for l in p.read_text(encoding="utf-8").splitlines() if l.startswith("- [")]
 
     def test_case_drifted_local_line_does_not_survive_as_zombie(self):
         # Lokale kleingeschriebene Alt-Zeilen + NocoDB großgeschrieben → nur NocoDB überlebt
@@ -443,9 +443,9 @@ Updated: 2026-06-30
     def _run(self, entries):
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "STATUS.md"
-            p.write_text(self.STATUS)
+            p.write_text(self.STATUS, encoding="utf-8")
             merge_status_roadmap(p, entries)
-            return p.read_text()
+            return p.read_text(encoding="utf-8")
 
     def test_nocodb_entries_sorted_by_order(self):
         text = self._run([
@@ -470,9 +470,9 @@ Updated: 2026-06-30
         status = self.STATUS + "\n## Notes\nkeep me\n"
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "STATUS.md"
-            p.write_text(status)
+            p.write_text(status, encoding="utf-8")
             merge_status_roadmap(p, [{"name": "Feature A", "status": "idea"}])
-            out = p.read_text()
+            out = p.read_text(encoding="utf-8")
         self.assertIn("## Notes", out)
         self.assertIn("keep me", out)
 
@@ -493,9 +493,9 @@ Testprojekt.
     def _run(self, entries):
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "VISION.md"
-            p.write_text(self.VISION)
+            p.write_text(self.VISION, encoding="utf-8")
             reorder_vision_roadmap(p, entries)
-            return p.read_text()
+            return p.read_text(encoding="utf-8")
 
     def test_done_line_stays_position_fixed(self):
         text = self._run([
@@ -609,35 +609,35 @@ class TestGlobalLock:
 class TestMergeNoDowngrade:
     def _status(self, tmp_path, lines):
         p = tmp_path / "STATUS.md"
-        p.write_text("# Project Status — x\n\n## Roadmap\n" + "\n".join(lines) + "\n")
+        p.write_text("# Project Status — x\n\n## Roadmap\n" + "\n".join(lines) + "\n", encoding="utf-8")
         return p
 
     def test_local_higher_rank_wins(self, tmp_path):
         from scripts.nocodb_sync import merge_status_roadmap
         p = self._status(tmp_path, ["- [planned]   Feature A"])
         merge_status_roadmap(p, [{"name": "Feature A", "status": "idea"}])
-        assert "- [planned]" in p.read_text()
-        assert "- [idea]" not in p.read_text()
+        assert "- [planned]" in p.read_text(encoding="utf-8")
+        assert "- [idea]" not in p.read_text(encoding="utf-8")
 
     def test_nocodb_higher_rank_still_applies(self, tmp_path):
         from scripts.nocodb_sync import merge_status_roadmap
         p = self._status(tmp_path, ["- [idea]      Feature A"])
         merge_status_roadmap(p, [{"name": "Feature A", "status": "done"}])
-        assert "- [done]" in p.read_text()
+        assert "- [done]" in p.read_text(encoding="utf-8")
 
     def test_sync_nocodb_to_dev_keeps_fresh_local_line(self, tmp_path, monkeypatch):
         # frische lokale Zeile ohne NocoDB-Row überlebt den Sync (Merge statt Wipe)
         import scripts.nocodb_sync as ns
         (tmp_path / "topics" / "proj").mkdir(parents=True)
         p = tmp_path / "topics" / "proj" / "STATUS.md"
-        p.write_text("# x\n\n## Roadmap\n- [idea]      Frisch Lokal\n")
+        p.write_text("# x\n\n## Roadmap\n- [idea]      Frisch Lokal\n", encoding="utf-8")
         monkeypatch.setenv("HUB_DIR", str(tmp_path))
         monkeypatch.setattr(ns, "load_nocodb_table_id", lambda slug: "tbl1")
         monkeypatch.setattr(ns.requests, "get", lambda *a, **k: type(
             "R", (), {"json": lambda self: {"list": [
                 {"Name": "Aus NocoDB", "Status": "planned"}]}})())
         ns.sync_nocodb_to_dev("proj")
-        text = p.read_text()
+        text = p.read_text(encoding="utf-8")
         assert "Frisch Lokal" in text          # H3: kein Wipe
         assert "Aus NocoDB" in text
 
@@ -654,9 +654,9 @@ Updated: 2026-06-30
     def _run(self, entries):
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "STATUS.md"
-            p.write_text(self.STATUS)
+            p.write_text(self.STATUS, encoding="utf-8")
             merge_status_roadmap(p, entries)
-            return p.read_text()
+            return p.read_text(encoding="utf-8")
 
     def test_comment_survives_merge(self):
         text = self._run([{"name": "Firmen-Watchlist", "status": "discussed"}])
@@ -688,9 +688,9 @@ class TestReorderVisionKeepsAnchors(unittest.TestCase):
     def _run(self, entries):
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir) / "VISION.md"
-            p.write_text(self.VISION)
+            p.write_text(self.VISION, encoding="utf-8")
             reorder_vision_roadmap(p, entries)
-            return p.read_text()
+            return p.read_text(encoding="utf-8")
 
     def test_key_anchor_survives_reorder(self):
         text = self._run([
@@ -724,35 +724,35 @@ class TestUpdateStatusActive(unittest.TestCase):
     def test_conditional_keeps_running_feature(self):
         p = self._status("My Current Feature", phase="implement")
         _update_status_active(p, "Top Idea From NocoDB", conditional=True)
-        self.assertIn("Active: My Current Feature", p.read_text())
+        self.assertIn("Active: My Current Feature", p.read_text(encoding="utf-8"))
 
     def test_conditional_fills_never_set_field(self):
         p = self._status("(none)")
         _update_status_active(p, "First Feature", conditional=True)
-        self.assertIn("Active: First Feature", p.read_text())
+        self.assertIn("Active: First Feature", p.read_text(encoding="utf-8"))
 
     def test_conditional_fills_empty_field(self):
         p = self._status("")
         _update_status_active(p, "First Feature", conditional=True)
-        self.assertIn("Active: First Feature", p.read_text())
+        self.assertIn("Active: First Feature", p.read_text(encoding="utf-8"))
 
     def test_conditional_respects_deliberate_no_active(self):
         """finish schreibt den Sentinel absichtlich — der Sync darf ihn nicht
         durch die oberste Idee ersetzen (sonst: aktives Feature bei Phase none)."""
         p = self._status("(keine aktive Entwicklung)")
         _update_status_active(p, "Top Idea From NocoDB", conditional=True)
-        self.assertIn("Active: (keine aktive Entwicklung)", p.read_text())
+        self.assertIn("Active: (keine aktive Entwicklung)", p.read_text(encoding="utf-8"))
 
     def test_unconditional_overwrites_the_sentinel(self):
         """nocodb-reorder ist eine explizite Nutzeraktion und darf ihn setzen."""
         p = self._status("(keine aktive Entwicklung)")
         _update_status_active(p, "Top Idea From NocoDB", conditional=False)
-        self.assertIn("Active: Top Idea From NocoDB", p.read_text())
+        self.assertIn("Active: Top Idea From NocoDB", p.read_text(encoding="utf-8"))
 
     def test_empty_active_writes_the_sentinel(self):
         p = self._status("Some Feature")
         _update_status_active(p, "", conditional=False)
-        self.assertIn("Active: (keine aktive Entwicklung)", p.read_text())
+        self.assertIn("Active: (keine aktive Entwicklung)", p.read_text(encoding="utf-8"))
 
 
 class TestParseStatusMdKeyAnchor(unittest.TestCase):

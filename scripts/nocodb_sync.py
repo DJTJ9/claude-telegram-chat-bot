@@ -8,6 +8,11 @@ import requests
 PROJECT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
+from core.console import enable_safe_console
+
+enable_safe_console()
+
+
 from core.filelock import exclusive_lock  # noqa: E402
 from core.roadmap import (  # noqa: E402
     NO_ACTIVE, STATUS_RANK, UNSET_ACTIVE, split_roadmap_line,

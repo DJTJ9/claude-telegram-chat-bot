@@ -75,16 +75,16 @@ def test_append_idea_hub_writes_to_status_and_vision():
         tmp = pathlib.Path(tmpdir)
         slug_dir = tmp / "topics" / "testslug"
         slug_dir.mkdir(parents=True)
-        (slug_dir / "STATUS.md").write_text("## Roadmap\n")
-        (slug_dir / "VISION.md").write_text("## Roadmap\n")
+        (slug_dir / "STATUS.md").write_text("## Roadmap\n", encoding="utf-8")
+        (slug_dir / "VISION.md").write_text("## Roadmap\n", encoding="utf-8")
         orig_hub = organizer.HUB_DIR
         organizer.HUB_DIR = tmp
         try:
             organizer._append_idea_hub("testslug", "Test Idee")
         finally:
             organizer.HUB_DIR = orig_hub
-        assert "- [idea]      Test Idee" in (slug_dir / "STATUS.md").read_text()
-        assert "- [idea]      Test Idee" in (slug_dir / "VISION.md").read_text()
+        assert "- [idea]      Test Idee" in (slug_dir / "STATUS.md").read_text(encoding="utf-8")
+        assert "- [idea]      Test Idee" in (slug_dir / "VISION.md").read_text(encoding="utf-8")
 
 
 def test_idea_pick_callback_handler_present():
@@ -120,8 +120,8 @@ def test_idea_for_project_name_step_calls_nocodb_sync(monkeypatch):
         tmp = pathlib.Path(tmpdir)
         slug_dir = tmp / "topics" / "testslug"
         slug_dir.mkdir(parents=True)
-        (slug_dir / "STATUS.md").write_text("## Roadmap\n")
-        (slug_dir / "VISION.md").write_text("## Roadmap\n")
+        (slug_dir / "STATUS.md").write_text("## Roadmap\n", encoding="utf-8")
+        (slug_dir / "VISION.md").write_text("## Roadmap\n", encoding="utf-8")
         orig_hub = organizer.HUB_DIR
         organizer.HUB_DIR = tmp
         organizer._workflow[999] = {"step": "idea_for_project:name", "data": {"slug": "testslug"}}

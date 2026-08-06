@@ -4,6 +4,12 @@ import os, sys
 from pathlib import Path
 import requests
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.console import enable_safe_console
+
+enable_safe_console()
+
+
 _env = Path(__file__).parent.parent / ".env"
 if _env.exists():
     for _line in _env.read_text(encoding="utf-8").splitlines():

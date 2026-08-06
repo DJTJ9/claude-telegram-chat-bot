@@ -18,7 +18,7 @@ def load_settings(work_dir=None):
     p = Path(work_dir or WORK_DIR) / "settings.json"
     if p.exists():
         try:
-            data = json.loads(p.read_text())
+            data = json.loads(p.read_text(encoding="utf-8"))
             return {**_DEFAULTS, **data}
         except json.JSONDecodeError:
             pass

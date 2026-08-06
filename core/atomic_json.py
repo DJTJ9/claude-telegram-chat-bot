@@ -36,7 +36,7 @@ def atomic_update(path, mutate, default=None):
         data = dict(seed)
         if path.exists():
             try:
-                data = json.loads(path.read_text())
+                data = json.loads(path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, ValueError):
                 data = dict(seed)
         new = mutate(data)

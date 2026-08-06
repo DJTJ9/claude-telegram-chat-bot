@@ -9,6 +9,12 @@ import sys
 from datetime import date
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.console import enable_safe_console
+
+enable_safe_console()
+
+
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 FAIL_MARKER = " — fail:"
 

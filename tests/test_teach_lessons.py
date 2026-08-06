@@ -34,21 +34,21 @@ def test_title_lektion_two_digit():
 def test_get_topics_returns_sorted_slugs(tmp_path):
     for slug in ["sql-basics", "python-grundlagen", "tdd"]:
         (tmp_path / slug / "lessons").mkdir(parents=True)
-        (tmp_path / slug / "lessons" / "lektion-01-intro.html").write_text("")
+        (tmp_path / slug / "lessons" / "lektion-01-intro.html").write_text("", encoding="utf-8")
     topics = _get_topics(teach_dir=tmp_path)
     assert [s for s, _ in topics] == ["python-grundlagen", "sql-basics", "tdd"]
 
 def test_get_topics_skips_empty_lessons(tmp_path):
     (tmp_path / "empty-course" / "lessons").mkdir(parents=True)
     (tmp_path / "python-grundlagen" / "lessons").mkdir(parents=True)
-    (tmp_path / "python-grundlagen" / "lessons" / "lektion-01-intro.html").write_text("")
+    (tmp_path / "python-grundlagen" / "lessons" / "lektion-01-intro.html").write_text("", encoding="utf-8")
     topics = _get_topics(teach_dir=tmp_path)
     assert len(topics) == 1
     assert topics[0][0] == "python-grundlagen"
 
 def test_get_topics_slug_to_label(tmp_path):
     (tmp_path / "python-grundlagen" / "lessons").mkdir(parents=True)
-    (tmp_path / "python-grundlagen" / "lessons" / "lektion-01-intro.html").write_text("")
+    (tmp_path / "python-grundlagen" / "lessons" / "lektion-01-intro.html").write_text("", encoding="utf-8")
     topics = _get_topics(teach_dir=tmp_path)
     assert topics[0][1] == "Python Grundlagen"
 
@@ -77,8 +77,8 @@ def test_keyboard_button_text():
 def test_send_lesson_list_format(tmp_path):
     lessons = tmp_path / "python-grundlagen" / "lessons"
     lessons.mkdir(parents=True)
-    (lessons / "lektion-01-erste-schritte.html").write_text("")
-    (lessons / "lektion-02-variablen.html").write_text("")
+    (lessons / "lektion-01-erste-schritte.html").write_text("", encoding="utf-8")
+    (lessons / "lektion-02-variablen.html").write_text("", encoding="utf-8")
 
     sent_kwargs = []
     with patch("bots.teach.send_message", lambda tok, cid, text, **kw: sent_kwargs.append((text, kw))):
@@ -209,7 +209,7 @@ def test_inject_nav_idempotent(tmp_path):
 
 
 def test_question_relay_removed():
-    src = (Path(__file__).parent.parent / "bots" / "teach.py").read_text()
+    src = (Path(__file__).parent.parent / "bots" / "teach.py").read_text(encoding="utf-8")
     for token in ("notifications_enabled", "telegram_ask", "_question_poll",
                   "_active_question_id", "_write_question_response",
                   "pending_question", "__freitext__"):
@@ -217,7 +217,7 @@ def test_question_relay_removed():
 
 
 def test_run_teach_prompt_has_no_question_instruction():
-    src = (Path(__file__).parent.parent / "bots" / "teach.py").read_text()
+    src = (Path(__file__).parent.parent / "bots" / "teach.py").read_text(encoding="utf-8")
     idx = src.index("def _run_teach(")
     snippet = src[idx:idx + 900]
     assert "question_instruction" not in snippet

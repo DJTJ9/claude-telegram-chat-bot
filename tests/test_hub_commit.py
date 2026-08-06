@@ -37,10 +37,10 @@ def _staged(repo):
 def test_bleed_two_sessions(tmp_path):
     """Session A commits only its path; Session B's staged file stays uncommitted."""
     repo = _init_repo(tmp_path / "hub")
-    (repo / "seed").write_text("x")
+    (repo / "seed").write_text("x", encoding="utf-8")
     _git(repo, "add", "seed"); _git(repo, "commit", "-qm", "seed")
     # both sessions stage their own file into the shared index
-    (repo / "A").write_text("a"); (repo / "B").write_text("b")
+    (repo / "A").write_text("a", encoding="utf-8"); (repo / "B").write_text("b", encoding="utf-8")
     _git(repo, "add", "A"); _git(repo, "add", "B")
     r = _run(repo, "A", "-m", "commit A")
     assert r.returncode == 0, r.stderr
@@ -50,9 +50,9 @@ def test_bleed_two_sessions(tmp_path):
 
 def test_pathspec_only_named(tmp_path):
     repo = _init_repo(tmp_path / "hub")
-    (repo / "seed").write_text("x")
+    (repo / "seed").write_text("x", encoding="utf-8")
     _git(repo, "add", "seed"); _git(repo, "commit", "-qm", "seed")
-    (repo / "x").write_text("1"); (repo / "y").write_text("2")
+    (repo / "x").write_text("1", encoding="utf-8"); (repo / "y").write_text("2", encoding="utf-8")
     r = _run(repo, "x", "-m", "only x")
     assert r.returncode == 0, r.stderr
     assert _log_files(repo) == {"x"}
@@ -60,9 +60,9 @@ def test_pathspec_only_named(tmp_path):
 
 def test_new_untracked_file_gets_added(tmp_path):
     repo = _init_repo(tmp_path / "hub")
-    (repo / "seed").write_text("x")
+    (repo / "seed").write_text("x", encoding="utf-8")
     _git(repo, "add", "seed"); _git(repo, "commit", "-qm", "seed")
-    (repo / "fresh").write_text("new")        # never git-add'd by caller
+    (repo / "fresh").write_text("new", encoding="utf-8")        # never git-add'd by caller
     r = _run(repo, "fresh", "-m", "add fresh")
     assert r.returncode == 0, r.stderr
     assert _log_files(repo) == {"fresh"}
@@ -70,7 +70,7 @@ def test_new_untracked_file_gets_added(tmp_path):
 
 def test_nothing_to_commit_is_success(tmp_path):
     repo = _init_repo(tmp_path / "hub")
-    (repo / "seed").write_text("x")
+    (repo / "seed").write_text("x", encoding="utf-8")
     _git(repo, "add", "seed"); _git(repo, "commit", "-qm", "seed")
     r = _run(repo, "seed", "-m", "noop")      # seed unchanged
     assert r.returncode == 0, r.stdout + r.stderr
@@ -83,10 +83,10 @@ def test_pathspec_noop_with_other_dirty_tracked_file_is_success(tmp_path):
     the finish.md `&&`-chain race: this exact message broke a later `&&`-chained
     NocoDB sync step, LEARNINGS dev-skill 2026-07-16)."""
     repo = _init_repo(tmp_path / "hub")
-    (repo / "target").write_text("x")
-    (repo / "other").write_text("y")
+    (repo / "target").write_text("x", encoding="utf-8")
+    (repo / "other").write_text("y", encoding="utf-8")
     _git(repo, "add", "target", "other"); _git(repo, "commit", "-qm", "seed")
-    (repo / "other").write_text("changed")    # dirty, but NOT in this call's paths
+    (repo / "other").write_text("changed", encoding="utf-8")    # dirty, but NOT in this call's paths
     r = _run(repo, "target", "-m", "noop for target")
     assert r.returncode == 0, r.stdout + r.stderr
     status = _git(repo, "status", "--short").stdout
@@ -98,10 +98,10 @@ def test_push_to_bare_remote(tmp_path):
     subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
     repo = _init_repo(tmp_path / "work")
     _git(repo, "remote", "add", "origin", str(bare))
-    (repo / "f").write_text("1")
+    (repo / "f").write_text("1", encoding="utf-8")
     _git(repo, "add", "f"); _git(repo, "commit", "-qm", "init")
     _git(repo, "push", "-q", "-u", "origin", "HEAD")
-    (repo / "g").write_text("2"); _git(repo, "add", "g")
+    (repo / "g").write_text("2", encoding="utf-8"); _git(repo, "add", "g")
     r = _run(repo, "g", "-m", "with push", "--push")
     assert r.returncode == 0, r.stdout + r.stderr
     rl = subprocess.run(["git", "-C", str(bare), "log", "--oneline"],

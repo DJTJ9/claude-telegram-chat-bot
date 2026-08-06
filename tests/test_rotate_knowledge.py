@@ -15,7 +15,7 @@ def _entry(n):
 
 def _write(path, count):
     body = "\n".join(_entry(n) for n in range(count, 0, -1))
-    path.write_text(HEADER + "\n" + body)
+    path.write_text(HEADER + "\n" + body, encoding="utf-8")
 
 
 def _run(path, keep=None):
@@ -28,11 +28,11 @@ def _run(path, keep=None):
 def test_exactly_keep_does_not_rotate(tmp_path):
     p = tmp_path / "DECISIONS.md"
     _write(p, 8)
-    before = p.read_text()
+    before = p.read_text(encoding="utf-8")
     r = _run(p)
     assert r.returncode == 0
     assert json.loads(r.stdout) == {"rotated": 0}
-    assert p.read_text() == before
+    assert p.read_text(encoding="utf-8") == before
     assert not (tmp_path / "DECISIONS_ARCHIVE.md").exists()
 
 
@@ -43,11 +43,11 @@ def test_keep_plus_one_rotates_oldest(tmp_path):
     assert r.returncode == 0
     out = json.loads(r.stdout)
     assert out["rotated"] == 1
-    src = p.read_text()
+    src = p.read_text(encoding="utf-8")
     assert src.count("## [") == 8
     assert "Entscheidung 1" not in src
     assert "Entscheidung 9" in src
-    arc = (tmp_path / "DECISIONS_ARCHIVE.md").read_text()
+    arc = (tmp_path / "DECISIONS_ARCHIVE.md").read_text(encoding="utf-8")
     assert arc.startswith("# Decisions Archive — Dev Skill")
     assert "Entscheidung 1" in arc
 
@@ -57,32 +57,32 @@ def test_far_over_keep_moves_all_older_in_order(tmp_path):
     _write(p, 12)
     r = _run(p)
     assert json.loads(r.stdout)["rotated"] == 4
-    arc = (tmp_path / "DECISIONS_ARCHIVE.md").read_text()
+    arc = (tmp_path / "DECISIONS_ARCHIVE.md").read_text(encoding="utf-8")
     assert arc.count("## [") == 4
     assert arc.index("Entscheidung 4") < arc.index("Entscheidung 1")
-    assert p.read_text().count("## [") == 8
+    assert p.read_text(encoding="utf-8").count("## [") == 8
 
 
 def test_appends_to_existing_archive_keeping_order(tmp_path):
     p = tmp_path / "LEARNINGS.md"
     p.write_text("# Learnings — Dev Skill\n\n"
-                 + "\n".join(_entry(n) for n in range(3, 0, -1)))
+                 + "\n".join(_entry(n) for n in range(3, 0, -1)), encoding="utf-8")
     arc = tmp_path / "LEARNINGS_ARCHIVE.md"
-    arc.write_text("# Learnings Archive — Dev Skill\n\n## [2026-01-01] Alt\n- **Grund:** alt\n")
+    arc.write_text("# Learnings Archive — Dev Skill\n\n## [2026-01-01] Alt\n- **Grund:** alt\n", encoding="utf-8")
     r = _run(p, keep=1)
     assert r.returncode == 0
-    text = arc.read_text()
+    text = arc.read_text(encoding="utf-8")
     assert text.count("# Learnings Archive") == 1
     assert text.index("Alt") < text.index("Entscheidung 2")
     assert text.index("Entscheidung 2") < text.index("Entscheidung 1")
-    assert p.read_text().count("## [") == 1
+    assert p.read_text(encoding="utf-8").count("## [") == 1
 
 
 def test_custom_keep(tmp_path):
     p = tmp_path / "DECISIONS.md"
     _write(p, 5)
     assert json.loads(_run(p, keep=2).stdout)["rotated"] == 3
-    assert p.read_text().count("## [") == 2
+    assert p.read_text(encoding="utf-8").count("## [") == 2
 
 
 def test_missing_file_exits_1(tmp_path):
@@ -93,7 +93,7 @@ def test_missing_file_exits_1(tmp_path):
 
 def test_unparsable_title_exits_1(tmp_path):
     p = tmp_path / "DECISIONS.md"
-    p.write_text("Kein Titel hier\n\n" + "\n".join(_entry(n) for n in range(9, 0, -1)))
+    p.write_text("Kein Titel hier\n\n" + "\n".join(_entry(n) for n in range(9, 0, -1)), encoding="utf-8")
     r = _run(p)
     assert r.returncode == 1
     assert "title" in r.stderr.lower()

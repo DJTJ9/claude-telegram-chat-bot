@@ -14,6 +14,12 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.console import enable_safe_console
+
+enable_safe_console()
+
+
 try:
     from scripts.unity_compile_check import image_tag  # Test-Kontext (Repo-Root auf sys.path)
 except ImportError:

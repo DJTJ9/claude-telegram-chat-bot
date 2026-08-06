@@ -22,7 +22,7 @@ SSH_HOST = "sharky"
 
 
 def load_registry() -> list:
-    return json.loads((HUB_DIR / "projects-registry.json").read_text())
+    return json.loads((HUB_DIR / "projects-registry.json").read_text(encoding="utf-8"))
 
 
 def resolve_slug(registry: list, slug: str) -> str:

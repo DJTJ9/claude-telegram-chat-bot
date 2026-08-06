@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 def _write_wait(tmp_path, session_id="s1", **over):
     data = {"slug": "dev-skill", "pane": "%5",
             "question": "Frage? A) Ja B) Nein", "timestamp": 1234.0, **over}
-    (tmp_path / f"pending_wait_{session_id}.json").write_text(json.dumps(data))
+    (tmp_path / f"pending_wait_{session_id}.json").write_text(json.dumps(data), encoding="utf-8")
     return data
 
 
@@ -86,14 +86,14 @@ def test_notify_deduped_across_restart_via_marker(tmp_path):
             brain._wait_notified.clear()
         brain._check_wait_notify()
     ms.assert_called_once()  # M4: Marker verhindert Doppel-Notify
-    assert (tmp_path / "pending_wait_s1.notified").read_text() == "111.0"
+    assert (tmp_path / "pending_wait_s1.notified").read_text(encoding="utf-8") == "111.0"
 
 
 def test_phase_suffix_from_feature_file(tmp_path):
     import bots.brain as brain
     fdir = tmp_path / "topics" / "dev-skill" / "features"
     fdir.mkdir(parents=True)
-    (fdir / "email-auth.md").write_text("# E-Mail Auth\nPhase: implement\n")
+    (fdir / "email-auth.md").write_text("# E-Mail Auth\nPhase: implement\n", encoding="utf-8")
     _write_wait(tmp_path, feature="email-auth", timestamp=1.0)
     with patch.object(brain, "WORK_DIR", tmp_path), \
          patch.object(brain, "HUB_DIR", tmp_path), \

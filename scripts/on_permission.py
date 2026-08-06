@@ -18,7 +18,7 @@ if session_id:
     session_path = PROJECT_DIR / "dev_sessions" / f"{session_id}.json"
     if session_path.exists():
         try:
-            sdata = json.loads(session_path.read_text())
+            sdata = json.loads(session_path.read_text(encoding="utf-8"))
             impl_mode = sdata.get("implementation_mode", False)
             impl_until = sdata.get("implementation_mode_until")
             if impl_mode and impl_until:

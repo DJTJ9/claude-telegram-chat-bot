@@ -165,7 +165,7 @@ def test_has_cookies_false_wenn_file_fehlt(monkeypatch, tmp_path):
 
 def test_probe_und_download_geben_cookies_flag_weiter(monkeypatch, tmp_path):
     cookies = tmp_path / "youtube_cookies.txt"
-    cookies.write_text("# Netscape HTTP Cookie File\n")
+    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
     monkeypatch.setattr(youtube_enrich, "COOKIES_FILE", str(cookies))
     calls = []
 

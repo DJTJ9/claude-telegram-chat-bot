@@ -10,12 +10,13 @@ import sys
 from datetime import date
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.console import enable_safe_console
+
 # Feature-Namen enthalten regelmäßig Zeichen außerhalb von cp1252 (→, –, …).
 # Ohne das hier wirft print() auf der Windows-Konsole UnicodeEncodeError und ein
 # grüner Gate endet mit Exit 1 — ein falsches Rot, das wie ein echtes aussieht.
-for _stream in (sys.stdout, sys.stderr):
-    if hasattr(_stream, "reconfigure"):
-        _stream.reconfigure(errors="replace")
+enable_safe_console()
 
 FAIL_MARKER = " — fail:"
 DIMENSIONS = ("Feel", "Balance", "Fun", "Optik", "Bug")

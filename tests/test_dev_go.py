@@ -43,7 +43,7 @@ Updated: 2026-01-01
 
 
 def _make_hub(tmp_path):
-    (tmp_path / "projects-registry.json").write_text(json.dumps(REGISTRY))
+    (tmp_path / "projects-registry.json").write_text(json.dumps(REGISTRY), encoding="utf-8")
     for slug, status in [
         ("shopping-navigator", STATUS_SHOPPING),
         ("dart-app", STATUS_DART),
@@ -51,7 +51,7 @@ def _make_hub(tmp_path):
     ]:
         d = tmp_path / "topics" / slug
         d.mkdir(parents=True)
-        (d / "STATUS.md").write_text(status)
+        (d / "STATUS.md").write_text(status, encoding="utf-8")
     return tmp_path
 
 
@@ -133,7 +133,7 @@ def test_no_project_match_has_no_project_matches(tmp_path):
 def test_project_matches_skips_missing_status_md(tmp_path):
     registry = REGISTRY + [{"slug": "ghost", "name": "Ghost", "path": "",
                             "path_windows": "", "repo": "", "description": ""}]
-    (tmp_path / "projects-registry.json").write_text(json.dumps(registry))
+    (tmp_path / "projects-registry.json").write_text(json.dumps(registry), encoding="utf-8")
     for slug, status in [
         ("shopping-navigator", STATUS_SHOPPING),
         ("dart-app", STATUS_DART),
@@ -141,7 +141,7 @@ def test_project_matches_skips_missing_status_md(tmp_path):
     ]:
         d = tmp_path / "topics" / slug
         d.mkdir(parents=True)
-        (d / "STATUS.md").write_text(status)
+        (d / "STATUS.md").write_text(status, encoding="utf-8")
     r = _go(tmp_path, "ghost zzz")
     assert "error" in r
     assert "project_matches" not in r

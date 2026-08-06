@@ -9,6 +9,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.console import enable_safe_console
+
+enable_safe_console()
+
+
 BEGIN = "# >>> game-skill unity hygiene >>>"
 END = "# <<< game-skill unity hygiene <<<"
 

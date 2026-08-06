@@ -51,7 +51,7 @@ def test_unparseable_input_blocks():
 
 
 def test_relay_and_gate_code_removed():
-    src = SCRIPT.read_text()
+    src = SCRIPT.read_text(encoding="utf-8")
     assert "notifications_enabled" not in src
     assert "pending_permission" not in src
     assert "permission_response" not in src
@@ -59,6 +59,6 @@ def test_relay_and_gate_code_removed():
 
 
 def test_implementation_mode_branch_kept():
-    src = SCRIPT.read_text()
+    src = SCRIPT.read_text(encoding="utf-8")
     assert "implementation_mode" in src
     assert "implementation_mode_until" in src

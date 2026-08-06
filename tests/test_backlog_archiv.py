@@ -55,16 +55,16 @@ def test_run_archive_once_calls_run_claude():
     assert any(bot.ARCHIV_DATA_SOURCE_ID in (sp or "") for sp in calls)
 
 def test_archive_migration_runs_if_flag_missing(tmp_path):
-    (tmp_path / "settings.json").write_text('{"notifications_enabled": true}')
+    (tmp_path / "settings.json").write_text('{"notifications_enabled": true}', encoding="utf-8")
     calls = []
     with patch("bot.run_claude", lambda *a, **kw: calls.append(True) or "Nichts zu archivieren."):
         bot._run_migration(str(tmp_path))
     assert len(calls) >= 1
-    settings = json.loads((tmp_path / "settings.json").read_text())
+    settings = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
     assert settings.get("archive_migration_done") is True
 
 def test_archive_migration_skipped_if_flag_set(tmp_path):
-    (tmp_path / "settings.json").write_text('{"notifications_enabled": true, "archive_migration_done": true}')
+    (tmp_path / "settings.json").write_text('{"notifications_enabled": true, "archive_migration_done": true}', encoding="utf-8")
     calls = []
     with patch("bot.run_claude", lambda *a, **kw: calls.append(True) or ""):
         bot._run_migration(str(tmp_path))

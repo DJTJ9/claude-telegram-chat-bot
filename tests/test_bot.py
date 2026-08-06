@@ -87,12 +87,12 @@ def test_load_settings_default(tmp_path):
     assert load_settings(tmp_path) == {"notifications_enabled": True}
 
 def test_load_settings_reads_file(tmp_path):
-    (tmp_path / "settings.json").write_text('{"notifications_enabled": false}')
+    (tmp_path / "settings.json").write_text('{"notifications_enabled": false}', encoding="utf-8")
     assert load_settings(tmp_path) == {"notifications_enabled": False}
 
 def test_save_settings(tmp_path):
     save_settings({"notifications_enabled": False}, tmp_path)
-    data = json.loads((tmp_path / "settings.json").read_text())
+    data = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
     assert data == {"notifications_enabled": False}
 
 def test_save_load_roundtrip(tmp_path):
@@ -100,7 +100,7 @@ def test_save_load_roundtrip(tmp_path):
     assert load_settings(tmp_path) == {"notifications_enabled": True}
 
 def test_load_settings_corrupt_file(tmp_path):
-    (tmp_path / "settings.json").write_text("{bad json}")
+    (tmp_path / "settings.json").write_text("{bad json}", encoding="utf-8")
     assert load_settings(tmp_path) == {"notifications_enabled": True}
 
 def test_bot_notify_in_hilfe():
@@ -270,8 +270,8 @@ def test_brainstorming_prefix_parse_with_basis():
 def test_specs_listing_format(tmp_path):
     specs_dir = tmp_path / "docs" / "superpowers" / "specs"
     specs_dir.mkdir(parents=True)
-    (specs_dir / "2026-06-11-telegram-relay-design.md").write_text("")
-    (specs_dir / "2026-06-13-teach-improvements-design.md").write_text("")
+    (specs_dir / "2026-06-11-telegram-relay-design.md").write_text("", encoding="utf-8")
+    (specs_dir / "2026-06-13-teach-improvements-design.md").write_text("", encoding="utf-8")
 
     files = sorted(specs_dir.glob("*.md"))
     lines = []
@@ -313,7 +313,7 @@ def test_load_registry_empty_when_missing(tmp_path, monkeypatch):
 def test_load_registry_returns_list(tmp_path, monkeypatch):
     import bot
     registry = [{"slug": "test", "name": "Test", "path": "", "repo": "", "description": ""}]
-    (tmp_path / "projects-registry.json").write_text(json.dumps(registry))
+    (tmp_path / "projects-registry.json").write_text(json.dumps(registry), encoding="utf-8")
     monkeypatch.setattr(bot, "HUB_DIR", str(tmp_path))
     result = bot._load_registry()
     assert len(result) == 1
@@ -334,7 +334,7 @@ def test_parse_vision_features_parses_unchecked(tmp_path, monkeypatch):
     slug_dir.mkdir(parents=True)
     (slug_dir / "VISION.md").write_text(
         "## Features\n- [ ] Feature A\n- [x] Done Feature\n- [ ] Feature B\n"
-    )
+    , encoding="utf-8")
     result = bot._parse_vision_features("test-proj")
     assert result == ["Feature A", "Feature B"]
     assert "Done Feature" not in result
@@ -345,7 +345,7 @@ def test_parse_vision_features_all_returned(tmp_path, monkeypatch):
     slug_dir = tmp_path / "topics" / "big-proj"
     slug_dir.mkdir(parents=True)
     lines = "\n".join(f"- [ ] Feature {i}" for i in range(15))
-    (slug_dir / "VISION.md").write_text(f"## Features\n{lines}\n")
+    (slug_dir / "VISION.md").write_text(f"## Features\n{lines}\n", encoding="utf-8")
     result = bot._parse_vision_features("big-proj")
     assert len(result) == 15
     assert result[0] == "Feature 0"
@@ -394,7 +394,7 @@ def test_vision_handler_empty():
 def test_create_project_entry_adds_to_registry(tmp_path, monkeypatch):
     import bot
     monkeypatch.setattr(bot, "HUB_DIR", str(tmp_path))
-    (tmp_path / "projects-registry.json").write_text("[]")
+    (tmp_path / "projects-registry.json").write_text("[]", encoding="utf-8")
     monkeypatch.setattr(bot, "_vision_active", False)
     monkeypatch.setattr(bot, "send_message", lambda *a, **kw: None)
     monkeypatch.setattr(bot, "_run_vision", lambda slug: None)

@@ -11,7 +11,7 @@ def test_load_settings_defaults():
 
 
 def test_settings_json_has_no_notifications_flag():
-    data = json.loads((Path(__file__).parent.parent / "settings.json").read_text())
+    data = json.loads((Path(__file__).parent.parent / "settings.json").read_text(encoding="utf-8"))
     assert "notifications_enabled" not in data
 
 def test_save_and_load():

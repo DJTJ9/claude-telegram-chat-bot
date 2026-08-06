@@ -8,6 +8,11 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
+from core.console import enable_safe_console
+
+enable_safe_console()
+
+
 from core.claude import run_claude
 
 

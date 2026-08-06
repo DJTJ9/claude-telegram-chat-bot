@@ -1,7 +1,7 @@
 from pathlib import Path
 
-CLAUDE_MD = Path("/root/.claude/CLAUDE.md").read_text()
-FINISH_MD = Path("/root/.claude/skills/dev/phases/finish.md").read_text()
+CLAUDE_MD = Path("/root/.claude/CLAUDE.md").read_text(encoding="utf-8")
+FINISH_MD = Path("/root/.claude/skills/dev/phases/finish.md").read_text(encoding="utf-8")
 
 
 def test_claude_md_relay_section_removed():

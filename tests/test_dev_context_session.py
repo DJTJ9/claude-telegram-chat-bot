@@ -20,8 +20,8 @@ Updated: 2026-01-01
 
 def _make_hub(tmp_path):
     (tmp_path / "topics" / "testproj").mkdir(parents=True)
-    (tmp_path / "topics" / "testproj" / "STATUS.md").write_text(STATUS_MD)
-    (tmp_path / "projects-registry.json").write_text("[]")
+    (tmp_path / "topics" / "testproj" / "STATUS.md").write_text(STATUS_MD, encoding="utf-8")
+    (tmp_path / "projects-registry.json").write_text("[]", encoding="utf-8")
     return tmp_path
 
 
@@ -40,7 +40,7 @@ def test_session_includes_spec_plan_features(tmp_path):
     work = tmp_path / "work"
     sessions_dir = work / "dev_sessions"
     sessions_dir.mkdir(parents=True)
-    (sessions_dir / "sid-1.json").write_text(json.dumps({"active_dev_slug": "testproj"}))
+    (sessions_dir / "sid-1.json").write_text(json.dumps({"active_dev_slug": "testproj"}), encoding="utf-8")
 
     result = _session(hub, work, "sid-1")
 

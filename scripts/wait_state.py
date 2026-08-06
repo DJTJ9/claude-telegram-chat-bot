@@ -59,7 +59,7 @@ def write(name: str, content: str) -> None:
     if _remote():
         _ssh(f"cat > {_target(name)}", stdin=content)
         return
-    (_work_dir() / name).write_text(content)
+    (_work_dir() / name).write_text(content, encoding="utf-8")
 
 
 def read(name: str) -> str:
@@ -68,7 +68,7 @@ def read(name: str) -> str:
         r = _ssh(f"cat {_target(name)} 2>/dev/null")
         return r.stdout if r and r.returncode == 0 else ""
     try:
-        return (_work_dir() / name).read_text()
+        return (_work_dir() / name).read_text(encoding="utf-8")
     except OSError:
         return ""
 

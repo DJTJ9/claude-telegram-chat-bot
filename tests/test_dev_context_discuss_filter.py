@@ -23,8 +23,8 @@ Updated: 2026-01-01
 
 def _make_hub(tmp_path):
     (tmp_path / "topics" / "testproj").mkdir(parents=True)
-    (tmp_path / "topics" / "testproj" / "STATUS.md").write_text(STATUS_MD)
-    (tmp_path / "projects-registry.json").write_text("[]")
+    (tmp_path / "topics" / "testproj" / "STATUS.md").write_text(STATUS_MD, encoding="utf-8")
+    (tmp_path / "projects-registry.json").write_text("[]", encoding="utf-8")
     return tmp_path
 
 

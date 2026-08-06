@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 def test_load_projects_reads_registry(tmp_path):
     import bots.brain as brain
     reg = tmp_path / "projects-registry.json"
-    reg.write_text(json.dumps([{"slug": "my-app", "name": "MyApp", "path": ""}]))
+    reg.write_text(json.dumps([{"slug": "my-app", "name": "MyApp", "path": ""}]), encoding="utf-8")
     with patch.object(brain, "HUB_DIR", tmp_path):
         result = brain._load_projects()
     assert result == [{"slug": "my-app", "name": "MyApp", "path": ""}]
@@ -30,7 +30,7 @@ def test_get_dev_status_reads_status_md(tmp_path):
     import bots.brain as brain
     status = tmp_path / "topics" / "my-app" / "STATUS.md"
     status.parent.mkdir(parents=True)
-    status.write_text("# Status\nActive: Feature X\nPhase: plan\n")
+    status.write_text("# Status\nActive: Feature X\nPhase: plan\n", encoding="utf-8")
     with patch.object(brain, "HUB_DIR", tmp_path):
         active, phase = brain._get_dev_status("my-app")
     assert active == "Feature X"
@@ -54,7 +54,7 @@ def test_build_main_keyboard_structure():
 
 
 def test_relay_and_toggle_code_removed():
-    src = (Path(__file__).parent.parent / "bots" / "brain.py").read_text()
+    src = (Path(__file__).parent.parent / "bots" / "brain.py").read_text(encoding="utf-8")
     for token in ("_check_relay_question", "_handle_relay_callback",
                   "_write_relay_response", "_handle_wait_reply",
                   "_wait_prompt_still_open", "_toggle_notify",
@@ -78,20 +78,20 @@ def test_append_idea_writes_to_status_and_vision(tmp_path):
     (tmp_path / "topics" / "p").mkdir(parents=True)
     status = tmp_path / "topics" / "p" / "STATUS.md"
     vision = tmp_path / "topics" / "p" / "VISION.md"
-    status.write_text("# Status\n## Roadmap\n")
-    vision.write_text("# Vision\n## Roadmap\n")
+    status.write_text("# Status\n## Roadmap\n", encoding="utf-8")
+    vision.write_text("# Vision\n## Roadmap\n", encoding="utf-8")
     with patch.object(brain, "HUB_DIR", tmp_path):
         brain._append_idea("p", "Neue Idee")
-    assert "- [idea]      Neue Idee" in status.read_text()
-    assert "- [idea]      Neue Idee" in vision.read_text()
+    assert "- [idea]      Neue Idee" in status.read_text(encoding="utf-8")
+    assert "- [idea]      Neue Idee" in vision.read_text(encoding="utf-8")
 
 
 def test_handle_message_capture_text(tmp_path):
     import bots.brain as brain
     brain._capture_state = {"slug": "p", "name": "ProjP"}
     (tmp_path / "topics" / "p").mkdir(parents=True)
-    (tmp_path / "topics" / "p" / "STATUS.md").write_text("# S\n## Roadmap\n")
-    (tmp_path / "topics" / "p" / "VISION.md").write_text("# V\n## Roadmap\n")
+    (tmp_path / "topics" / "p" / "STATUS.md").write_text("# S\n## Roadmap\n", encoding="utf-8")
+    (tmp_path / "topics" / "p" / "VISION.md").write_text("# V\n## Roadmap\n", encoding="utf-8")
     with patch.object(brain, "HUB_DIR", tmp_path), \
          patch("bots.brain.send_message") as mock_send, \
          patch("bots.brain._summarize_idea", return_value="Gute Idee"), \
@@ -106,8 +106,8 @@ def test_handle_message_capture_syncs_idea_to_nocodb(tmp_path):
     import bots.brain as brain
     brain._capture_state = {"slug": "p", "name": "ProjP"}
     (tmp_path / "topics" / "p").mkdir(parents=True)
-    (tmp_path / "topics" / "p" / "STATUS.md").write_text("# S\n## Roadmap\n")
-    (tmp_path / "topics" / "p" / "VISION.md").write_text("# V\n## Roadmap\n")
+    (tmp_path / "topics" / "p" / "STATUS.md").write_text("# S\n## Roadmap\n", encoding="utf-8")
+    (tmp_path / "topics" / "p" / "VISION.md").write_text("# V\n## Roadmap\n", encoding="utf-8")
     with patch.object(brain, "HUB_DIR", tmp_path), \
          patch("bots.brain.send_message"), \
          patch("bots.brain._summarize_idea", return_value="Gute Idee"), \

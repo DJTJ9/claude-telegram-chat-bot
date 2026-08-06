@@ -41,7 +41,7 @@ if __name__ == "__main__":
         data = {}
         if session_path.exists():
             try:
-                data = json.loads(session_path.read_text())
+                data = json.loads(session_path.read_text(encoding="utf-8"))
             except Exception:
                 data = {}
         data["active_dev_slug"] = args[1]

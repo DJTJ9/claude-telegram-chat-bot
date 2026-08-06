@@ -115,7 +115,7 @@ class TestWriteProjectFiles(unittest.TestCase):
             scratch = Path(tmp)
             stale = scratch / "Assets" / "Skill" / "Runtime" / "Old.cs"
             stale.parent.mkdir(parents=True)
-            stale.write_text("old")
+            stale.write_text("old", encoding="utf-8")
 
             written = write_project_files(extract_blocks(SAMPLE_MD), scratch)
 
@@ -149,7 +149,7 @@ class TestImageTag(unittest.TestCase):
             pv = Path(tmp) / "ProjectSettings" / "ProjectVersion.txt"
             pv.parent.mkdir(parents=True)
             pv.write_text("m_EditorVersion: 6000.0.32f1\n"
-                          "m_EditorVersionWithRevision: 6000.0.32f1 (12345abc)\n")
+                          "m_EditorVersionWithRevision: 6000.0.32f1 (12345abc)\n", encoding="utf-8")
             self.assertEqual(image_tag(Path(tmp)),
                              "unityci/editor:ubuntu-6000.0.32f1-base-3")
 
@@ -196,13 +196,13 @@ class TestParseLog(unittest.TestCase):
 def _env(tmp):
     """Baut md/scratch/license in tmp, gibt argv zurück."""
     md = Path(tmp) / "unity.md"
-    md.write_text(SAMPLE_MD)
+    md.write_text(SAMPLE_MD, encoding="utf-8")
     scratch = Path(tmp) / "scratch"
     pv = scratch / "ProjectSettings" / "ProjectVersion.txt"
     pv.parent.mkdir(parents=True)
-    pv.write_text("m_EditorVersion: 6000.0.32f1\n")
+    pv.write_text("m_EditorVersion: 6000.0.32f1\n", encoding="utf-8")
     lic = Path(tmp) / "Unity_lic.ulf"
-    lic.write_text("<lic/>")
+    lic.write_text("<lic/>", encoding="utf-8")
     return ["unity_compile_check.py", "--md", str(md),
             "--scratch", str(scratch), "--license", str(lic)]
 

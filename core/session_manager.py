@@ -18,14 +18,14 @@ def save_session(type: str, slug: str, pid: int, checkpoint_path: str | None = N
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "pid": pid,
         "checkpoint_path": cp,
-    }, ensure_ascii=False))
+    }, ensure_ascii=False), encoding="utf-8")
 
 
 def load_session() -> dict | None:
     if not _STATE_PATH.exists():
         return None
     try:
-        return json.loads(_STATE_PATH.read_text())
+        return json.loads(_STATE_PATH.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
 
@@ -50,14 +50,14 @@ def kill_session() -> bool:
 
 
 def write_comment(text: str) -> None:
-    _COMMENT_PATH.write_text(json.dumps({"comment": text}, ensure_ascii=False))
+    _COMMENT_PATH.write_text(json.dumps({"comment": text}, ensure_ascii=False), encoding="utf-8")
 
 
 def read_and_clear_comment() -> str | None:
     if not _COMMENT_PATH.exists():
         return None
     try:
-        data = json.loads(_COMMENT_PATH.read_text())
+        data = json.loads(_COMMENT_PATH.read_text(encoding="utf-8"))
         _COMMENT_PATH.unlink(missing_ok=True)
         return data.get("comment")
     except (json.JSONDecodeError, OSError):

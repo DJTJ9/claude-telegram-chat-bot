@@ -22,7 +22,7 @@ def test_parallel_writers_no_lost_update(tmp_path):
         pr.start()
     for pr in procs:
         pr.join()
-    assert json.loads(p.read_text())["n"] == 20
+    assert json.loads(p.read_text(encoding="utf-8"))["n"] == 20
 
 
 def test_pending_dev_exactly_once(tmp_path):
@@ -43,7 +43,7 @@ def test_pending_dev_exactly_once(tmp_path):
     consume(second)
     assert first["entry"] == {"command": "/dev implement"}
     assert second["entry"] is None
-    assert "pending_dev" not in json.loads(p.read_text())
+    assert "pending_dev" not in json.loads(p.read_text(encoding="utf-8"))
 
 
 def _spin_writer(path, stop_after):
@@ -59,7 +59,7 @@ def test_reader_never_sees_partial_json(tmp_path):
     errors = 0
     for _ in range(2000):
         try:
-            json.loads(p.read_text())
+            json.loads(p.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             errors += 1
     w.join()
@@ -71,11 +71,11 @@ def test_mutate_returning_new_dict(tmp_path):
     atomic_write(p, {"a": 1})
     out = atomic_update(p, lambda d: {**d, "b": 2})
     assert out == {"a": 1, "b": 2}
-    assert json.loads(p.read_text()) == {"a": 1, "b": 2}
+    assert json.loads(p.read_text(encoding="utf-8")) == {"a": 1, "b": 2}
 
 
 def test_corrupt_file_falls_back_to_default(tmp_path):
     p = tmp_path / "s.json"
-    p.write_text("{ broken")
+    p.write_text("{ broken", encoding="utf-8")
     out = atomic_update(p, lambda d: d, default={"seed": 1})
     assert out == {"seed": 1}

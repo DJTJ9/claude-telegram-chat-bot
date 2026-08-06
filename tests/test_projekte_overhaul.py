@@ -1,12 +1,12 @@
 import pathlib, unittest
 
-SRC = (pathlib.Path(__file__).parent.parent / "scripts" / "nocodb_sync.py").read_text()
+SRC = (pathlib.Path(__file__).parent.parent / "scripts" / "nocodb_sync.py").read_text(encoding="utf-8")
 
 class TestNocobdSyncBugStatus(unittest.TestCase):
     def test_bug_in_status_choices(self):
         self.assertIn('"bug"', SRC)
 
-ORG_SRC = (pathlib.Path(__file__).parent.parent / "bots" / "organizer.py").read_text()
+ORG_SRC = (pathlib.Path(__file__).parent.parent / "bots" / "organizer.py").read_text(encoding="utf-8")
 
 class TestKbState(unittest.TestCase):
     def test_kb_state_global_defined(self):

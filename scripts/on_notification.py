@@ -36,7 +36,7 @@ def main() -> int:
     if not session_path.exists():
         return 0
     try:
-        sdata = json.loads(session_path.read_text())
+        sdata = json.loads(session_path.read_text(encoding="utf-8"))
     except Exception:
         return 0
     slug = sdata.get("active_dev_slug") or ""

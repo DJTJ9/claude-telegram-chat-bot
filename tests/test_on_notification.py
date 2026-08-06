@@ -11,9 +11,9 @@ def _run(tmp_path, stdin_data, tmux_pane="%5",
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     cap_file = tmp_path / "capture.txt"
-    cap_file.write_text(capture_text)
+    cap_file.write_text(capture_text, encoding="utf-8")
     fake_tmux = bin_dir / "tmux"
-    fake_tmux.write_text('#!/bin/sh\ncat "$FAKE_CAPTURE"\n')
+    fake_tmux.write_text('#!/bin/sh\ncat "$FAKE_CAPTURE"\n', encoding="utf-8")
     fake_tmux.chmod(0o755)
     env = {**os.environ,
            "WORK_DIR": str(tmp_path),
@@ -35,7 +35,7 @@ def _mk_session(tmp_path, session_id="s1", **fields):
     d.mkdir(exist_ok=True)
     data = {"active_dev_slug": "dev-skill", "implementation_mode": False,
             "implementation_mode_until": None, **fields}
-    (d / f"{session_id}.json").write_text(json.dumps(data))
+    (d / f"{session_id}.json").write_text(json.dumps(data), encoding="utf-8")
 
 
 def _pending(tmp_path, session_id="s1"):
@@ -46,7 +46,7 @@ def test_writes_pending_wait_for_bound_dev_session(tmp_path):
     _mk_session(tmp_path)
     r = _run(tmp_path, {"session_id": "s1", "message": "Claude is waiting for your input"})
     assert r.returncode == 0, r.stderr
-    data = json.loads(_pending(tmp_path).read_text())
+    data = json.loads(_pending(tmp_path).read_text(encoding="utf-8"))
     assert data["slug"] == "dev-skill"
     assert data["pane"] == "%5"
     assert "Frage?" in data["question"]
@@ -74,7 +74,7 @@ def _flag(tmp_path, session_id="s1"):
 def test_turn_ended_flag_skips_notification(tmp_path):
     # Stop-Hook lief bereits (Turn beendet) → generisches Idle, keine echte Frage
     _mk_session(tmp_path)
-    _flag(tmp_path).write_text("")
+    _flag(tmp_path).write_text("", encoding="utf-8")
     r = _run(tmp_path, {"session_id": "s1", "message": "Claude is waiting for your input"})
     assert r.returncode == 0
     assert not _pending(tmp_path).exists()
@@ -113,7 +113,7 @@ ON_STOP = PROJECT_DIR / "scripts" / "on_stop.py"
 
 
 def test_on_stop_deletes_pending_wait(tmp_path):
-    _pending(tmp_path).write_text("{}")
+    _pending(tmp_path).write_text("{}", encoding="utf-8")
     env = {**os.environ, "WORK_DIR": str(tmp_path), "CLAUDE_AUTOMATED": "1"}
     r = subprocess.run(
         [sys.executable, str(ON_STOP)],
@@ -147,20 +147,20 @@ def test_on_stop_writes_turn_ended_flag(tmp_path):
 def test_pending_wait_includes_feature(tmp_path):
     _mk_session(tmp_path, active_dev_feature="email-auth")
     _run(tmp_path, {"session_id": "s1", "message": "Claude is waiting for your input"})
-    data = json.loads(_pending(tmp_path).read_text())
+    data = json.loads(_pending(tmp_path).read_text(encoding="utf-8"))
     assert data["feature"] == "email-auth"
 
 
 def test_pending_wait_feature_empty_when_unset(tmp_path):
     _mk_session(tmp_path)
     _run(tmp_path, {"session_id": "s1", "message": "Claude is waiting for your input"})
-    data = json.loads(_pending(tmp_path).read_text())
+    data = json.loads(_pending(tmp_path).read_text(encoding="utf-8"))
     assert data["feature"] == ""
 
 
 def test_on_stop_removes_marker(tmp_path):
-    _pending(tmp_path).write_text("{}")
-    (tmp_path / "pending_wait_s1.notified").write_text("1.0")
+    _pending(tmp_path).write_text("{}", encoding="utf-8")
+    (tmp_path / "pending_wait_s1.notified").write_text("1.0", encoding="utf-8")
     env = {**os.environ, "WORK_DIR": str(tmp_path), "CLAUDE_AUTOMATED": "1"}
     r = subprocess.run(
         [sys.executable, str(ON_STOP)],
@@ -175,7 +175,7 @@ ON_USER_PROMPT = PROJECT_DIR / "scripts" / "on_user_prompt.py"
 
 
 def test_on_user_prompt_clears_turn_ended_flag(tmp_path):
-    _flag(tmp_path).write_text("")
+    _flag(tmp_path).write_text("", encoding="utf-8")
     env = {**os.environ, "WORK_DIR": str(tmp_path)}
     r = subprocess.run(
         [sys.executable, str(ON_USER_PROMPT)],
@@ -211,7 +211,7 @@ def _remote_env(tmp_path):
         '  *"capture-pane"*) printf "Frage?\\nA) Ja\\n"; exit 0 ;;\n'
         "esac\n"
         "exit 0\n"
-    )
+    , encoding="utf-8")
     fake.chmod(0o755)
     env = {**os.environ,
            "WORK_DIR": str(tmp_path),
@@ -235,9 +235,9 @@ def test_remote_mode_writes_pending_wait_over_ssh(tmp_path):
     )
     assert r.returncode == 0, r.stderr
     assert not _pending(tmp_path).exists()          # nichts lokal auf Windows
-    assert "cat > /srv/bot/pending_wait_s1.json" in log.read_text()
-    assert "tmux capture-pane -p -t sharky-game-skill" in log.read_text()
-    data = json.loads(stdin_log.read_text())
+    assert "cat > /srv/bot/pending_wait_s1.json" in log.read_text(encoding="utf-8")
+    assert "tmux capture-pane -p -t sharky-game-skill" in log.read_text(encoding="utf-8")
+    data = json.loads(stdin_log.read_text(encoding="utf-8"))
     assert data["slug"] == "dev-skill"
     assert data["pane"] == "sharky-game-skill"
     assert "Frage?" in data["question"]
@@ -251,7 +251,7 @@ def test_remote_mode_on_stop_deletes_and_flags_over_ssh(tmp_path):
         capture_output=True, text=True, env=env, timeout=15,
     )
     assert r.returncode == 0, r.stderr
-    calls = log.read_text()
+    calls = log.read_text(encoding="utf-8")
     assert "rm -f /srv/bot/pending_wait_s1.json" in calls
     assert "rm -f /srv/bot/pending_wait_s1.notified" in calls
     assert "cat > /srv/bot/turn_ended_s1.flag" in calls
@@ -265,4 +265,4 @@ def test_remote_mode_on_user_prompt_clears_flag_over_ssh(tmp_path):
         capture_output=True, text=True, env=env, timeout=15,
     )
     assert r.returncode == 0, r.stderr
-    assert "rm -f /srv/bot/turn_ended_s1.flag" in log.read_text()
+    assert "rm -f /srv/bot/turn_ended_s1.flag" in log.read_text(encoding="utf-8")

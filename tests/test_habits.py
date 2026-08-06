@@ -28,7 +28,7 @@ class TestCreateHabitsTable(unittest.TestCase):
         self.assertIn("Status", col_titles)
 
     def test_habits_flag_in_argparse(self):
-        src = Path("scripts/nocodb_create_table.py").read_text()
+        src = Path("scripts/nocodb_create_table.py").read_text(encoding="utf-8")
         self.assertIn("--habits", src)
 
 
@@ -84,7 +84,7 @@ class TestSeedHabits(unittest.TestCase):
         self.assertTrue(Path("scripts/seed_habits.py").exists())
 
     def test_seed_script_has_five_habits(self):
-        src = Path("scripts/seed_habits.py").read_text()
+        src = Path("scripts/seed_habits.py").read_text(encoding="utf-8")
         self.assertIn("Meditation", src)
         self.assertIn("Lesen", src)
         self.assertIn("Sport", src)
