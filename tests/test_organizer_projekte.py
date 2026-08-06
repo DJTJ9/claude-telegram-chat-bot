@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(WORK_DIR, "bots"))
 
 def _run_projekte():
     r = subprocess.run(
-        ["python3", f"{HUB_DIR}/scripts/dev_context.py", "--command", "projekte"],
+        [sys.executable, f"{HUB_DIR}/scripts/dev_context.py", "--command", "projekte"],
         capture_output=True, text=True, env=os.environ
     )
     return json.loads(r.stdout)

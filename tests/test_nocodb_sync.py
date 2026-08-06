@@ -2,6 +2,8 @@ import json, os, sys, unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("NOCODB_API_URL", "http://localhost:8090")
 os.environ.setdefault("NOCODB_API_TOKEN", "test_token")
@@ -586,24 +588,25 @@ class TestSyncNocodbReorder(unittest.TestCase):
 
 
 class TestGlobalLock:
-    def test_sync_lock_holds_exclusive_flock(self, tmp_path, monkeypatch):
-        import fcntl
+    """Prueft die Zusage von _sync_lock, nicht ihre Implementierung: solange er
+    gehalten wird, kommt niemand sonst rein. Frueher direkt gegen fcntl.flock
+    getestet — das ist POSIX-only und liess den Test auf Windows sterben."""
+
+    def test_sync_lock_blocks_a_second_holder(self, tmp_path, monkeypatch):
+        from core.filelock import exclusive_lock
         monkeypatch.setenv("WORK_DIR", str(tmp_path))
         from scripts import nocodb_sync
+
         with nocodb_sync._sync_lock():
             lock_file = nocodb_sync._lock_path()
             assert lock_file.exists()
-            with open(lock_file, "w") as fh:
-                try:
-                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    held = False
-                except BlockingIOError:
-                    held = True
-            assert held
+            with pytest.raises(TimeoutError):
+                with exclusive_lock(lock_file, timeout=0.2):
+                    pass
+
         # nach Verlassen wieder frei
-        with open(nocodb_sync._lock_path(), "w") as fh:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        with exclusive_lock(nocodb_sync._lock_path(), timeout=2):
+            pass
 
 
 class TestMergeNoDowngrade:

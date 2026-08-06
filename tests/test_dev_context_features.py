@@ -1,3 +1,4 @@
+import sys
 import json
 import os
 import subprocess
@@ -10,7 +11,7 @@ SCRIPT = f"{HUB_DIR}/scripts/dev_context.py"
 def _run(hub, *args, env_extra=None):
     env = {**os.environ, "HUB_DIR": str(hub), **(env_extra or {})}
     return subprocess.run(
-        ["python3", SCRIPT, *args],
+        [sys.executable, SCRIPT, *args],
         capture_output=True, text=True, env=env, timeout=5,
     )
 

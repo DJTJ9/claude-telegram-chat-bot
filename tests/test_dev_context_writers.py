@@ -1,3 +1,4 @@
+import sys
 import importlib.util
 import json
 import os
@@ -33,7 +34,7 @@ def _make_hub(tmp_path, status=STATUS_MD):
 
 def _run(hub, *args):
     env = {**os.environ, "HUB_DIR": str(hub)}
-    return subprocess.run(["python3", SCRIPT, *args],
+    return subprocess.run([sys.executable, SCRIPT, *args],
                           capture_output=True, text=True, env=env, timeout=5)
 
 

@@ -1,3 +1,4 @@
+import sys
 import json
 import os
 import subprocess
@@ -31,7 +32,7 @@ def _make_hub(tmp_path):
 def _run(hub, command):
     env = {**os.environ, "HUB_DIR": str(hub)}
     r = subprocess.run(
-        ["python3", f"{HUB_DIR}/scripts/dev_context.py", "--command", command,
+        [sys.executable, f"{HUB_DIR}/scripts/dev_context.py", "--command", command,
          "--slug", "testproj"],
         capture_output=True, text=True, env=env, timeout=5,
     )

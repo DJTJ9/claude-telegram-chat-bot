@@ -1,3 +1,4 @@
+import sys
 import json
 import os
 import subprocess
@@ -29,7 +30,7 @@ def _session(hub, work_dir, session_id):
     env = {**os.environ, "HUB_DIR": str(hub), "WORK_DIR": str(work_dir),
            "CLAUDE_CODE_SESSION_ID": session_id}
     r = subprocess.run(
-        ["python3", f"{HUB_DIR}/scripts/dev_context.py", "--command", "session"],
+        [sys.executable, f"{HUB_DIR}/scripts/dev_context.py", "--command", "session"],
         capture_output=True, text=True, env=env, timeout=5,
     )
     return json.loads(r.stdout)

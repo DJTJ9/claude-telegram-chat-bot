@@ -1,3 +1,4 @@
+import sys
 import json
 import os
 import subprocess
@@ -19,7 +20,7 @@ def _write(path, count):
 
 
 def _run(path, keep=None):
-    cmd = ["python3", SCRIPT, "--file", str(path)]
+    cmd = [sys.executable, SCRIPT, "--file", str(path)]
     if keep is not None:
         cmd += ["--keep", str(keep)]
     return subprocess.run(cmd, capture_output=True, text=True, timeout=5)

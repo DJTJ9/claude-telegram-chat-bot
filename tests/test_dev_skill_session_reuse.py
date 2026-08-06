@@ -1,6 +1,6 @@
 from pathlib import Path
 
-SKILL_MD = Path("/root/.claude/skills/dev/SKILL.md").read_text(encoding="utf-8")
+SKILL_MD = (Path.home() / ".claude" / "skills" / "dev" / "SKILL.md").read_text(encoding="utf-8")
 
 
 def test_skill_md_step1_keeps_full_session_object():
@@ -8,7 +8,7 @@ def test_skill_md_step1_keeps_full_session_object():
     assert "<SESSION_DATA>" in SKILL_MD
 
 
-PLAN_MD = Path("/root/.claude/skills/dev/phases/plan.md").read_text(encoding="utf-8")
+PLAN_MD = (Path.home() / ".claude" / "skills" / "dev" / "phases" / "plan.md").read_text(encoding="utf-8")
 
 
 def test_plan_md_shortcut_reuses_session_data():
@@ -17,7 +17,7 @@ def test_plan_md_shortcut_reuses_session_data():
     assert "If Phase=`plan` and Spec field is set" in PLAN_MD
 
 
-IMPLEMENT_MD = Path("/root/.claude/skills/dev/phases/implement.md").read_text(encoding="utf-8")
+IMPLEMENT_MD = (Path.home() / ".claude" / "skills" / "dev" / "phases" / "implement.md").read_text(encoding="utf-8")
 
 
 def test_implement_md_shortcut_reuses_session_data():

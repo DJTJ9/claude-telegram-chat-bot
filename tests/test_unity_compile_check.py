@@ -50,7 +50,7 @@ public class ThingPlayModeTests
 ```
 """
 
-REAL_MD = Path("/root/.claude/skills/game/references/unity.md")
+REAL_MD = Path.home() / ".claude" / "skills" / "game" / "references" / "unity.md"
 
 
 class TestExtractBlocks(unittest.TestCase):

@@ -8,7 +8,7 @@ from scripts.unity_scaffold import (
     LAYOUT, ASMDEFS, asmdefs_for, scaffold, main,
 )
 
-CONVENTIONS = Path("/root/.claude/skills/game/references/unity-conventions.md")
+CONVENTIONS = Path.home() / ".claude" / "skills" / "game" / "references" / "unity-conventions.md"
 
 
 class TestAsmdefsFor(unittest.TestCase):

@@ -3,7 +3,7 @@
 den Dateiinhalt — konsistent mit test_skill_files_updated.py."""
 from pathlib import Path
 
-CLAUDE = Path("/root/.claude")
+CLAUDE = Path.home() / ".claude"
 PHASES = CLAUDE / "skills/dev/phases"
 
 

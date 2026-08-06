@@ -1,3 +1,4 @@
+import sys
 import json
 import os
 import subprocess
@@ -57,7 +58,7 @@ def _make_hub(tmp_path):
 
 def _go(hub, query):
     r = subprocess.run(
-        ["python3", f"{HUB_DIR}/scripts/dev_context.py", "--command", "go",
+        [sys.executable, f"{HUB_DIR}/scripts/dev_context.py", "--command", "go",
          "--query", query, "--hub-dir", str(hub)],
         capture_output=True, text=True, env=os.environ,
     )
