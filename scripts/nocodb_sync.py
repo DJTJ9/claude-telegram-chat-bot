@@ -177,9 +177,13 @@ def parse_status_md(path: Path) -> dict:
             val = line[len("Phase: "):].strip()
             phase = "" if val == "(none)" else val
         else:
-            m = re.match(r"^- \[(\w+)\]\s+(.+)$", line)
-            if m:
-                items.append((m.group(1), m.group(2).strip()))
+            # Kommentar-Zone abtrennen: ohne das wanderte der `#key:`-Anker als
+            # Teil des Feature-Namens nach NocoDB ("... Neustart  #key:foo") und
+            # matchte anschließend keine bestehende Row mehr — jeder Sync legte
+            # ein Duplikat an. Gleicher Splitter wie merge_status_roadmap.
+            parts = _split_roadmap_line(line)
+            if parts:
+                items.append((parts[0], parts[1]))
     return {"slug": slug, "active": active, "phase": phase, "items": items}
 
 
