@@ -8,12 +8,14 @@ so concurrent add/commit never race on .git/index.lock. Optional --push does
 pull --rebase --autostash + push with retry.
 """
 import argparse
-import fcntl
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.filelock import exclusive_lock  # noqa: E402
 
 
 def _git(hub, *args):
@@ -29,10 +31,7 @@ def main():
     a = ap.parse_args()
 
     hub = os.environ["HUB_DIR"]
-    lock_path = Path(hub) / ".git" / "hub_commit.lock"
-    lock = open(lock_path, "w")
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    try:
+    with exclusive_lock(Path(hub) / ".git" / "hub_commit.lock"):
         _git(hub, "add", "--", *a.paths)
         r = _git(hub, "commit", "-m", a.message, "--", *a.paths)
         output = r.stdout + r.stderr
@@ -49,9 +48,6 @@ def main():
             else:
                 sys.stderr.write("hub_commit: push failed after 3 attempts\n")
                 sys.exit(1)
-    finally:
-        fcntl.flock(lock, fcntl.LOCK_UN)
-        lock.close()
 
 
 if __name__ == "__main__":

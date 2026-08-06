@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Sync Dev Skill feature status to NocoDB."""
-import argparse, fcntl, json, os, re, sys
+import argparse, json, os, re, sys
 from contextlib import contextmanager
 from pathlib import Path
 import requests
 
 PROJECT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
+
+from core.filelock import exclusive_lock  # noqa: E402
 
 env_file = PROJECT_DIR / ".env"
 if env_file.exists():
@@ -35,17 +37,11 @@ def _lock_path() -> Path:
 
 @contextmanager
 def _sync_lock():
-    """Globaler flock: serialisiert ALLE Sync-Richtungen über Sessions hinweg
-    (H3+H6 — parallele dev-to-nocodb/nocodb-to-dev-Läufe raceten sonst auf
-    Roadmap-Blöcken und NocoDB-Rows)."""
-    p = _lock_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+    """Globaler Dateilock: serialisiert ALLE Sync-Richtungen über Sessions
+    hinweg (H3+H6 — parallele dev-to-nocodb/nocodb-to-dev-Läufe raceten sonst
+    auf Roadmap-Blöcken und NocoDB-Rows)."""
+    with exclusive_lock(_lock_path()):
+        yield
 
 
 def load_registry() -> list:
