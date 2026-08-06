@@ -16,6 +16,7 @@ if env_file.exists():
             os.environ.setdefault(k.strip(), v.strip())
 
 from core.claude import run_claude
+from core.roadmap import NO_ACTIVE, UNSET_ACTIVE, split_roadmap_line
 
 ARBEIT_DB_ID = os.environ.get("ARBEIT_DB_ID", "")
 
@@ -48,14 +49,17 @@ def parse_status_md(path: Path) -> dict:
     for line in text.splitlines():
         if line.startswith("Active: "):
             val = line[len("Active: "):].strip()
-            active = "" if val in ("(none)", "(keine aktive Entwicklung)") else val
+            active = "" if val in (*UNSET_ACTIVE, NO_ACTIVE) else val
         elif line.startswith("Phase: "):
             val = line[len("Phase: "):].strip()
             phase = "" if val == "(none)" else val
         else:
-            m = re.match(r"^- \[(\w+)\]\s+(.+)$", line)
-            if m:
-                items.append((m.group(1), m.group(2).strip()))
+            # Kommentar-Zone abtrennen: ohne das wanderte der `#key:`-Anker als
+            # Teil des Feature-Namens nach Notion und matchte den bestehenden
+            # Eintrag nie wieder — jeder Sync legte ein Duplikat an.
+            parts = split_roadmap_line(line)
+            if parts:
+                items.append((parts[0], parts[1]))
     return {"slug": slug, "active": active, "phase": phase, "items": items}
 
 
@@ -235,6 +239,9 @@ def build_per_project_sync_prompt(slug: str, feature: str, status: str,
 
 
 def _update_status_active(path: Path, active: str, conditional: bool = False) -> None:
+    """Setzt `Active:`. Mit conditional=True nur, wenn das Feld nie gesetzt war —
+    `(keine aktive Entwicklung)` ist eine Aussage der finish-Phase und bleibt
+    stehen (siehe UNSET_ACTIVE in core.roadmap)."""
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8")
@@ -242,9 +249,9 @@ def _update_status_active(path: Path, active: str, conditional: bool = False) ->
         m = re.search(r'^Active: (.*)$', text, re.MULTILINE)
         if m:
             current = m.group(1).strip()
-            if current and current not in ("(none)", "(keine aktive Entwicklung)"):
+            if current and current not in UNSET_ACTIVE:
                 return
-    display = active if active else "(keine aktive Entwicklung)"
+    display = active if active else NO_ACTIVE
     text = re.sub(r'^Active: .*$', f'Active: {display}', text, flags=re.MULTILINE)
     path.write_text(text, encoding="utf-8")
 
@@ -261,11 +268,13 @@ def _reorder_vision_roadmap(path: Path, ordered_names: list[str]) -> None:
     roadmap_text = text[after_header:next_sec] if next_sec != -1 else text[after_header:]
     tail = text[next_sec:] if next_sec != -1 else ""
 
+    # Key ist der reine Name ohne Kommentar-Zone — sonst matcht eine Zeile mit
+    # `#key:`-Anker nie gegen den Notion-Namen und fällt aus der Sortierung.
     existing: dict[str, str] = {}
     for line in roadmap_text.splitlines():
-        m = re.match(r'^(- \[\w+\]\s+)(.+)$', line)
-        if m:
-            existing[m.group(2).strip().lower()] = line
+        parts = split_roadmap_line(line)
+        if parts:
+            existing[parts[1].lower()] = line
 
     seen: set[str] = set()
     reordered: list[str] = []
@@ -303,14 +312,16 @@ def _reorder_status_roadmap(path: Path, entries: list[dict]) -> None:
     roadmap_text = text[after_header:next_sec] if next_sec != -1 else text[after_header:]
     tail = text[next_sec:] if next_sec != -1 else ""
 
+    # Key ist der reine Name, damit eine Zeile mit `#key:`-Anker gegen den
+    # Notion-Namen matcht; der Anker wird beim Neuschreiben wieder angehängt.
     existing: dict[str, tuple[str, str]] = {}
     existing_lines: dict[str, str] = {}
     for line in roadmap_text.splitlines():
-        m = re.match(r'^- \[\w+\](\s+)(.+)$', line)
-        if m:
-            key = m.group(2).strip().lower()
-            existing[key] = (m.group(1), m.group(2).strip())
-            existing_lines[key] = line
+        parts = split_roadmap_line(line)
+        if parts:
+            _status, name, comment = parts
+            existing[name.lower()] = (name, comment)
+            existing_lines[name.lower()] = line
 
     seen: set[str] = set()
     reordered: list[str] = []
@@ -320,8 +331,11 @@ def _reorder_status_roadmap(path: Path, entries: list[dict]) -> None:
         if not name or key not in existing:
             continue
         dev_status = _NOTION_TO_DEV_STATUS.get(entry.get("status", "idea"), "idea")
-        spacing, name_part = existing[key]
-        reordered.append(f"- [{dev_status}]{spacing}{name_part}")
+        name_part, comment = existing[key]
+        # ljust(14) wie in nocodb_sync.merge_status_roadmap: die ursprüngliche
+        # Einrückung der Zeile mitzuschleppen verschiebt die Spalte, sobald sich
+        # die Länge des Status-Tags ändert ([planned] -> [done]).
+        reordered.append(f"- [{dev_status}]".ljust(14) + name_part + comment)
         seen.add(key)
 
     for key, line in existing_lines.items():

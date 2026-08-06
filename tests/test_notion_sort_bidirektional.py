@@ -74,13 +74,24 @@ def test_update_status_active_conditional_no_override(tmp_path):
     assert "My Current Feature" in status.read_text()
 
 
-def test_update_status_active_conditional_sets_when_empty(tmp_path):
-    """Conditional update MUST set Active when field is empty/default."""
+def test_update_status_active_conditional_sets_when_never_set(tmp_path):
+    """Conditional update MUST set Active when the field was never set."""
     status = tmp_path / "STATUS.md"
-    status.write_text("Active: (keine aktive Entwicklung)\nPhase: (none)\n", encoding="utf-8")
+    status.write_text("Active: (none)\nPhase: (none)\n", encoding="utf-8")
     from scripts.notion_sync import _update_status_active
     _update_status_active(status, "First Feature", conditional=True)
     assert "First Feature" in status.read_text()
+
+
+def test_update_status_active_conditional_respects_deliberate_no_active(tmp_path):
+    """`(keine aktive Entwicklung)` is written by the finish phase on purpose.
+    The sync must not replace it with whichever feature happens to sort first —
+    that produced an active feature next to `Phase: (none)`."""
+    status = tmp_path / "STATUS.md"
+    status.write_text("Active: (keine aktive Entwicklung)\nPhase: (none)\n", encoding="utf-8")
+    from scripts.notion_sync import _update_status_active
+    _update_status_active(status, "Top Feature From Notion", conditional=True)
+    assert "Active: (keine aktive Entwicklung)" in status.read_text()
 
 
 def test_sync_feature_order_auto_active_from_first_non_done():

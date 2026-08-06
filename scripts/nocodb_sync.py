@@ -9,6 +9,9 @@ PROJECT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
 from core.filelock import exclusive_lock  # noqa: E402
+from core.roadmap import (  # noqa: E402
+    NO_ACTIVE, STATUS_RANK, UNSET_ACTIVE, split_roadmap_line,
+)
 
 env_file = PROJECT_DIR / ".env"
 if env_file.exists():
@@ -172,7 +175,7 @@ def parse_status_md(path: Path) -> dict:
     for line in text.splitlines():
         if line.startswith("Active: "):
             val = line[len("Active: "):].strip()
-            active = "" if val in ("(none)", "(keine aktive Entwicklung)") else val
+            active = "" if val in (*UNSET_ACTIVE, NO_ACTIVE) else val
         elif line.startswith("Phase: "):
             val = line[len("Phase: "):].strip()
             phase = "" if val == "(none)" else val
@@ -187,20 +190,11 @@ def parse_status_md(path: Path) -> dict:
     return {"slug": slug, "active": active, "phase": phase, "items": items}
 
 
-_NO_ACTIVE = "(keine aktive Entwicklung)"
-
-# `(none)` und ein leeres Feld heissen "nie gesetzt" — da darf der Sync ein
-# Feature eintragen. `(keine aktive Entwicklung)` ist dagegen eine AUSSAGE, die
-# die finish-Phase bewusst schreibt: dieses Projekt hat gerade nichts Aktives.
-# Stand der Sentinel früher mit in dieser Liste, hat der Rückwärts-Sync direkt
-# im Anschluss an jedes /dev|/game finish die oberste Idee als aktiv eingetragen
-# — bei `Phase: (none)`, also ein Zustand, den keine Phase erzeugen kann.
-# Das Nachrücken des nächsten Features macht `dev_context.py --command advance`,
-# und zwar über [planned]/[discussed] statt über die erstbeste Idee.
-_UNSET_ACTIVE = ("(none)",)
-
-
 def _update_status_active(path: Path, active: str, conditional: bool = False) -> None:
+    """Setzt `Active:`. Mit conditional=True nur, wenn das Feld nie gesetzt war —
+    `(keine aktive Entwicklung)` bleibt stehen, siehe UNSET_ACTIVE in core.roadmap.
+    Das Nachrücken des nächsten Features macht `dev_context.py --command advance`,
+    und zwar über [planned]/[discussed] statt über die erstbeste Idee."""
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8")
@@ -208,38 +202,15 @@ def _update_status_active(path: Path, active: str, conditional: bool = False) ->
         m = re.search(r'^Active: (.*)$', text, re.MULTILINE)
         if m:
             current = m.group(1).strip()
-            if current and current not in _UNSET_ACTIVE:
+            if current and current not in UNSET_ACTIVE:
                 return
-    display = active if active else _NO_ACTIVE
+    display = active if active else NO_ACTIVE
     text = re.sub(r'^Active: .*$', f'Active: {display}', text, flags=re.MULTILINE)
     path.write_text(text, encoding="utf-8")
 
 
-_COMMENT_RE = re.compile(r"\s{2,}#")
-_ROADMAP_RE = re.compile(r"^- \[(\w+)\]\s+(.+)$")
-
-
-def _split_roadmap_line(line: str) -> tuple[str, str, str] | None:
-    """(status, name, comment) einer Roadmap-Zeile, sonst None.
-
-    Kommentar-Zone beginnt erst bei mindestens ZWEI Leerzeichen vor einer `#`,
-    damit Namen mit Raute (`C#-Vorlagen`) vollständig bleiben und der
-    `#key:`-Anker den Rewrite überlebt. Bewusste Kopie des Splitters aus
-    `$HUB_DIR/scripts/dev_context.py` — ein Cross-Repo-Import koppelte dieses
-    Repo zur Importzeit an gesetztes HUB_DIR und machte die Testsuite
-    umgebungsabhängig.
-    """
-    m = _ROADMAP_RE.match(line)
-    if not m:
-        return None
-    status, body = m.group(1), m.group(2)
-    c = _COMMENT_RE.search(body)
-    if c:
-        return status, body[:c.start()].strip(), body[c.start():]
-    return status, body.strip(), ""
-
-
-_STATUS_RANK = {"idea": 0, "discussed": 1, "planned": 2, "in_progress": 3, "done": 4}
+_split_roadmap_line = split_roadmap_line
+_STATUS_RANK = STATUS_RANK
 
 
 def _dedup_entries(entries: list[dict]) -> list[dict]:
