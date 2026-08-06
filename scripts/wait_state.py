@@ -46,8 +46,11 @@ def _ssh(command: str, stdin: str = ""):
     argv = ["ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={CONNECT_TIMEOUT}",
             _host(), command]
     try:
+        # encoding explizit: auf Windows waere die Locale-Default cp1252, und der
+        # per capture-pane geholte Fragetext kaeme als Mojibake im Reminder an.
         return subprocess.run(argv, input=stdin, capture_output=True,
-                              text=True, timeout=_timeout())
+                              text=True, encoding="utf-8", errors="replace",
+                              timeout=_timeout())
     except Exception:
         return None
 

@@ -125,3 +125,19 @@ def test_capture_pane_remote_goes_through_ssh(monkeypatch, tmp_path):
 def test_capture_pane_empty_target_returns_empty(monkeypatch, tmp_path):
     _fake_ssh(monkeypatch, tmp_path)
     assert wait_state.capture_pane("") == ""
+
+
+def test_remote_decodes_as_utf8_not_locale_default(monkeypatch, tmp_path):
+    """Auf Windows waere die Locale-Default cp1252 — der Fragetext kaeme als Mojibake an."""
+    seen = {}
+    real_run = wait_state.subprocess.run
+
+    def spy(argv, **kwargs):
+        seen.update(kwargs)
+        return real_run(["true"], capture_output=True, text=True)
+
+    _fake_ssh(monkeypatch, tmp_path)
+    monkeypatch.setattr(wait_state.subprocess, "run", spy)
+    wait_state.capture_pane("sharky-x")
+    assert seen.get("encoding") == "utf-8"
+    assert seen.get("errors") == "replace"
