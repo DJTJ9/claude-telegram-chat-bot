@@ -198,8 +198,9 @@ def parse_status_md(path: Path) -> dict:
 def _update_status_active(path: Path, active: str, conditional: bool = False) -> None:
     """Setzt `Active:`. Mit conditional=True nur, wenn das Feld nie gesetzt war —
     `(keine aktive Entwicklung)` bleibt stehen, siehe UNSET_ACTIVE in core.roadmap.
-    Das Nachrücken des nächsten Features macht `dev_context.py --command advance`,
-    und zwar über [planned]/[discussed] statt über die erstbeste Idee."""
+    Das Nachrücken des nächsten Features passiert nicht mehr automatisch — der
+    Phasen-Zustand liegt in `topics/<slug>/features/<key>.md`, die finish-Phase
+    zeigt das nächste [planned]-Feature nur noch an."""
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8")
