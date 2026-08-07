@@ -1,4 +1,5 @@
-import sys, unittest, tempfile
+import io, sys, unittest, tempfile
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -60,20 +61,24 @@ class TestExtractBlocks(unittest.TestCase):
         self.assertNotIn("echo ignored", "".join(blocks))
 
     @unittest.skipUnless(REAL_MD.exists(), "references/unity.md nicht auf dieser Maschine")
-    def test_real_file_has_nine_blocks(self):
+    def test_real_file_has_twelve_blocks(self):
         blocks = extract_blocks(REAL_MD.read_text(encoding="utf-8"))
-        self.assertEqual(len(blocks), 9)
+        self.assertEqual(len(blocks), 12)
         names = [class_name(b) for b in blocks]
         self.assertEqual(names, [
             "FeatureHarness", "DebugCheats", "CaptureScreenshot", "PlaytestSeed",
             "FeatureTuning", "PlayerController", "BuildScript",
             "FeatureEditModeTests", "FeaturePlayModeTests",
+            "FeatureSetup", "SetupStepAttribute", "SetupAll",
         ])
         self.assertEqual([placement(b) for b in blocks], [
             "Editor/Templates", "Runtime/Templates", "Runtime/Templates",
             "Runtime/Templates", "Runtime/Templates", "Runtime/Templates",
             "Editor/Templates", "Tests/EditMode/Templates",
             "Tests/PlayMode/Templates",
+            # SetupStepAttribute ist ein reines System.Attribute ohne top-level
+            # `using UnityEditor` -> Runtime; die Editor-Assembly referenziert sie.
+            "Editor/Templates", "Runtime/Templates", "Editor/Templates",
         ])
 
 
@@ -242,6 +247,37 @@ class TestMain(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with patch("sys.argv", _env(tmp)):
                 self.assertEqual(main(), 1)
+
+    @patch("scripts.unity_compile_check.shutil.which", return_value="/usr/bin/docker")
+    @patch("scripts.unity_compile_check.subprocess.run")
+    def test_missing_menuitem_names_the_item_not_blocked(self, run, _which):
+        # SkillCheck.Run exitet bei fehlendem Menüpunkt selbst mit 1 — das ist ein
+        # Verdikt, kein abgestürzter Editor: die Ursache muss dranstehen.
+        run.return_value = _proc(1, "[SkillCheck] MENUITEM OK: Tools/Playtest/Feature\n"
+                                    "[SkillCheck] MENUITEM MISSING: Tools/Build/WebGL\n"
+                                    "[SkillCheck] RESULT FAIL\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("sys.argv", _env(tmp)):
+                out, err = io.StringIO(), io.StringIO()
+                with redirect_stdout(out), redirect_stderr(err):
+                    rc = main()
+        combined = out.getvalue() + err.getvalue()
+        self.assertEqual(rc, 1)
+        self.assertIn("MenuItem FEHLT: Tools/Build/WebGL", combined)
+        self.assertNotIn("BLOCKED", combined)
+
+    @patch("scripts.unity_compile_check.shutil.which", return_value="/usr/bin/docker")
+    @patch("scripts.unity_compile_check.subprocess.run")
+    def test_unity_death_without_verdict_still_blocks(self, run, _which):
+        # Kein SkillCheck-Marker im Log = Editor kam nie bis zum Verdikt -> BLOCKED bleibt.
+        run.return_value = _proc(1, "Fatal Error! Could not create logfile\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("sys.argv", _env(tmp)):
+                out, err = io.StringIO(), io.StringIO()
+                with redirect_stdout(out), redirect_stderr(err):
+                    rc = main()
+        self.assertEqual(rc, 1)
+        self.assertIn("BLOCKED", out.getvalue() + err.getvalue())
 
     def test_missing_license_blocks(self):
         with tempfile.TemporaryDirectory() as tmp:

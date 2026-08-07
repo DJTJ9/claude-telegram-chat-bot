@@ -124,6 +124,7 @@ def parse_log(log: str) -> dict:
         "menu_missing": re.findall(r"\[SkillCheck\] MENUITEM MISSING: ([^\n]+)",
                                    log),
         "result_pass": "[SkillCheck] RESULT PASS" in log,
+        "result_fail": "[SkillCheck] RESULT FAIL" in log,
     }
 
 
@@ -167,7 +168,10 @@ def main() -> int:
         for e in res["errors"]:
             print(f"  {e}")
         return 1
-    if proc.returncode != 0 and not res["result_pass"]:
+    # SkillCheck.Run exitet bei fehlendem Menüpunkt selbst mit 1. Liegt ein Verdikt
+    # vor (PASS oder FAIL), ist der Exit-Code kein Absturz — dann unten die
+    # MenuItem-Zeilen drucken statt den Grund im Log-Tail zu begraben.
+    if proc.returncode != 0 and not res["result_pass"] and not res["result_fail"]:
         log = proc.stdout + proc.stderr
         print(f"\nBLOCKED: Unity-Exit {proc.returncode} ohne Compile-Fehler "
               f"— Log-Ende:\n{log[-2000:]}", file=sys.stderr)
