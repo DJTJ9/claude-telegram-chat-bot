@@ -34,7 +34,12 @@ class TestAsmdefsFor(unittest.TestCase):
 
     def test_constants_are_not_empty(self):
         self.assertIn("Runtime/Shared", LAYOUT)
+        self.assertIn("Editor/Shared", LAYOUT)
         self.assertEqual(len(ASMDEFS), 4)
+
+    def test_editor_shared_directly_follows_editor(self):
+        # mkdir(parents=True) legt den Elternordner sonst vorab an -> created-Count kippt.
+        self.assertEqual(LAYOUT.index("Editor/Shared"), LAYOUT.index("Editor") + 1)
 
 
 class TestScaffold(unittest.TestCase):

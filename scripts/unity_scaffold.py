@@ -22,6 +22,7 @@ LAYOUT = [
     "Runtime",
     "Runtime/Shared",
     "Editor",
+    "Editor/Shared",
     "Tests/EditMode",
     "Tests/PlayMode",
 ]
