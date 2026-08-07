@@ -6,3 +6,5 @@ __pycache__/
 permission_response_*.json
 question_response_*.json
 *.lock
+# Added by code-review-graph
+.code-review-graph/
