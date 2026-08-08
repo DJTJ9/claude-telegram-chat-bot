@@ -61,15 +61,16 @@ class TestExtractBlocks(unittest.TestCase):
         self.assertNotIn("echo ignored", "".join(blocks))
 
     @unittest.skipUnless(REAL_MD.exists(), "references/unity.md nicht auf dieser Maschine")
-    def test_real_file_has_twelve_blocks(self):
+    def test_real_file_has_fourteen_blocks(self):
         blocks = extract_blocks(REAL_MD.read_text(encoding="utf-8"))
-        self.assertEqual(len(blocks), 12)
+        self.assertEqual(len(blocks), 14)
         names = [class_name(b) for b in blocks]
         self.assertEqual(names, [
             "FeatureHarness", "DebugCheats", "CaptureScreenshot", "PlaytestSeed",
             "FeatureTuning", "PlayerController", "BuildScript",
             "FeatureEditModeTests", "FeaturePlayModeTests",
             "FeatureSetup", "SetupStepAttribute", "SetupAll",
+            "QaOverlay", "FeatureAnimatorSetup",
         ])
         self.assertEqual([placement(b) for b in blocks], [
             "Editor/Templates", "Runtime/Templates", "Runtime/Templates",
@@ -79,7 +80,12 @@ class TestExtractBlocks(unittest.TestCase):
             # SetupStepAttribute ist ein reines System.Attribute ohne top-level
             # `using UnityEditor` -> Runtime; die Editor-Assembly referenziert sie.
             "Editor/Templates", "Runtime/Templates", "Editor/Templates",
+            # QaOverlay steht komplett in `#if QA_OVERLAY || UNITY_EDITOR` und
+            # hat kein top-level `using UnityEditor` -> Runtime.
+            "Runtime/Templates", "Editor/Templates",
         ])
+        # Kein klassenloser Block: write_project_files bricht darauf fail-hard ab.
+        self.assertNotIn(None, names)
 
 
 class TestClassName(unittest.TestCase):
